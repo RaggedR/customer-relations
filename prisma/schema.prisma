@@ -102,6 +102,28 @@ model ClaimItem {
   patient Patient? @relation(fields: [patientId], references: [id])
 }
 
+model Nurse {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  name String
+  phone String?
+  email String?
+  registration_number String?
+  notes String?
+  nurse_specialtys NurseSpecialty[]
+}
+
+model NurseSpecialty {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  specialty String
+  notes String?
+  nurseId Int?
+  nurse Nurse? @relation(fields: [nurseId], references: [id])
+}
+
 model Attachment {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())

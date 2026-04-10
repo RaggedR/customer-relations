@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { layout } from "@/lib/layout";
 
 interface FloatingWindowProps {
   title: string;
@@ -19,23 +20,24 @@ export function FloatingWindow({
   title,
   children,
   onClose,
-  defaultPosition = { x: 280, y: 60 },
-  defaultSize = { width: 480, height: 560 },
-  minSize = { width: 360, height: 300 },
+  defaultPosition = layout.window.positions.search,
+  defaultSize = layout.window.sizes.search,
+  minSize = layout.window.minSize,
   zIndex = 100,
   onFocus,
 }: FloatingWindowProps) {
+  const edge = layout.window.edgePadding;
   const [size, setSize] = useState(() => {
     if (typeof window === "undefined") return defaultSize;
     return {
-      width: Math.min(defaultSize.width, window.innerWidth - 40),
-      height: Math.min(defaultSize.height, window.innerHeight - 40),
+      width: Math.min(defaultSize.width, window.innerWidth - edge),
+      height: Math.min(defaultSize.height, window.innerHeight - edge),
     };
   });
   const [position, setPosition] = useState(() => {
     if (typeof window === "undefined") return defaultPosition;
-    const w = Math.min(defaultSize.width, window.innerWidth - 40);
-    const h = Math.min(defaultSize.height, window.innerHeight - 40);
+    const w = Math.min(defaultSize.width, window.innerWidth - edge);
+    const h = Math.min(defaultSize.height, window.innerHeight - edge);
     return {
       x: Math.max(0, Math.min(defaultPosition.x, window.innerWidth - w - 10)),
       y: Math.max(0, Math.min(defaultPosition.y, window.innerHeight - h - 10)),

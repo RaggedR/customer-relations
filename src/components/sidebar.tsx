@@ -1,16 +1,24 @@
 "use client";
 
 import { Separator } from "@/components/ui/separator";
+import { entityLabel, entityLabelSingular } from "@/lib/schema-hierarchy";
+import { layout } from "@/lib/layout";
 
 interface SidebarProps {
-  onOpenPatients: () => void;
-  onAddPatient: () => void;
+  firstOrderEntities: string[];
+  onOpenEntity: (entityName: string) => void;
+  onAddEntity: (entityName: string) => void;
   onOpenAiChat: () => void;
 }
 
-export function Sidebar({ onOpenPatients, onAddPatient, onOpenAiChat }: SidebarProps) {
+export function Sidebar({
+  firstOrderEntities,
+  onOpenEntity,
+  onAddEntity,
+  onOpenAiChat,
+}: SidebarProps) {
   return (
-    <aside className="flex flex-col w-56 border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+    <aside className={`flex flex-col ${layout.sidebar.widthClass} border-r border-sidebar-border bg-sidebar text-sidebar-foreground`}>
       <div className="flex items-center gap-2 px-4 h-12 font-semibold text-sm tracking-tight">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -22,30 +30,34 @@ export function Sidebar({ onOpenPatients, onAddPatient, onOpenAiChat }: SidebarP
       </div>
       <Separator />
       <nav className="flex-1 px-2 py-3 space-y-1">
-        <button
-          onClick={onOpenPatients}
-          className="flex items-center gap-2 w-full px-2 py-2 text-sm rounded-md transition-colors text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM22 12h-6" />
-          </svg>
-          Patients
-        </button>
+        {firstOrderEntities.map((name) => (
+          <button
+            key={name}
+            onClick={() => onOpenEntity(name)}
+            className="flex items-center gap-2 w-full px-2 py-2 text-sm rounded-md transition-colors text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" />
+            </svg>
+            {entityLabel(name)}
+          </button>
+        ))}
       </nav>
       <Separator />
       <div className="px-2 py-3 space-y-1.5">
-        <button
-          onClick={onAddPatient}
-          className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md border border-floating-border bg-floating text-floating-foreground hover:bg-floating-muted transition-colors"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <line x1="19" y1="8" x2="19" y2="14" />
-            <line x1="16" y1="11" x2="22" y2="11" />
-          </svg>
-          Add Patient
-        </button>
+        {firstOrderEntities.map((name) => (
+          <button
+            key={`add-${name}`}
+            onClick={() => onAddEntity(name)}
+            className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md border border-floating-border bg-floating text-floating-foreground hover:bg-floating-muted transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add {entityLabelSingular(name)}
+          </button>
+        ))}
         <button
           onClick={onOpenAiChat}
           className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md border border-floating-border bg-floating text-floating-foreground hover:bg-floating-muted transition-colors"

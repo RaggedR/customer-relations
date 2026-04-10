@@ -67,6 +67,21 @@ entities:
     relations:
       patient: { type: belongs_to, entity: patient }
 
+  nurse:
+    fields:
+      name: { type: string, required: true }
+      phone: { type: phone }
+      email: { type: email }
+      registration_number: { type: string }
+      notes: { type: text }
+
+  nurse_specialty:
+    fields:
+      specialty: { type: string, required: true }
+      notes: { type: text }
+    relations:
+      nurse: { type: belongs_to, entity: nurse }
+
   attachment:
     fields:
       filename: { type: string, required: true }

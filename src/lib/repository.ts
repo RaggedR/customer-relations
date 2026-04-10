@@ -35,14 +35,35 @@ function getModelDelegate(entityName: string) {
 
 /**
  * Build the Prisma `include` clause for relations.
+ * Includes both forward relations (belongs_to) and reverse relations
+ * (other entities that belong_to this one).
  */
-function buildIncludes(entity: EntityConfig): Record<string, boolean> {
+function buildIncludes(
+  entityName: string,
+  entity: EntityConfig
+): Record<string, boolean> {
+  const schema = getSchema();
   const includes: Record<string, boolean> = {};
+
+  // Forward relations (belongs_to)
   if (entity.relations) {
     for (const relName of Object.keys(entity.relations)) {
       includes[relName] = true;
     }
   }
+
+  // Reverse relations (other entities that belong_to this one)
+  for (const [otherName, otherEntity] of Object.entries(schema.entities)) {
+    if (otherName === entityName || !otherEntity.relations) continue;
+    for (const rel of Object.values(otherEntity.relations)) {
+      if (rel.entity === entityName) {
+        // Prisma uses the plural form: "referrals", "clinical_notes", etc.
+        includes[`${otherName}s`] = true;
+        break;
+      }
+    }
+  }
+
   return includes;
 }
 
@@ -137,7 +158,7 @@ export async function findAll(
   if (!entity) throw new Error(`Unknown entity: ${entityName}`);
 
   const model = getModelDelegate(entityName);
-  const includes = buildIncludes(entity);
+  const includes = buildIncludes(entityName, entity);
 
   const args: Record<string, unknown> = {};
   if (Object.keys(includes).length > 0) {
@@ -191,7 +212,7 @@ export async function findById(entityName: string, id: number) {
   if (!entity) throw new Error(`Unknown entity: ${entityName}`);
 
   const model = getModelDelegate(entityName);
-  const includes = buildIncludes(entity);
+  const includes = buildIncludes(entityName, entity);
 
   const args: Record<string, unknown> = { where: { id } };
   if (Object.keys(includes).length > 0) {
@@ -211,7 +232,7 @@ export async function create(
 
   const model = getModelDelegate(entityName);
   const transformed = transformInput(entityName, data, entity);
-  const includes = buildIncludes(entity);
+  const includes = buildIncludes(entityName, entity);
 
   const args: Record<string, unknown> = { data: transformed };
   if (Object.keys(includes).length > 0) {
@@ -232,7 +253,7 @@ export async function update(
 
   const model = getModelDelegate(entityName);
   const transformed = transformInput(entityName, data, entity);
-  const includes = buildIncludes(entity);
+  const includes = buildIncludes(entityName, entity);
 
   const args: Record<string, unknown> = {
     where: { id },
