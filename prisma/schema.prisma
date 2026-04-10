@@ -9,54 +9,111 @@ datasource db {
   provider = "postgresql"
 }
 
-model Company {
+model Patient {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   name String
-  industry String?
-  website String?
-  contacts Contact[]
-  deals Deal[]
-}
-
-model Contact {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  name String
-  email String?
+  date_of_birth DateTime?
+  medicare_number String?
   phone String?
-  role String?
+  email String?
+  address String?
+  status String?
+  maintenance_plan_expiry DateTime?
   notes String?
-  companyId Int?
-  company Company? @relation(fields: [companyId], references: [id])
-  interactions Interaction[]
-  deals Deal[]
+  referrals Referral[]
+  clinical_notes ClinicalNote[]
+  personal_notes PersonalNote[]
+  hearing_aids HearingAid[]
+  claim_items ClaimItem[]
+  attachments Attachment[]
 }
 
-model Interaction {
+model Referral {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  summary String
+  referring_gp String
+  gp_practice String?
+  referral_date DateTime
+  reason String?
+  expiry_date DateTime?
+  notes String?
+  patientId Int?
+  patient Patient? @relation(fields: [patientId], references: [id])
+}
+
+model ClinicalNote {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   date DateTime
-  type String?
-  contactId Int?
-  contact Contact? @relation(fields: [contactId], references: [id])
+  note_type String?
+  content String
+  clinician String?
+  patientId Int?
+  patient Patient? @relation(fields: [patientId], references: [id])
+  attachments Attachment[]
 }
 
-model Deal {
+model PersonalNote {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  title String
-  value Float?
-  stage String?
-  expected_close DateTime?
+  date DateTime
+  content String
+  patientId Int?
+  patient Patient? @relation(fields: [patientId], references: [id])
+}
+
+model HearingAid {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ear String?
+  make String?
+  model String?
+  serial_number String?
+  battery_type String?
+  wax_filter String?
+  dome String?
+  programming_cable String?
+  programming_software String?
+  hsp_code String?
+  warranty_end_date DateTime?
+  last_repair_details String?
+  repair_address String?
+  patientId Int?
+  patient Patient? @relation(fields: [patientId], references: [id])
+}
+
+model ClaimItem {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  item_number String
+  description String?
+  date_of_service DateTime
+  amount Float?
+  status String?
   notes String?
-  contactId Int?
-  contact Contact? @relation(fields: [contactId], references: [id])
-  companyId Int?
-  company Company? @relation(fields: [companyId], references: [id])
+  patientId Int?
+  patient Patient? @relation(fields: [patientId], references: [id])
+}
+
+model Attachment {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  filename String
+  storage_path String
+  mime_type String?
+  size_bytes Float?
+  category String?
+  description String?
+  patientId Int?
+  patient Patient? @relation(fields: [patientId], references: [id])
+  clinical_noteId Int?
+  clinical_note ClinicalNote? @relation(fields: [clinical_noteId], references: [id])
 }

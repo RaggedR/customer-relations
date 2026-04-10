@@ -9,56 +9,41 @@ describe("Schema Loader", () => {
     const schema = loadSchema(path.resolve(process.cwd(), "schema.yaml"));
 
     expect(schema.entities).toBeDefined();
-    expect(Object.keys(schema.entities)).toContain("company");
-    expect(Object.keys(schema.entities)).toContain("contact");
-    expect(Object.keys(schema.entities)).toContain("interaction");
-    expect(Object.keys(schema.entities)).toContain("deal");
+    expect(Object.keys(schema.entities)).toContain("patient");
+    expect(Object.keys(schema.entities)).toContain("referral");
+    expect(Object.keys(schema.entities)).toContain("clinical_note");
+    expect(Object.keys(schema.entities)).toContain("hearing_aid");
   });
 
   it("parses entity fields correctly", () => {
     const schema = loadSchema(path.resolve(process.cwd(), "schema.yaml"));
-    const contact = schema.entities.contact;
+    const patient = schema.entities.patient;
 
-    expect(contact.fields.name.type).toBe("string");
-    expect(contact.fields.name.required).toBe(true);
-    expect(contact.fields.email.type).toBe("email");
-    expect(contact.fields.phone.type).toBe("phone");
-    expect(contact.fields.notes.type).toBe("text");
+    expect(patient.fields.name.type).toBe("string");
+    expect(patient.fields.name.required).toBe(true);
+    expect(patient.fields.email.type).toBe("email");
+    expect(patient.fields.phone.type).toBe("phone");
+    expect(patient.fields.notes.type).toBe("text");
   });
 
   it("parses relations correctly", () => {
     const schema = loadSchema(path.resolve(process.cwd(), "schema.yaml"));
-    const contact = schema.entities.contact;
+    const referral = schema.entities.referral;
 
-    expect(contact.relations).toBeDefined();
-    expect(contact.relations!.company.type).toBe("belongs_to");
-    expect(contact.relations!.company.entity).toBe("company");
-  });
-
-  it("parses CardDAV config correctly", () => {
-    const schema = loadSchema(path.resolve(process.cwd(), "schema.yaml"));
-    const contact = schema.entities.contact;
-
-    expect(contact.carddav).toBeDefined();
-    expect(contact.carddav!.enabled).toBe(true);
-    expect(contact.carddav!.mapping.name).toBe("fn");
-    expect(contact.carddav!.mapping.email).toBe("email");
-    expect(contact.carddav!.mapping.phone).toBe("tel");
-    expect(contact.carddav!.mapping.company).toBe("org");
+    expect(referral.relations).toBeDefined();
+    expect(referral.relations!.patient.type).toBe("belongs_to");
+    expect(referral.relations!.patient.entity).toBe("patient");
   });
 
   it("parses enum fields with values", () => {
     const schema = loadSchema(path.resolve(process.cwd(), "schema.yaml"));
-    const deal = schema.entities.deal;
+    const patient = schema.entities.patient;
 
-    expect(deal.fields.stage.type).toBe("enum");
-    expect(deal.fields.stage.values).toEqual([
-      "lead",
-      "qualified",
-      "proposal",
-      "negotiation",
-      "closed_won",
-      "closed_lost",
+    expect(patient.fields.status.type).toBe("enum");
+    expect(patient.fields.status.values).toEqual([
+      "active",
+      "inactive",
+      "discharged",
     ]);
   });
 

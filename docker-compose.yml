@@ -24,6 +24,8 @@ services:
       - db
     volumes:
       - ./schema.yaml:/app/schema.yaml
+      - uploads:/app/uploads
 
 volumes:
   pgdata:
+  uploads:

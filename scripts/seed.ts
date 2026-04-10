@@ -1,15 +1,14 @@
 /**
  * Seed Script
  *
- * Populates the database with rich test data covering every combination:
- * - Companies with and without contacts
- * - Contacts with and without companies
- * - Contacts with and without deals
- * - Deals at every pipeline stage
- * - Deals with and without companies
- * - Interactions of every type
- * - Contacts with multiple interactions
- * - Contacts with no interactions
+ * Populates the database with healthcare test data covering every relationship:
+ * - Patients at every status (active, inactive, discharged)
+ * - Referrals (multiple per patient, expired and active)
+ * - Clinical notes of every type
+ * - Personal notes with context
+ * - Hearing aids (bilateral, single, different brands/battery types)
+ * - Claim items at every status
+ * - Maintenance plan expiry dates
  */
 
 import "dotenv/config";
@@ -21,514 +20,442 @@ const prisma = new PrismaClient({ adapter });
 
 async function seed() {
   console.log("Clearing existing data...");
-  await prisma.interaction.deleteMany();
-  await prisma.deal.deleteMany();
-  await prisma.contact.deleteMany();
-  await prisma.company.deleteMany();
+  await prisma.attachment.deleteMany();
+  await prisma.claimItem.deleteMany();
+  await prisma.hearingAid.deleteMany();
+  await prisma.personalNote.deleteMany();
+  await prisma.clinicalNote.deleteMany();
+  await prisma.referral.deleteMany();
+  await prisma.patient.deleteMany();
 
-  console.log("Creating companies...");
-  const companies = await Promise.all([
-    prisma.company.create({
-      data: { name: "Acme Corp", industry: "Manufacturing", website: "https://acme.example.com" },
-    }),
-    prisma.company.create({
-      data: { name: "Globex Industries", industry: "Technology", website: "https://globex.example.com" },
-    }),
-    prisma.company.create({
-      data: { name: "Stark Enterprises", industry: "Defense", website: "https://stark.example.com" },
-    }),
-    prisma.company.create({
-      data: { name: "Wayne Ventures", industry: "Finance", website: "https://wayne.example.com" },
-    }),
-    prisma.company.create({
-      data: { name: "Umbrella Corp", industry: "Pharmaceuticals", website: "https://umbrella.example.com" },
-    }),
-    // Company with no contacts (orphan)
-    prisma.company.create({
-      data: { name: "Empty Holdings LLC", industry: "Real Estate" },
-    }),
-    // Company with minimal data
-    prisma.company.create({
-      data: { name: "Mystery Inc" },
-    }),
-  ]);
-
-  const [acme, globex, stark, wayne, umbrella, emptyHoldings, mystery] = companies;
-
-  console.log("Creating contacts...");
-  const contacts = await Promise.all([
-    // Acme Corp contacts
-    prisma.contact.create({
+  console.log("Creating patients...");
+  const patients = await Promise.all([
+    prisma.patient.create({
       data: {
-        name: "Alice Johnson",
-        email: "alice@acme.example.com",
-        phone: "+1-555-0101",
-        role: "VP of Sales",
-        notes: "Key decision maker. Prefers email communication.",
-        companyId: acme.id,
+        name: "Margaret Thompson",
+        date_of_birth: new Date("1958-03-14"),
+        medicare_number: "2345 67890 1",
+        phone: "+61-3-9876-5432",
+        email: "margaret.t@example.com",
+        address: "42 Collins St, Melbourne VIC 3000",
+        status: "active",
+        maintenance_plan_expiry: new Date("2026-09-01"),
+        notes: "Prefers morning appointments. Has mobility issues — home visits preferred.",
       },
     }),
-    prisma.contact.create({
+    prisma.patient.create({
       data: {
-        name: "Bob Smith",
-        email: "bob@acme.example.com",
-        phone: "+1-555-0102",
-        role: "CTO",
-        notes: "Technical evaluator. Very detail-oriented.",
-        companyId: acme.id,
+        name: "James Chen",
+        date_of_birth: new Date("1985-11-22"),
+        medicare_number: "3456 78901 2",
+        phone: "+61-4-1234-5678",
+        email: "james.chen@example.com",
+        address: "15 Bourke St, Melbourne VIC 3000",
+        status: "active",
+        maintenance_plan_expiry: new Date("2026-07-15"),
       },
     }),
-    // Globex contacts
-    prisma.contact.create({
+    prisma.patient.create({
       data: {
-        name: "Carol Williams",
-        email: "carol@globex.example.com",
-        phone: "+1-555-0201",
-        role: "CEO",
-        companyId: globex.id,
+        name: "Susan O'Brien",
+        date_of_birth: new Date("1972-07-08"),
+        medicare_number: "4567 89012 3",
+        phone: "+61-4-9876-1234",
+        address: "8 St Kilda Rd, St Kilda VIC 3182",
+        status: "active",
+        maintenance_plan_expiry: new Date("2026-05-01"),
+        notes: "Requires interpreter (Vietnamese). Daughter translates when available.",
       },
     }),
-    prisma.contact.create({
+    prisma.patient.create({
       data: {
-        name: "Dave Brown",
-        email: "dave@globex.example.com",
-        phone: "+1-555-0202",
-        role: "Procurement Manager",
-        notes: "Budget holder. Needs ROI justification.",
-        companyId: globex.id,
+        name: "Robert Williams",
+        date_of_birth: new Date("1945-01-30"),
+        medicare_number: "5678 90123 4",
+        phone: "+61-3-5555-0199",
+        address: "3/27 Beach Rd, Brighton VIC 3186",
+        status: "discharged",
+        notes: "Discharged 2026-02-15. Goals met. May return if condition changes.",
       },
     }),
-    // Stark Enterprises
-    prisma.contact.create({
+    prisma.patient.create({
       data: {
-        name: "Eve Davis",
-        email: "eve@stark.example.com",
-        phone: "+44-20-7946-0958",
-        role: "Head of Innovation",
-        notes: "Based in London office. Interested in AI features.",
-        companyId: stark.id,
-      },
-    }),
-    // Wayne Ventures
-    prisma.contact.create({
-      data: {
-        name: "Frank Miller",
-        email: "frank@wayne.example.com",
-        phone: "+1-555-0401",
-        role: "CFO",
-        companyId: wayne.id,
-      },
-    }),
-    // Umbrella Corp
-    prisma.contact.create({
-      data: {
-        name: "Grace Lee",
-        email: "grace@umbrella.example.com",
-        phone: "+1-555-0501",
-        role: "Research Director",
-        notes: "Very interested but slow internal approval process.",
-        companyId: umbrella.id,
-      },
-    }),
-    // Contact with NO company (freelancer)
-    prisma.contact.create({
-      data: {
-        name: "Henry Wilson",
-        email: "henry@freelance.example.com",
-        phone: "+1-555-0601",
-        role: "Independent Consultant",
-        notes: "No company affiliation. Met at conference.",
-      },
-    }),
-    // Contact with minimal data
-    prisma.contact.create({
-      data: {
-        name: "Iris Chen",
-        email: "iris@example.com",
-      },
-    }),
-    // Contact with only name and phone
-    prisma.contact.create({
-      data: {
-        name: "Jack Thompson",
-        phone: "+61-2-9876-5432",
-        notes: "Referral from Alice. No email yet.",
-        companyId: mystery.id,
-      },
-    }),
-    // Contact with no deals, no interactions (cold)
-    prisma.contact.create({
-      data: {
-        name: "Karen White",
-        email: "karen@example.com",
-        phone: "+1-555-0701",
-        role: "Marketing Director",
-        companyId: wayne.id,
+        name: "Priya Sharma",
+        date_of_birth: new Date("1990-09-12"),
+        medicare_number: "6789 01234 5",
+        phone: "+61-4-5555-0201",
+        email: "priya.s@example.com",
+        status: "inactive",
+        notes: "On waitlist. GP referral received, pending initial assessment scheduling.",
       },
     }),
   ]);
 
-  const [alice, bob, carol, dave, eve, frank, grace, henry, iris, jack, karen] = contacts;
+  const [margaret, james, susan, robert, priya] = patients;
 
-  console.log("Creating deals at every pipeline stage...");
+  console.log("Creating referrals...");
   await Promise.all([
-    // Lead stage
-    prisma.deal.create({
+    prisma.referral.create({
       data: {
-        title: "Acme Annual Contract",
-        value: 50000,
-        stage: "lead",
-        expected_close: new Date("2026-06-15"),
-        notes: "Initial inquiry from website form.",
-        contactId: alice.id,
-        companyId: acme.id,
+        referring_gp: "Dr Sarah Mitchell",
+        gp_practice: "Collins St Medical Centre",
+        referral_date: new Date("2025-03-01"),
+        reason: "Post-hip replacement rehabilitation. Requires home-based physiotherapy and occupational therapy.",
+        expiry_date: new Date("2026-03-01"),
+        notes: "Original referral — now expired.",
+        patientId: margaret.id,
       },
     }),
-    prisma.deal.create({
+    prisma.referral.create({
       data: {
-        title: "Mystery Inc Exploration",
-        value: 5000,
-        stage: "lead",
-        notes: "Very early stage. Need to qualify.",
-        contactId: jack.id,
-        companyId: mystery.id,
+        referring_gp: "Dr Sarah Mitchell",
+        gp_practice: "Collins St Medical Centre",
+        referral_date: new Date("2026-03-05"),
+        reason: "Ongoing mobility support. Patient has made progress but still requires weekly sessions.",
+        expiry_date: new Date("2027-03-05"),
+        patientId: margaret.id,
       },
     }),
-    // Qualified stage
-    prisma.deal.create({
+    prisma.referral.create({
       data: {
-        title: "Globex Platform License",
-        value: 120000,
-        stage: "qualified",
-        expected_close: new Date("2026-07-01"),
-        notes: "Budget confirmed. Technical evaluation next.",
-        contactId: carol.id,
-        companyId: globex.id,
+        referring_gp: "Dr Kevin Nguyen",
+        gp_practice: "Bourke St Family Practice",
+        referral_date: new Date("2026-01-15"),
+        reason: "Workplace injury — lower back. Requires assessment and treatment plan.",
+        expiry_date: new Date("2027-01-15"),
+        patientId: james.id,
       },
     }),
-    prisma.deal.create({
+    prisma.referral.create({
       data: {
-        title: "Freelance Consulting Setup",
-        value: 15000,
-        stage: "qualified",
-        expected_close: new Date("2026-05-20"),
-        contactId: henry.id,
-        // No company — freelancer deal
+        referring_gp: "Dr Amanda Li",
+        gp_practice: "St Kilda Health Hub",
+        referral_date: new Date("2026-02-10"),
+        reason: "Chronic pain management. Referred for multidisciplinary approach.",
+        expiry_date: new Date("2027-02-10"),
+        patientId: susan.id,
       },
     }),
-    // Proposal stage
-    prisma.deal.create({
+    prisma.referral.create({
       data: {
-        title: "Stark Innovation Package",
-        value: 250000,
-        stage: "proposal",
-        expected_close: new Date("2026-08-01"),
-        notes: "Proposal sent April 5. Awaiting feedback from London.",
-        contactId: eve.id,
-        companyId: stark.id,
+        referring_gp: "Dr Peter Grant",
+        gp_practice: "Brighton Medical Group",
+        referral_date: new Date("2025-08-20"),
+        reason: "Post-stroke rehabilitation — speech and motor function.",
+        expiry_date: new Date("2026-08-20"),
+        notes: "Patient discharged 2026-02-15. Goals met.",
+        patientId: robert.id,
       },
     }),
-    prisma.deal.create({
+    prisma.referral.create({
       data: {
-        title: "Globex Add-on Modules",
-        value: 35000,
-        stage: "proposal",
-        expected_close: new Date("2026-06-01"),
-        notes: "Upsell to existing platform license.",
-        contactId: dave.id,
-        companyId: globex.id,
-      },
-    }),
-    // Negotiation stage
-    prisma.deal.create({
-      data: {
-        title: "Wayne Financial Suite",
-        value: 180000,
-        stage: "negotiation",
-        expected_close: new Date("2026-05-15"),
-        notes: "Legal reviewing contract terms. Close expected soon.",
-        contactId: frank.id,
-        companyId: wayne.id,
-      },
-    }),
-    // Closed Won
-    prisma.deal.create({
-      data: {
-        title: "Acme Training Package",
-        value: 8000,
-        stage: "closed_won",
-        expected_close: new Date("2026-03-01"),
-        notes: "Delivered and paid. Happy customer.",
-        contactId: bob.id,
-        companyId: acme.id,
-      },
-    }),
-    prisma.deal.create({
-      data: {
-        title: "Umbrella Research License",
-        value: 95000,
-        stage: "closed_won",
-        expected_close: new Date("2026-04-01"),
-        notes: "Signed after 6 months of evaluation.",
-        contactId: grace.id,
-        companyId: umbrella.id,
-      },
-    }),
-    // Closed Lost
-    prisma.deal.create({
-      data: {
-        title: "Iris Exploration Deal",
-        value: 20000,
-        stage: "closed_lost",
-        notes: "Went with a competitor. Price was the issue.",
-        contactId: iris.id,
-      },
-    }),
-    prisma.deal.create({
-      data: {
-        title: "Acme Premium Upgrade",
-        value: 75000,
-        stage: "closed_lost",
-        expected_close: new Date("2026-02-15"),
-        notes: "Budget was reallocated internally. May revisit Q3.",
-        contactId: alice.id,
-        companyId: acme.id,
+        referring_gp: "Dr Rachel Wong",
+        gp_practice: "Melbourne CBD Medical",
+        referral_date: new Date("2026-04-01"),
+        reason: "Anxiety and stress management. Requesting psychology sessions.",
+        expiry_date: new Date("2027-04-01"),
+        patientId: priya.id,
       },
     }),
   ]);
 
-  console.log("Creating interactions of every type...");
+  console.log("Creating clinical notes...");
   await Promise.all([
-    // Alice — multiple interactions (active relationship)
-    prisma.interaction.create({
+    prisma.clinicalNote.create({
       data: {
-        summary: "Initial discovery call. Alice described their needs for contract management.",
-        date: new Date("2026-01-15T10:00:00Z"),
-        type: "call",
-        contactId: alice.id,
+        date: new Date("2025-03-10T09:00:00Z"),
+        note_type: "initial_assessment",
+        content: "Initial home visit. Patient is 6 weeks post right total hip replacement. Mobilising with walker. ROM limited. Pain 5/10 on movement. Goals: independent mobility, return to gardening. Plan: 2x/week physio for 8 weeks, then reassess.",
+        clinician: "Clare",
+        patientId: margaret.id,
       },
     }),
-    prisma.interaction.create({
+    prisma.clinicalNote.create({
       data: {
-        summary: "Sent product overview deck and pricing sheet.",
-        date: new Date("2026-01-20T14:00:00Z"),
-        type: "email",
-        contactId: alice.id,
+        date: new Date("2025-05-15T09:00:00Z"),
+        note_type: "progress_note",
+        content: "Week 10. Progressed to single-point stick. ROM improved. Pain 2/10. Walking 200m independently. Reduced to 1x/week.",
+        clinician: "Clare",
+        patientId: margaret.id,
       },
     }),
-    prisma.interaction.create({
+    prisma.clinicalNote.create({
       data: {
-        summary: "On-site demo with Alice and her team. Very positive feedback.",
-        date: new Date("2026-02-05T09:00:00Z"),
-        type: "meeting",
-        contactId: alice.id,
+        date: new Date("2026-03-10T09:00:00Z"),
+        note_type: "treatment_plan",
+        content: "New referral received. Reassessment: patient has maintained gains but reports occasional instability on uneven surfaces. Plan: 1x/week for 6 weeks focusing on balance and outdoor mobility. Consider falls prevention program.",
+        clinician: "Clare",
+        patientId: margaret.id,
       },
     }),
-    prisma.interaction.create({
+    prisma.clinicalNote.create({
       data: {
-        summary: "Alice mentioned budget freeze may delay decision. Follow up in March.",
-        date: new Date("2026-02-20T11:00:00Z"),
-        type: "note",
-        contactId: alice.id,
+        date: new Date("2026-01-22T10:00:00Z"),
+        note_type: "initial_assessment",
+        content: "Workplace injury assessment. Lumbar strain — lifting incident at warehouse. Pain 7/10, radiating to left leg. Limited flexion. Red flags screened — nil. Plan: 2x/week manual therapy + exercise program. WorkCover claim lodged.",
+        clinician: "Clare",
+        patientId: james.id,
       },
     }),
-    prisma.interaction.create({
+    prisma.clinicalNote.create({
       data: {
-        summary: "Follow-up call after budget freeze lifted. Ready to proceed.",
-        date: new Date("2026-03-15T10:00:00Z"),
-        type: "call",
-        contactId: alice.id,
+        date: new Date("2026-03-20T10:00:00Z"),
+        note_type: "progress_note",
+        content: "Week 8. Pain reduced to 3/10. Full ROM restored. Commenced graduated return to work program. Employer liaison completed. Expect full duties by week 12.",
+        clinician: "Clare",
+        patientId: james.id,
       },
     }),
+    prisma.clinicalNote.create({
+      data: {
+        date: new Date("2026-02-20T14:00:00Z"),
+        note_type: "initial_assessment",
+        content: "Assessment conducted with daughter interpreting. Chronic widespread pain — 3 year history. Multiple failed treatments. Pain 6/10 average, 9/10 flares. Sleep disrupted. Mood low. Plan: pain education, gentle exercise program, liaison with GP re: medication review.",
+        clinician: "Clare",
+        patientId: susan.id,
+      },
+    }),
+    prisma.clinicalNote.create({
+      data: {
+        date: new Date("2025-09-01T11:00:00Z"),
+        note_type: "initial_assessment",
+        content: "Post-CVA assessment. Left-sided weakness, dysarthria. Mobilising with quad stick. ADLs partially dependent. Speech slightly slurred but intelligible. Goals: independent transfers, clear speech for phone calls.",
+        clinician: "Clare",
+        patientId: robert.id,
+      },
+    }),
+    prisma.clinicalNote.create({
+      data: {
+        date: new Date("2026-02-15T11:00:00Z"),
+        note_type: "discharge_summary",
+        content: "Discharge summary. 24 sessions over 5.5 months. All goals achieved. Independent transfers, walking 500m without aid, speech intelligible on phone. Patient and wife educated on ongoing home exercises. Will re-refer if regression noted.",
+        clinician: "Clare",
+        patientId: robert.id,
+      },
+    }),
+  ]);
 
-    // Bob — technical interactions
-    prisma.interaction.create({
+  console.log("Creating hearing aids...");
+  await Promise.all([
+    prisma.hearingAid.create({
       data: {
-        summary: "Technical deep-dive call with Bob on API integration requirements.",
-        date: new Date("2026-02-10T15:00:00Z"),
-        type: "call",
-        contactId: bob.id,
+        ear: "right",
+        make: "Phonak",
+        model: "Audéo Paradise P90-R",
+        serial_number: "PHK-2024-R-78432",
+        battery_type: "Rechargeable lithium-ion",
+        wax_filter: "CeruShield Disk",
+        dome: "Open dome 8mm",
+        programming_cable: "Noahlink Wireless",
+        programming_software: "Phonak Target 9.0",
+        hsp_code: "HSP-VIC-2025-11234",
+        warranty_end_date: new Date("2027-06-15"),
+        last_repair_details: "Replaced receiver — intermittent cutout. Sent 2026-01-10, returned 2026-01-22.",
+        repair_address: "Sonova Australia, 8 Nexus Ct, Mulgrave VIC 3170",
+        patientId: margaret.id,
       },
     }),
-    prisma.interaction.create({
+    prisma.hearingAid.create({
       data: {
-        summary: "Sent API documentation and sandbox credentials.",
-        date: new Date("2026-02-12T09:00:00Z"),
-        type: "email",
-        contactId: bob.id,
+        ear: "left",
+        make: "Phonak",
+        model: "Audéo Paradise P90-R",
+        serial_number: "PHK-2024-L-78433",
+        battery_type: "Rechargeable lithium-ion",
+        wax_filter: "CeruShield Disk",
+        dome: "Open dome 8mm",
+        programming_cable: "Noahlink Wireless",
+        programming_software: "Phonak Target 9.0",
+        hsp_code: "HSP-VIC-2025-11234",
+        warranty_end_date: new Date("2027-06-15"),
+        repair_address: "Sonova Australia, 8 Nexus Ct, Mulgrave VIC 3170",
+        patientId: margaret.id,
       },
     }),
+    prisma.hearingAid.create({
+      data: {
+        ear: "right",
+        make: "Oticon",
+        model: "Real 1 miniRITE R",
+        serial_number: "OTI-2025-R-55901",
+        battery_type: "Rechargeable lithium-ion",
+        wax_filter: "ProWax miniFit",
+        dome: "Bass dome 10mm",
+        programming_cable: "Noahlink Wireless",
+        programming_software: "Oticon Genie 2 2024.1",
+        hsp_code: "HSP-VIC-2026-20187",
+        warranty_end_date: new Date("2028-01-20"),
+        repair_address: "Demant Australia, Level 2, 3 Nexus Ct, Mulgrave VIC 3170",
+        patientId: james.id,
+      },
+    }),
+    prisma.hearingAid.create({
+      data: {
+        ear: "left",
+        make: "Widex",
+        model: "Moment Sheer 440 sRIC RD",
+        serial_number: "WDX-2023-L-33210",
+        battery_type: "Size 312 zinc-air",
+        wax_filter: "Nanocare Wax Guard",
+        dome: "Tulip dome S",
+        programming_cable: "Noahlink Wireless",
+        programming_software: "Widex Compass GPS 4.5",
+        hsp_code: "HSP-VIC-2024-08921",
+        warranty_end_date: new Date("2026-08-01"),
+        last_repair_details: "Volume control intermittent. Cleaned contacts, resolved. 2025-11-05.",
+        repair_address: "WS Audiology ANZ, 95 Coventry St, South Melbourne VIC 3205",
+        patientId: susan.id,
+      },
+    }),
+  ]);
 
-    // Carol — CEO-level interactions
-    prisma.interaction.create({
+  console.log("Creating personal notes...");
+  await Promise.all([
+    prisma.personalNote.create({
       data: {
-        summary: "Introductory meeting at Tech Summit 2026. Carol very interested.",
-        date: new Date("2026-01-28T16:00:00Z"),
-        type: "meeting",
-        contactId: carol.id,
+        date: new Date("2025-03-10T09:30:00Z"),
+        content: "Margaret lives alone since husband passed 2024. Daughter visits weekly. Has a cat named Biscuit. Prefers tea — no milk.",
+        patientId: margaret.id,
       },
     }),
-    prisma.interaction.create({
+    prisma.personalNote.create({
       data: {
-        summary: "Carol forwarded us to Dave for procurement process.",
-        date: new Date("2026-02-01T10:00:00Z"),
-        type: "email",
-        contactId: carol.id,
+        date: new Date("2026-01-22T10:30:00Z"),
+        content: "James works at Linfox warehouse. Shifts are 6am-2pm. Can only attend afternoon appointments. Has WorkCover case manager: Sarah (0412 555 789).",
+        patientId: james.id,
       },
     }),
+    prisma.personalNote.create({
+      data: {
+        date: new Date("2026-02-20T14:30:00Z"),
+        content: "Susan's daughter Mai (0423 555 100) translates. Call Mai first to arrange appointments. Susan is Buddhist — no appointments on Vesak Day.",
+        patientId: susan.id,
+      },
+    }),
+    prisma.personalNote.create({
+      data: {
+        date: new Date("2025-09-01T11:30:00Z"),
+        content: "Robert's wife June is very involved in his care. She takes detailed notes. Their grandson is studying medicine at Monash — Robert is very proud.",
+        patientId: robert.id,
+      },
+    }),
+  ]);
 
-    // Dave — procurement interactions
-    prisma.interaction.create({
+  console.log("Creating claim items...");
+  await Promise.all([
+    prisma.claimItem.create({
       data: {
-        summary: "Call with Dave to discuss pricing tiers and volume discounts.",
-        date: new Date("2026-02-15T14:00:00Z"),
-        type: "call",
-        contactId: dave.id,
+        item_number: "10960",
+        description: "Allied health service — physiotherapy (TCA)",
+        date_of_service: new Date("2026-03-10"),
+        amount: 56.35,
+        status: "paid",
+        patientId: margaret.id,
       },
     }),
-    prisma.interaction.create({
+    prisma.claimItem.create({
       data: {
-        summary: "Sent revised proposal with volume pricing to Dave.",
-        date: new Date("2026-03-01T09:00:00Z"),
-        type: "email",
-        contactId: dave.id,
+        item_number: "10960",
+        description: "Allied health service — physiotherapy (TCA)",
+        date_of_service: new Date("2026-03-17"),
+        amount: 56.35,
+        status: "paid",
+        patientId: margaret.id,
       },
     }),
-
-    // Eve — international interactions
-    prisma.interaction.create({
+    prisma.claimItem.create({
       data: {
-        summary: "Video call with Eve in London. Discussed AI roadmap and innovation use cases.",
-        date: new Date("2026-03-10T08:00:00Z"),
-        type: "call",
-        contactId: eve.id,
+        item_number: "10960",
+        description: "Allied health service — physiotherapy (TCA)",
+        date_of_service: new Date("2026-03-24"),
+        amount: 56.35,
+        status: "claimed",
+        patientId: margaret.id,
       },
     }),
-    prisma.interaction.create({
+    prisma.claimItem.create({
       data: {
-        summary: "Sent proposal to Eve. She needs internal approval from NY office.",
-        date: new Date("2026-04-05T12:00:00Z"),
-        type: "email",
-        contactId: eve.id,
+        item_number: "10960",
+        description: "Allied health service — physiotherapy (TCA)",
+        date_of_service: new Date("2026-04-07"),
+        amount: 56.35,
+        status: "pending",
+        patientId: margaret.id,
       },
     }),
-
-    // Frank — finance interactions
-    prisma.interaction.create({
+    prisma.claimItem.create({
       data: {
-        summary: "Contract negotiation meeting with Frank and legal team.",
-        date: new Date("2026-04-02T11:00:00Z"),
-        type: "meeting",
-        contactId: frank.id,
+        item_number: "10960",
+        description: "Allied health service — initial assessment",
+        date_of_service: new Date("2026-01-22"),
+        amount: 56.35,
+        status: "paid",
+        notes: "WorkCover claim — invoice sent separately",
+        patientId: james.id,
       },
     }),
-    prisma.interaction.create({
+    prisma.claimItem.create({
       data: {
-        summary: "Frank requested revised payment terms — net 60 instead of net 30.",
-        date: new Date("2026-04-08T15:00:00Z"),
-        type: "note",
-        contactId: frank.id,
+        item_number: "10960",
+        description: "Allied health service — follow-up",
+        date_of_service: new Date("2026-03-20"),
+        amount: 56.35,
+        status: "paid",
+        patientId: james.id,
       },
     }),
-
-    // Grace — slow-moving interactions
-    prisma.interaction.create({
+    prisma.claimItem.create({
       data: {
-        summary: "Initial call with Grace. Interested but says approval takes months.",
-        date: new Date("2025-10-15T10:00:00Z"),
-        type: "call",
-        contactId: grace.id,
+        item_number: "10960",
+        description: "Allied health service — pain management",
+        date_of_service: new Date("2026-02-20"),
+        amount: 56.35,
+        status: "paid",
+        patientId: susan.id,
       },
     }),
-    prisma.interaction.create({
+    prisma.claimItem.create({
       data: {
-        summary: "Quarterly check-in with Grace. Still in internal review.",
-        date: new Date("2026-01-10T10:00:00Z"),
-        type: "call",
-        contactId: grace.id,
+        item_number: "10960",
+        description: "Allied health service — follow-up",
+        date_of_service: new Date("2026-03-15"),
+        amount: 56.35,
+        status: "rejected",
+        notes: "Rejected — TCA session limit reached. Need GP to renew plan.",
+        patientId: susan.id,
       },
     }),
-    prisma.interaction.create({
-      data: {
-        summary: "Grace confirmed approval! Sending contract.",
-        date: new Date("2026-03-20T14:00:00Z"),
-        type: "email",
-        contactId: grace.id,
-      },
-    }),
-
-    // Henry — freelancer interactions
-    prisma.interaction.create({
-      data: {
-        summary: "Met Henry at DevConf 2026. Exchanged cards.",
-        date: new Date("2026-02-22T17:00:00Z"),
-        type: "meeting",
-        contactId: henry.id,
-      },
-    }),
-    prisma.interaction.create({
-      data: {
-        summary: "Henry called to discuss consulting engagement scope.",
-        date: new Date("2026-03-05T10:00:00Z"),
-        type: "call",
-        contactId: henry.id,
-      },
-    }),
-
-    // Iris — minimal interaction before losing the deal
-    prisma.interaction.create({
-      data: {
-        summary: "Cold email to Iris. She responded with interest.",
-        date: new Date("2026-01-05T09:00:00Z"),
-        type: "email",
-        contactId: iris.id,
-      },
-    }),
-    prisma.interaction.create({
-      data: {
-        summary: "Iris informed us they chose a competitor. Price was deciding factor.",
-        date: new Date("2026-03-25T11:00:00Z"),
-        type: "email",
-        contactId: iris.id,
-      },
-    }),
-
-    // Jack — referral with minimal interaction
-    prisma.interaction.create({
-      data: {
-        summary: "Alice referred Jack. Left voicemail, waiting for callback.",
-        date: new Date("2026-04-01T10:00:00Z"),
-        type: "note",
-        contactId: jack.id,
-      },
-    }),
-
-    // Karen — NO interactions (completely cold contact)
   ]);
 
   console.log("\nSeed complete! Summary:");
-  const companyCount = await prisma.company.count();
-  const contactCount = await prisma.contact.count();
-  const dealCount = await prisma.deal.count();
-  const interactionCount = await prisma.interaction.count();
-  console.log(`  Companies:    ${companyCount}`);
-  console.log(`  Contacts:     ${contactCount}`);
-  console.log(`  Deals:        ${dealCount}`);
-  console.log(`  Interactions: ${interactionCount}`);
-  console.log("\nRelation coverage:");
-  console.log("  - Companies with multiple contacts (Acme, Globex, Wayne)");
-  console.log("  - Company with no contacts (Empty Holdings LLC)");
-  console.log("  - Company with minimal data (Mystery Inc)");
-  console.log("  - Contact with no company (Henry — freelancer)");
-  console.log("  - Contact with minimal data (Iris — email only)");
-  console.log("  - Contact with no email (Jack — phone only)");
-  console.log("  - Contact with no deals or interactions (Karen — cold)");
-  console.log("  - Contact with multiple deals (Alice — 2 deals)");
-  console.log("  - Contact with multiple interactions (Alice — 5)");
-  console.log("  - Deal with no company (Henry's freelance deal)");
-  console.log("  - Deal with no expected close date (Mystery, Iris deals)");
-  console.log("  - Deals at every stage: lead(2), qualified(2), proposal(2), negotiation(1), closed_won(2), closed_lost(2)");
-  console.log("  - Interactions of every type: call, email, meeting, note");
+  const patientCount = await prisma.patient.count();
+  const referralCount = await prisma.referral.count();
+  const clinicalNoteCount = await prisma.clinicalNote.count();
+  const hearingAidCount = await prisma.hearingAid.count();
+  const personalNoteCount = await prisma.personalNote.count();
+  const claimItemCount = await prisma.claimItem.count();
+  console.log(`  Patients:       ${patientCount}`);
+  console.log(`  Referrals:      ${referralCount}`);
+  console.log(`  Clinical Notes: ${clinicalNoteCount}`);
+  console.log(`  Hearing Aids:   ${hearingAidCount}`);
+  console.log(`  Personal Notes: ${personalNoteCount}`);
+  console.log(`  Claim Items:    ${claimItemCount}`);
+  console.log("\nCoverage:");
+  console.log("  - Patient with multiple referrals (Margaret — re-referred)");
+  console.log("  - Patient with full note history (Margaret — assessment, progress, treatment plan)");
+  console.log("  - Discharged patient with discharge summary (Robert)");
+  console.log("  - Inactive patient on waitlist (Priya)");
+  console.log("  - Patient requiring interpreter (Susan)");
+  console.log("  - WorkCover patient (James)");
+  console.log("  - Clinical notes of every type: initial_assessment, progress_note, discharge_summary, treatment_plan");
+  console.log("  - Bilateral hearing aids (Margaret — Phonak pair, one with repair history)");
+  console.log("  - Single hearing aid (James — Oticon right ear)");
+  console.log("  - Older model with zinc-air batteries (Susan — Widex)");
+  console.log("  - Personal notes with family/scheduling context for 4 patients");
+  console.log("  - Claim items at every status: pending, claimed, paid, rejected");
+  console.log("  - Rejected claim with reason (Susan — TCA session limit)");
+  console.log("  - Maintenance plan expiry dates (Margaret Sep, James Jul, Susan May — expiring soon!)");
+  console.log("  - No attachments seeded (files require actual uploads)");
 }
 
 seed()

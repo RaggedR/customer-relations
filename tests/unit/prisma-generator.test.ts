@@ -15,15 +15,15 @@ describe("Prisma Generator", () => {
 
   it("generates models for all entities", () => {
     const output = generatePrismaSchema(schema);
-    expect(output).toContain("model Company {");
-    expect(output).toContain("model Contact {");
-    expect(output).toContain("model Interaction {");
-    expect(output).toContain("model Deal {");
+    expect(output).toContain("model Patient {");
+    expect(output).toContain("model Referral {");
+    expect(output).toContain("model ClinicalNote {");
+    expect(output).toContain("model HearingAid {");
   });
 
   it("generates required fields without ? suffix", () => {
     const output = generatePrismaSchema(schema);
-    // name is required on Contact
+    // name is required on Patient
     expect(output).toMatch(/name String\b(?!\?)/);
   });
 
@@ -35,26 +35,25 @@ describe("Prisma Generator", () => {
 
   it("generates foreign key fields for belongs_to relations", () => {
     const output = generatePrismaSchema(schema);
-    expect(output).toContain("companyId Int?");
-    expect(output).toContain("contactId Int?");
+    expect(output).toContain("patientId Int?");
   });
 
   it("generates relation fields", () => {
     const output = generatePrismaSchema(schema);
-    expect(output).toContain("company Company? @relation");
-    expect(output).toContain("contact Contact? @relation");
+    expect(output).toContain("patient Patient? @relation");
   });
 
   it("generates reverse relation arrays", () => {
     const output = generatePrismaSchema(schema);
-    // Company should have contacts[] and deals[]
-    expect(output).toContain("contacts Contact[]");
-    expect(output).toContain("deals Deal[]");
+    // Patient should have referrals[], clinical_notes[], etc.
+    expect(output).toContain("referrals Referral[]");
+    expect(output).toContain("clinical_notes ClinicalNote[]");
   });
 
   it("includes id, createdAt, updatedAt on all models", () => {
     const output = generatePrismaSchema(schema);
-    const models = output.split("model ");
+    // Split on "model " at the start of a line to avoid matching field names like "model String?"
+    const models = output.split(/\nmodel /);
     for (const model of models.slice(1)) {
       expect(model).toContain("id        Int      @id @default(autoincrement())");
       expect(model).toContain("createdAt DateTime @default(now())");
