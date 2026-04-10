@@ -125,7 +125,12 @@ export function validateEntity(
 
 export async function findAll(
   entityName: string,
-  options?: { search?: string; sortBy?: string; sortOrder?: "asc" | "desc" }
+  options?: {
+    search?: string;
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
+    filterBy?: Record<string, unknown>;
+  }
 ) {
   const schema = getSchema();
   const entity = schema.entities[entityName];
@@ -139,6 +144,15 @@ export async function findAll(
     args.include = includes;
   }
 
+  const whereConditions: Record<string, unknown>[] = [];
+
+  // Exact-match filters (e.g. patientId=5)
+  if (options?.filterBy) {
+    for (const [key, value] of Object.entries(options.filterBy)) {
+      whereConditions.push({ [key]: value });
+    }
+  }
+
   // Search across string fields
   if (options?.search) {
     const orConditions = Object.entries(entity.fields)
@@ -150,8 +164,15 @@ export async function findAll(
         },
       }));
     if (orConditions.length > 0) {
-      args.where = { OR: orConditions };
+      whereConditions.push({ OR: orConditions });
     }
+  }
+
+  if (whereConditions.length > 0) {
+    args.where =
+      whereConditions.length === 1
+        ? whereConditions[0]
+        : { AND: whereConditions };
   }
 
   // Sorting

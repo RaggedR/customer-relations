@@ -26,8 +26,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const sortBy = searchParams.get("sortBy") || undefined;
   const sortOrder = (searchParams.get("sortOrder") as "asc" | "desc") || undefined;
 
+  // Build filter from query params (e.g. ?patientId=5)
+  const filterBy: Record<string, unknown> = {};
+  const entityConfig = schema.entities[entity];
+  if (entityConfig.relations) {
+    for (const relName of Object.keys(entityConfig.relations)) {
+      const fkParam = searchParams.get(`${relName}Id`);
+      if (fkParam) {
+        filterBy[`${relName}Id`] = parseInt(fkParam, 10);
+      }
+    }
+  }
+
   try {
-    const items = await findAll(entity, { search, sortBy, sortOrder });
+    const items = await findAll(entity, {
+      search,
+      sortBy,
+      sortOrder,
+      filterBy: Object.keys(filterBy).length > 0 ? filterBy : undefined,
+    });
     return NextResponse.json(items);
   } catch (error) {
     console.error(`GET /api/${entity} error:`, error);

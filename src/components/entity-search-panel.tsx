@@ -11,9 +11,10 @@ import { Linkify } from "@/components/linkify";
 interface EntitySearchPanelProps {
   entityName: string;
   entity: EntityConfig;
+  onItemSelect?: (id: number, name: string) => void;
 }
 
-export function EntitySearchPanel({ entityName, entity }: EntitySearchPanelProps) {
+export function EntitySearchPanel({ entityName, entity, onItemSelect }: EntitySearchPanelProps) {
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,7 +110,14 @@ export function EntitySearchPanel({ entityName, entity }: EntitySearchPanelProps
                 entityName={entityName}
                 entity={entity}
                 item={item}
-                onClick={() => setSelectedItem(item)}
+                onClick={() => {
+                  if (onItemSelect) {
+                    const name = String(item.name ?? item[Object.keys(entity.fields)[0]] ?? `#${item.id}`);
+                    onItemSelect(item.id as number, name);
+                  } else {
+                    setSelectedItem(item);
+                  }
+                }}
               />
             ))}
           </div>

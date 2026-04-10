@@ -1,42 +1,80 @@
 entities:
-  company:
+  patient:
     fields:
       name: { type: string, required: true }
-      industry: { type: string }
-      website: { type: url }
-
-  contact:
-    fields:
-      name: { type: string, required: true }
-      email: { type: email }
+      date_of_birth: { type: date }
+      medicare_number: { type: string }
       phone: { type: phone }
-      role: { type: string }
+      email: { type: email }
+      address: { type: text }
+      status: { type: enum, values: [active, inactive, discharged] }
+      maintenance_plan_expiry: { type: date }
+      notes: { type: text }
+
+  referral:
+    fields:
+      referring_gp: { type: string, required: true }
+      gp_practice: { type: string }
+      referral_date: { type: date, required: true }
+      reason: { type: text }
+      expiry_date: { type: date }
       notes: { type: text }
     relations:
-      company: { type: belongs_to, entity: company }
-    carddav:
-      enabled: true
-      mapping:
-        name: fn
-        email: email
-        phone: tel
-        company: org
+      patient: { type: belongs_to, entity: patient }
 
-  interaction:
+  clinical_note:
     fields:
-      summary: { type: text, required: true }
       date: { type: datetime, required: true }
-      type: { type: enum, values: [call, email, meeting, note] }
+      note_type: { type: enum, values: [initial_assessment, progress_note, discharge_summary, treatment_plan] }
+      content: { type: text, required: true }
+      clinician: { type: string }
     relations:
-      contact: { type: belongs_to, entity: contact }
+      patient: { type: belongs_to, entity: patient }
 
-  deal:
+  personal_note:
     fields:
-      title: { type: string, required: true }
-      value: { type: number }
-      stage: { type: enum, values: [lead, qualified, proposal, negotiation, closed_won, closed_lost] }
-      expected_close: { type: date }
+      date: { type: datetime, required: true }
+      content: { type: text, required: true }
+    relations:
+      patient: { type: belongs_to, entity: patient }
+
+  hearing_aid:
+    fields:
+      ear: { type: enum, values: [left, right] }
+      make: { type: string }
+      model: { type: string }
+      serial_number: { type: string }
+      battery_type: { type: string }
+      wax_filter: { type: string }
+      dome: { type: string }
+      programming_cable: { type: string }
+      programming_software: { type: string }
+      hsp_code: { type: string }
+      warranty_end_date: { type: date }
+      last_repair_details: { type: text }
+      repair_address: { type: text }
+    relations:
+      patient: { type: belongs_to, entity: patient }
+
+  claim_item:
+    fields:
+      item_number: { type: string, required: true }
+      description: { type: string }
+      date_of_service: { type: date, required: true }
+      amount: { type: number }
+      status: { type: enum, values: [pending, claimed, paid, rejected] }
       notes: { type: text }
     relations:
-      contact: { type: belongs_to, entity: contact }
-      company: { type: belongs_to, entity: company }
+      patient: { type: belongs_to, entity: patient }
+
+  attachment:
+    fields:
+      filename: { type: string, required: true }
+      storage_path: { type: string, required: true }
+      mime_type: { type: string }
+      size_bytes: { type: number }
+      category: { type: enum, values: [referral_letter, test_result, clinical_document, other] }
+      description: { type: text }
+    relations:
+      patient: { type: belongs_to, entity: patient }
+      clinical_note: { type: belongs_to, entity: clinical_note }

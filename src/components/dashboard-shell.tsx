@@ -3,17 +3,22 @@
 import { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { TopBar } from "@/components/top-bar";
-import { AddContactDialog } from "@/components/add-contact-dialog";
 import { FloatingWindow } from "@/components/floating-window";
 import { EntitySearchPanel } from "@/components/entity-search-panel";
+import { PatientDetailPanel } from "@/components/patient-detail-panel";
+import { PatientPropertyPanel } from "@/components/patient-property-panel";
+import { PatientFormPanel } from "@/components/patient-form-panel";
 import { AiChatPanel, type ChartConfig } from "@/components/ai-chat-panel";
 import { ChartDisplay } from "@/components/chart-display";
 import type { SchemaConfig } from "@/engine/schema-loader";
 
 interface OpenWindow {
   id: string;
-  type: "entity" | "ai";
+  type: "patient-search" | "patient-detail" | "patient-property" | "patient-form" | "ai";
+  patientId?: number;
+  patientName?: string;
   entityName?: string;
+  label?: string;
   zIndex: number;
 }
 
@@ -32,44 +37,27 @@ export function DashboardShell({ children }: { children?: React.ReactNode }) {
       .catch((err) => console.error("Failed to load schema:", err));
   }, []);
 
-  const entities = schema ? Object.keys(schema.entities) : [];
-  const contactEntity = schema?.entities.contact;
-
-  const openWindow = useCallback(
-    (id: string, type: "entity" | "ai", entityName?: string) => {
-      const existing = openWindows.find((w) => w.id === id);
-      if (existing) {
-        setOpenWindows((prev) =>
-          prev.map((w) => (w.id === id ? { ...w, zIndex: nextZ } : w))
-        );
-        setNextZ((z) => z + 1);
-      } else {
-        const count = openWindows.length;
-        setOpenWindows((prev) => [
-          ...prev,
-          { id, type, entityName, zIndex: nextZ },
-        ]);
-        setNextZ((z) => z + 1);
-      }
+  const addWindow = useCallback(
+    (win: Omit<OpenWindow, "zIndex">) => {
+      setOpenWindows((prev) => {
+        const existing = prev.find((w) => w.id === win.id);
+        if (existing) {
+          return prev.map((w) =>
+            w.id === win.id ? { ...w, zIndex: nextZ } : w
+          );
+        }
+        return [...prev, { ...win, zIndex: nextZ }];
+      });
+      setNextZ((z) => z + 1);
     },
-    [openWindows, nextZ]
+    [nextZ]
   );
 
-  const handleEntitySelect = useCallback(
-    (entityName: string) => openWindow(`entity-${entityName}`, "entity", entityName),
-    [openWindow]
-  );
-
-  const handleOpenAiChat = useCallback(
-    () => openWindow("ai-chat", "ai"),
-    [openWindow]
-  );
-
-  const handleCloseWindow = useCallback((id: string) => {
+  const closeWindow = useCallback((id: string) => {
     setOpenWindows((prev) => prev.filter((w) => w.id !== id));
   }, []);
 
-  const handleFocusWindow = useCallback(
+  const focusWindow = useCallback(
     (id: string) => {
       setOpenWindows((prev) =>
         prev.map((w) => (w.id === id ? { ...w, zIndex: nextZ } : w))
@@ -79,103 +67,191 @@ export function DashboardShell({ children }: { children?: React.ReactNode }) {
     [nextZ]
   );
 
-  async function handleCreateContact(data: Record<string, unknown>) {
-    const res = await fetch("/api/contact", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json.errors?.join(", ") || json.error || "Failed to create contact");
-    }
-  }
+  // Sidebar: open patient search
+  const handleOpenPatients = useCallback(() => {
+    addWindow({ id: "patient-search", type: "patient-search" });
+  }, [addWindow]);
 
-  const activeEntity = openWindows.length > 0
-    ? (() => {
-        const top = openWindows.reduce((a, b) => (a.zIndex > b.zIndex ? a : b));
-        return top.entityName ?? null;
-      })()
-    : null;
+  // Patient search: click a patient → open detail window
+  const handlePatientSelected = useCallback(
+    (patientId: number, patientName: string) => {
+      addWindow({
+        id: `patient-${patientId}`,
+        type: "patient-detail",
+        patientId,
+        patientName,
+      });
+    },
+    [addWindow]
+  );
 
-  const pluralize = (name: string) =>
-    name === "company" ? "Companies" : `${name.charAt(0).toUpperCase()}${name.slice(1)}s`;
+  // Patient detail: click a property → open property window
+  const handleOpenProperty = useCallback(
+    (entityName: string, patientId: number, label: string) => {
+      // Find the patient name from the detail window
+      const detailWin = openWindows.find(
+        (w) => w.type === "patient-detail" && w.patientId === patientId
+      );
+      addWindow({
+        id: `property-${patientId}-${entityName}`,
+        type: "patient-property",
+        patientId,
+        patientName: detailWin?.patientName ?? "",
+        entityName,
+        label,
+      });
+    },
+    [addWindow, openWindows]
+  );
+
+  // Patient detail: edit button
+  const handleEditPatient = useCallback(
+    (patientId: number) => {
+      addWindow({
+        id: `patient-form-${patientId}`,
+        type: "patient-form",
+        patientId,
+      });
+    },
+    [addWindow]
+  );
+
+  // Patient detail: export
+  const handleExportPatient = useCallback(
+    (patientId: number, format: string) => {
+      window.open(`/api/patient/${patientId}/export?format=${format}`, "_blank");
+    },
+    []
+  );
+
+  const handleOpenPatientForm = useCallback(() => {
+    addWindow({ id: "patient-form-new", type: "patient-form" });
+  }, [addWindow]);
+
+  const handleOpenAiChat = useCallback(() => {
+    addWindow({ id: "ai-chat", type: "ai" });
+  }, [addWindow]);
 
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
-        entities={entities}
-        activeEntity={activeEntity}
-        onEntitySelect={handleEntitySelect}
-        actions={
-          <div className="space-y-1.5">
-            {contactEntity && (
-              <AddContactDialog
-                entity={contactEntity}
-                onSubmit={handleCreateContact}
-              />
-            )}
-            <button
-              onClick={handleOpenAiChat}
-              className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md border border-floating-border bg-floating text-floating-foreground hover:bg-floating-muted transition-colors"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2a8 8 0 0 1 8 8c0 3.3-2 6.2-5 7.5V20a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2.5C6 16.2 4 13.3 4 10a8 8 0 0 1 8-8z" />
-                <line x1="10" y1="22" x2="14" y2="22" />
-              </svg>
-              Ask AI
-            </button>
-          </div>
-        }
+        onOpenPatients={handleOpenPatients}
+        onAddPatient={handleOpenPatientForm}
+        onOpenAiChat={handleOpenAiChat}
       />
       <div className="flex flex-col flex-1 overflow-hidden">
-        <TopBar title="Customer Relations" />
+        <TopBar title="Patient Management" />
         <main className="relative flex-1 overflow-auto p-6">
           {chart ? (
             <ChartDisplay chart={chart} onClose={() => setChart(null)} />
           ) : (
             children ?? (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                Click an entity in the sidebar to search
+                Click Patients in the sidebar to get started
               </div>
             )
           )}
 
-          {/* Floating windows */}
           {openWindows.map((win, i) => {
+            if (win.type === "patient-search") {
+              const patientEntity = schema?.entities.patient;
+              if (!patientEntity) return null;
+              return (
+                <FloatingWindow
+                  key={win.id}
+                  title="Patients"
+                  onClose={() => closeWindow(win.id)}
+                  defaultPosition={{ x: 260, y: 50 }}
+                  defaultSize={{ width: 400, height: 520 }}
+                  zIndex={win.zIndex}
+                  onFocus={() => focusWindow(win.id)}
+                >
+                  <EntitySearchPanel
+                    entityName="patient"
+                    entity={patientEntity}
+                    onItemSelect={handlePatientSelected}
+                  />
+                </FloatingWindow>
+              );
+            }
+
+            if (win.type === "patient-detail" && win.patientId) {
+              return (
+                <FloatingWindow
+                  key={win.id}
+                  title={win.patientName ?? "Patient"}
+                  onClose={() => closeWindow(win.id)}
+                  defaultPosition={{ x: 340 + i * WINDOW_OFFSET, y: 50 + i * WINDOW_OFFSET }}
+                  defaultSize={{ width: 380, height: 540 }}
+                  zIndex={win.zIndex}
+                  onFocus={() => focusWindow(win.id)}
+                >
+                  <PatientDetailPanel
+                    patientId={win.patientId}
+                    onOpenProperty={handleOpenProperty}
+                    onEditPatient={handleEditPatient}
+                    onExportPatient={handleExportPatient}
+                  />
+                </FloatingWindow>
+              );
+            }
+
+            if (win.type === "patient-property" && win.patientId && win.entityName) {
+              const entityConfig = schema?.entities[win.entityName];
+              if (!entityConfig) return null;
+              return (
+                <FloatingWindow
+                  key={win.id}
+                  title={win.label ?? win.entityName}
+                  onClose={() => closeWindow(win.id)}
+                  defaultPosition={{ x: 420 + i * WINDOW_OFFSET, y: 60 + i * WINDOW_OFFSET }}
+                  defaultSize={{ width: 440, height: 500 }}
+                  zIndex={win.zIndex}
+                  onFocus={() => focusWindow(win.id)}
+                >
+                  <PatientPropertyPanel
+                    entityName={win.entityName}
+                    entity={entityConfig}
+                    patientId={win.patientId}
+                    patientName={win.patientName ?? ""}
+                  />
+                </FloatingWindow>
+              );
+            }
+
+            if (win.type === "patient-form") {
+              return (
+                <FloatingWindow
+                  key={win.id}
+                  title={win.patientId ? "Edit Patient" : "Add Patient"}
+                  onClose={() => closeWindow(win.id)}
+                  defaultPosition={{ x: 300 + i * WINDOW_OFFSET, y: 40 + i * WINDOW_OFFSET }}
+                  defaultSize={{ width: 520, height: 640 }}
+                  zIndex={win.zIndex}
+                  onFocus={() => focusWindow(win.id)}
+                >
+                  <PatientFormPanel patientId={win.patientId} />
+                </FloatingWindow>
+              );
+            }
+
             if (win.type === "ai") {
               return (
                 <FloatingWindow
                   key={win.id}
                   title="Ask AI"
-                  onClose={() => handleCloseWindow(win.id)}
+                  onClose={() => closeWindow(win.id)}
                   defaultPosition={{ x: 280 + i * WINDOW_OFFSET, y: 60 + i * WINDOW_OFFSET }}
                   defaultSize={{ width: 420, height: 520 }}
                   zIndex={win.zIndex}
-                  onFocus={() => handleFocusWindow(win.id)}
+                  onFocus={() => focusWindow(win.id)}
                 >
                   <AiChatPanel onChartGenerated={setChart} />
                 </FloatingWindow>
               );
             }
 
-            const entityConfig = win.entityName ? schema?.entities[win.entityName] : null;
-            if (!entityConfig || !win.entityName) return null;
-            return (
-              <FloatingWindow
-                key={win.id}
-                title={pluralize(win.entityName)}
-                onClose={() => handleCloseWindow(win.id)}
-                defaultPosition={{ x: 280 + i * WINDOW_OFFSET, y: 60 + i * WINDOW_OFFSET }}
-                zIndex={win.zIndex}
-                onFocus={() => handleFocusWindow(win.id)}
-              >
-                <EntitySearchPanel
-                  entityName={win.entityName}
-                  entity={entityConfig}
-                />
-              </FloatingWindow>
-            );
+            return null;
           })}
         </main>
       </div>
