@@ -16,13 +16,18 @@ interface RouteParams {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
+  const numId = parseInt(id, 10);
+  if (isNaN(numId)) {
+    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+  }
+
   const schema = getSchema();
   if (!schema.entities.patient) {
     return NextResponse.json({ error: "Patient entity not found" }, { status: 404 });
   }
 
   try {
-    const item = await findById("patient", parseInt(id, 10));
+    const item = await findById("patient", numId);
     if (!item) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -35,6 +40,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
+  const numId = parseInt(id, 10);
+  if (isNaN(numId)) {
+    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+  }
+
   const schema = getSchema();
   if (!schema.entities.patient) {
     return NextResponse.json({ error: "Patient entity not found" }, { status: 404 });
@@ -47,7 +57,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ errors }, { status: 400 });
     }
 
-    const item = await update("patient", parseInt(id, 10), body);
+    const item = await update("patient", numId, body);
     return NextResponse.json(item);
   } catch (error) {
     console.error(`PUT /api/patient/${id} error:`, error);
@@ -57,13 +67,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
+  const numId = parseInt(id, 10);
+  if (isNaN(numId)) {
+    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+  }
+
   const schema = getSchema();
   if (!schema.entities.patient) {
     return NextResponse.json({ error: "Patient entity not found" }, { status: 404 });
   }
 
   try {
-    await remove("patient", parseInt(id, 10));
+    await remove("patient", numId);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error(`DELETE /api/patient/${id} error:`, error);
