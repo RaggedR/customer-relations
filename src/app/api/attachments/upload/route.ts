@@ -70,8 +70,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Sanitise filename — strip path separators, keep the rest
-  const safeName = file.name.replace(/[/\\]/g, "_");
+  // Sanitise filename — strip path separators, quotes, and control characters
+  const safeName = file.name.replace(/[/\\"\r\n]/g, "_");
   const uniqueName = `${randomUUID()}-${safeName}`;
   const patientDir = path.join(UPLOADS_DIR, patientId);
   const storagePath = path.join(patientDir, uniqueName);

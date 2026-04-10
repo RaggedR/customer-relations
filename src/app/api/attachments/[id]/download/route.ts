@@ -47,13 +47,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const buffer = await fs.readFile(fullPath);
-    const filename = String(record.filename);
+    const rawFilename = String(record.filename);
+    // Sanitise for Content-Disposition header — strip quotes and control chars
+    const safeFilename = rawFilename.replace(/["\r\n]/g, "_");
     const mimeType = String(record.mime_type || "application/octet-stream");
 
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": mimeType,
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `attachment; filename="${safeFilename}"`,
         "Content-Length": String(buffer.length),
       },
     });
