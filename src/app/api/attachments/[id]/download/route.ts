@@ -39,7 +39,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const fullPath = path.resolve(UPLOADS_DIR, storagePath);
 
     // Ensure path stays inside uploads/
-    if (!fullPath.startsWith(UPLOADS_DIR)) {
+    if (!fullPath.startsWith(UPLOADS_DIR + path.sep)) {
       return NextResponse.json(
         { error: "Invalid file path" },
         { status: 400 }

@@ -23,15 +23,10 @@ export function PatientPropertyPanel({
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/${entityName}`)
+    fetch(`/api/${entityName}?patientId=${patientId}`)
       .then((r) => r.json())
       .then((data: Record<string, unknown>[]) => {
-        // Filter to this patient's records
-        const filtered = data.filter(
-          (item) =>
-            (item.patientId ?? item.patient_id) === patientId
-        );
-        setItems(filtered);
+        setItems(Array.isArray(data) ? data : []);
       })
       .catch((err) => console.error(`Failed to load ${entityName}:`, err))
       .finally(() => setLoading(false));

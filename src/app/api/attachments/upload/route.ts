@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
 
   // Ensure the relative path stays inside uploads/
   const resolved = path.resolve(storagePath);
-  if (!resolved.startsWith(UPLOADS_DIR)) {
+  if (!resolved.startsWith(UPLOADS_DIR + path.sep)) {
     return NextResponse.json(
       { error: "Invalid file path" },
       { status: 400 }
