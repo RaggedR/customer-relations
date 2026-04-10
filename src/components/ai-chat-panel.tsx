@@ -94,10 +94,10 @@ export function AiChatPanel({ onChartGenerated }: AiChatPanelProps) {
       <div ref={scrollRef} className="flex-1 overflow-auto p-3 space-y-3">
         {messages.length === 0 && (
           <div className="text-xs text-muted-foreground text-center py-8">
-            Ask anything about your CRM data.
+            Ask anything about your patients, nurses, or clinical data.
             <br />
             <span className="text-[10px] mt-1 block opacity-70">
-              e.g. &quot;What percentage of contacts have deals?&quot;
+              e.g. &quot;Are any maintenance plans expiring soon?&quot;
             </span>
           </div>
         )}
@@ -163,7 +163,6 @@ export function AiChatPanel({ onChartGenerated }: AiChatPanelProps) {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about your data..."
           className="h-8 text-sm flex-1"
-          disabled={loading}
         />
         <Button type="submit" size="sm" disabled={loading || !input.trim()}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

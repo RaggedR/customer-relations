@@ -1,0 +1,81 @@
+# Navigation Model
+#
+# Defines the window types, their features, and transitions.
+#
+# Window types: each is a "blob" in the navigation graph.
+#   - role: visual sizing/positioning (maps to layout.ts)
+#   - title: template string ({entity}, {name}, {label} are interpolated)
+#   - component: which React component renders the content
+#   - features: what actions/sections are available inside the window
+#
+# Transitions: each is an "arrow" in the graph.
+#   - from → to: source window/element → target window type
+#   - on: what user action triggers the transition
+#   - id: template for the window's unique ID (prevents duplicates)
+
+windows:
+  search:
+    role: search
+    title: "{entity} list"
+    component: EntitySearchPanel
+
+  detail:
+    role: detail
+    title: "{name}"
+    component: EntityDetailPanel
+    features:
+      - edit           # opens form for this entity
+      - upload         # file upload to this entity's attachments
+      - more           # collapsible inline property summaries
+      - export-pdf     # PDF export (entities with export endpoint)
+      - export-json    # JSON export
+      - export-xlsx    # hearing aid spreadsheet export
+
+  property:
+    role: property
+    title: "{label}"
+    component: PropertyPanel
+    features:
+      - detail-view    # click an item to see all fields
+      - export-xlsx    # export button (shown for hearing_aid entity)
+
+  form:
+    role: form
+    title: "{mode} {entity}"
+    component: EntityFormPanel
+
+  ai:
+    role: ai
+    title: Ask AI
+    component: AiChatPanel
+
+transitions:
+  - from: sidebar
+    to: search
+    on: click entity
+    id: "search-{entity}"
+
+  - from: sidebar
+    to: form
+    on: click add
+    id: "form-{entity}-new"
+
+  - from: sidebar
+    to: ai
+    on: click ai
+    id: ai-chat
+
+  - from: search
+    to: detail
+    on: select item
+    id: "detail-{entity}-{id}"
+
+  - from: detail
+    to: property
+    on: click property
+    id: "property-{entity}-{id}-{propertyEntity}"
+
+  - from: detail
+    to: form
+    on: click edit
+    id: "form-{entity}-{id}"

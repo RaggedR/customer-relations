@@ -1,36 +1,41 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import type { EntityConfig, FieldConfig } from "@/engine/schema-loader";
 import { Linkify } from "@/components/linkify";
 
-interface PatientPropertyPanelProps {
+interface PropertyPanelProps {
   entityName: string;
   entity: EntityConfig;
-  patientId: number;
-  patientName: string;
+  parentId: number;
+  parentName: string;
+  parentKey: string;
+  features?: string[];
 }
 
-export function PatientPropertyPanel({
+export function PropertyPanel({
   entityName,
   entity,
-  patientId,
-  patientName,
-}: PatientPropertyPanelProps) {
+  parentId,
+  parentName,
+  parentKey,
+  features = [],
+}: PropertyPanelProps) {
   const [items, setItems] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/${entityName}?patientId=${patientId}`)
+    fetch(`/api/${entityName}?${parentKey}=${parentId}`)
       .then((r) => r.json())
       .then((data: Record<string, unknown>[]) => {
         setItems(Array.isArray(data) ? data : []);
       })
       .catch((err) => console.error(`Failed to load ${entityName}:`, err))
       .finally(() => setLoading(false));
-  }, [entityName, patientId]);
+  }, [entityName, parentId, parentKey]);
 
   if (selectedItem) {
     return (
@@ -79,7 +84,7 @@ export function PatientPropertyPanel({
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-3 py-2 border-b border-floating-border text-xs text-muted-foreground shrink-0">
-        {patientName}
+        {parentName}
       </div>
 
       {/* List */}
@@ -105,9 +110,23 @@ export function PatientPropertyPanel({
         )}
       </div>
 
-      {/* Count */}
-      <div className="px-3 py-1.5 border-t border-floating-border text-xs text-muted-foreground shrink-0">
-        {items.length} record{items.length !== 1 ? "s" : ""}
+      {/* Footer: count + export */}
+      <div className="px-3 py-1.5 border-t border-floating-border flex items-center justify-between shrink-0">
+        <span className="text-xs text-muted-foreground">
+          {items.length} record{items.length !== 1 ? "s" : ""}
+        </span>
+        {features.includes("export-xlsx") && entityName === "hearing_aid" && (
+          <div className="flex gap-1">
+            <Button variant="outline" size="sm" className="text-[10px] h-6 px-2"
+              onClick={() => window.open("/api/hearing-aid/export?format=xlsx", "_blank")}>
+              Excel
+            </Button>
+            <Button variant="outline" size="sm" className="text-[10px] h-6 px-2"
+              onClick={() => window.open("/api/hearing-aid/export?format=csv", "_blank")}>
+              CSV
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -202,12 +221,32 @@ function PropertyRow({
 
   if (entityName === "attachment") {
     return (
-      <div>
-        <div className="text-sm font-medium">{String(item.filename ?? "—")}</div>
-        <div className="text-xs text-muted-foreground">
-          {item.category ? String(item.category).replace(/_/g, " ") : ""}
-          {item.size_bytes ? ` — ${((item.size_bytes as number) / 1024).toFixed(1)} KB` : ""}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-medium">{String(item.filename ?? "—")}</div>
+          <div className="text-xs text-muted-foreground">
+            {item.category ? String(item.category).replace(/_/g, " ") : ""}
+            {item.size_bytes ? ` — ${((item.size_bytes as number) / 1024).toFixed(1)} KB` : ""}
+          </div>
         </div>
+        <a
+          href={`/api/attachments/${item.id}/download`}
+          className="text-[10px] px-2 py-1 rounded bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Download
+        </a>
+      </div>
+    );
+  }
+
+  if (entityName === "nurse_specialty") {
+    return (
+      <div>
+        <div className="text-sm font-medium">{String(item.specialty ?? "—")}</div>
+        {item.notes ? (
+          <div className="text-xs text-muted-foreground truncate">{String(item.notes)}</div>
+        ) : null}
       </div>
     );
   }

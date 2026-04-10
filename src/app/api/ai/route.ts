@@ -97,6 +97,26 @@ PostgreSQL database with these tables:
   "patientId" INT REFERENCES "Patient"(id)
 )
 
+"Nurse" (
+  id SERIAL PRIMARY KEY,
+  "createdAt" TIMESTAMP DEFAULT now(),
+  "updatedAt" TIMESTAMP,
+  name TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  registration_number TEXT, -- AHPRA registration
+  notes TEXT
+)
+
+"NurseSpecialty" (
+  id SERIAL PRIMARY KEY,
+  "createdAt" TIMESTAMP DEFAULT now(),
+  "updatedAt" TIMESTAMP,
+  specialty TEXT NOT NULL,
+  notes TEXT,
+  "nurseId" INT REFERENCES "Nurse"(id)
+)
+
 "Attachment" (
   id SERIAL PRIMARY KEY,
   "createdAt" TIMESTAMP DEFAULT now(),
@@ -141,18 +161,37 @@ Database schema:
 ${SCHEMA_DESCRIPTION}
 
 IMPORTANT RULES:
+- If the question is not related to the practice data (patients, nurses, referrals, clinical notes, hearing aids, claims, attachments), respond with: {"refused": true, "message": "Sorry, I can't help you with that. I can only answer questions about your patient and practice data."}
 - Only generate SELECT statements. Never generate any data-modifying SQL.
-- Always quote table and column names with double quotes when they contain uppercase letters (e.g. "Patient", "createdAt", "patientId", "ClinicalNote", "ClaimItem", "HearingAid")
+- Always quote table and column names with double quotes when they contain uppercase letters (e.g. "Patient", "createdAt", "patientId", "ClinicalNote", "ClaimItem", "HearingAid", "Nurse", "NurseSpecialty")
 - Use double quotes for identifiers, not single quotes
 - Today's date is ${new Date().toISOString().split("T")[0]}
 - For patient summaries, use LEFT JOINs to include patients even if they have no referrals/notes/etc.
+- ALWAYS use fuzzy name matching, never exact equality. The pg_trgm extension is enabled.
+  Use this pattern to handle typos, partial names, and apostrophes:
+  WHERE REPLACE(LOWER(name), '''', '') ILIKE '%searchterm%'
+     OR similarity(LOWER(name), 'searchterm') > 0.15
+  Examples:
+  - "Susan O'Brien" → WHERE REPLACE(LOWER(name), '''', '') ILIKE '%susan%obrien%' OR similarity(LOWER(name), 'susan obrien') > 0.15
+  - "Susan" → WHERE REPLACE(LOWER(name), '''', '') ILIKE '%susan%' OR similarity(LOWER(name), 'susan') > 0.15
+  - "obrien" → WHERE REPLACE(LOWER(name), '''', '') ILIKE '%obrien%' OR similarity(LOWER(name), 'obrien') > 0.15
+  - "Suzan" (typo) → the similarity() function will still match "Susan" because trigrams overlap
+  - Always lowercase the search term and strip apostrophes from both sides
 - When asked about "last week" or "this week", calculate the date range relative to today
 - Return valid JSON only, no markdown code fences
 
-Respond with JSON in this exact format:
+Respond with JSON in ONE of these formats:
+
+If the question is relevant:
 {
   "sql": "SELECT ...",
   "explanation": "Brief explanation of what the query does"
+}
+
+If the question is irrelevant or malformed:
+{
+  "refused": true,
+  "message": "Sorry, I can't help you with that."
 }`;
 
 const RESULTS_PROMPT = `Given the query results below, provide:
@@ -179,12 +218,142 @@ function getGenAI() {
   return new GoogleGenerativeAI(apiKey);
 }
 
+/**
+ * Levenshtein distance — number of single-character edits
+ * (insertions, deletions, substitutions) to transform a into b.
+ */
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+/** Distance 0–1: confident match, auto-resolve */
+const CONFIDENT_DISTANCE = 1;
+/** Distance 2–3: uncertain, ask the user to confirm */
+const MAX_DISTANCE = 3;
+
+/**
+ * Resolve fuzzy names before sending to Gemini.
+ *
+ * Loads all patient and nurse names, splits them into parts,
+ * and compares each word in the question using Levenshtein distance.
+ * If the closest match is within MAX_DISTANCE edits, appends the
+ * exact name to the question so Gemini generates clean SQL.
+ */
+interface NameResolution {
+  question: string;
+  clarify?: string; // if set, ask the user this instead of querying
+}
+
+async function resolveNames(question: string): Promise<NameResolution> {
+  try {
+    // Load all names (tiny tables — fast)
+    const [patients, nurses] = await Promise.all([
+      prisma.patient.findMany({ select: { name: true } }),
+      prisma.nurse.findMany({ select: { name: true } }),
+    ]);
+
+    const allNames: { name: string; type: string; parts: string[] }[] = [];
+    for (const p of patients) {
+      allNames.push({
+        name: p.name,
+        type: "patient",
+        parts: p.name.toLowerCase().replace(/'/g, "").split(/\s+/),
+      });
+    }
+    for (const n of nurses) {
+      allNames.push({
+        name: n.name,
+        type: "nurse",
+        parts: n.name.toLowerCase().replace(/'/g, "").split(/\s+/),
+      });
+    }
+
+    // Extract words from question (3+ chars, skip common words)
+    const skipWords = new Set([
+      "the", "about", "tell", "what", "when", "does", "has", "have",
+      "are", "for", "from", "with", "how", "many", "show", "get",
+      "all", "list", "plan", "date", "last", "next", "hearing",
+      "aids", "aid", "notes", "note", "claim", "items", "referral",
+    ]);
+    const words = question
+      .toLowerCase()
+      .replace(/['']/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length >= 3 && !skipWords.has(w));
+
+    let bestMatch: { name: string; type: string; distance: number } | null = null;
+
+    for (const word of words) {
+      for (const entry of allNames) {
+        // Check against each part of the name (first name, last name)
+        for (const part of entry.parts) {
+          const dist = levenshtein(word, part);
+          if (dist <= MAX_DISTANCE && (!bestMatch || dist < bestMatch.distance)) {
+            bestMatch = { name: entry.name, type: entry.type, distance: dist };
+          }
+        }
+        // Also check against the full name (stripped of apostrophes)
+        const fullName = entry.parts.join("");
+        const distFull = levenshtein(word, fullName);
+        if (distFull <= MAX_DISTANCE && (!bestMatch || distFull < bestMatch.distance)) {
+          bestMatch = { name: entry.name, type: entry.type, distance: distFull };
+        }
+      }
+    }
+
+    if (bestMatch) {
+      if (bestMatch.distance <= CONFIDENT_DISTANCE) {
+        // Confident — auto-resolve
+        return {
+          question: question + `\n\n[Name resolved: the ${bestMatch.type} is "${bestMatch.name}"]`,
+        };
+      } else {
+        // Uncertain — ask the user to confirm
+        return {
+          question,
+          clarify: `Did you mean ${bestMatch.name}?`,
+        };
+      }
+    }
+  } catch {
+    // If name resolution fails, continue with the original question
+  }
+  return { question };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { question, model: modelName } = await request.json();
 
     if (!question || typeof question !== "string") {
       return NextResponse.json({ error: "Question is required" }, { status: 400 });
+    }
+
+    // Resolve fuzzy names before sending to the LLM
+    const resolved = await resolveNames(question);
+
+    // If uncertain about a name, ask the user to confirm
+    if (resolved.clarify) {
+      return NextResponse.json({
+        question,
+        answer: resolved.clarify,
+        sql: null,
+        rows: [],
+        rowCount: 0,
+        chart: null,
+      });
     }
 
     const genAI = getGenAI();
@@ -195,7 +364,7 @@ export async function POST(request: NextRequest) {
     // Step 1: Generate SQL
     const sqlResponse = await model.generateContent([
       { text: SYSTEM_PROMPT },
-      { text: `User question: ${question}` },
+      { text: `User question: ${resolved.question}` },
     ]);
 
     const sqlText = sqlResponse.response.text().trim();
@@ -203,7 +372,20 @@ export async function POST(request: NextRequest) {
     try {
       // Strip markdown code fences if present
       const cleaned = sqlText.replace(/^```(?:json)?\n?/g, "").replace(/\n?```$/g, "");
-      sqlResult = JSON.parse(cleaned);
+      const parsed = JSON.parse(cleaned);
+
+      // Handle refused questions
+      if (parsed.refused) {
+        return NextResponse.json({
+          question,
+          answer: parsed.message || "Sorry, I can't help you with that.",
+          sql: null,
+          rows: [],
+          rowCount: 0,
+          chart: null,
+        });
+      }
+      sqlResult = parsed;
     } catch {
       return NextResponse.json({
         error: "Failed to parse AI response",

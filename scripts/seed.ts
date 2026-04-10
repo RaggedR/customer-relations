@@ -20,6 +20,8 @@ const prisma = new PrismaClient({ adapter });
 
 async function seed() {
   console.log("Clearing existing data...");
+  await prisma.nurseSpecialty.deleteMany();
+  await prisma.nurse.deleteMany();
   await prisma.attachment.deleteMany();
   await prisma.claimItem.deleteMany();
   await prisma.hearingAid.deleteMany();
@@ -427,6 +429,54 @@ async function seed() {
     }),
   ]);
 
+  console.log("Creating nurses...");
+  const nurses = await Promise.all([
+    prisma.nurse.create({
+      data: {
+        name: "Clare Wilson",
+        phone: "+61-4-0000-1111",
+        email: "clare@callonclare.com.au",
+        registration_number: "AUD0012345",
+        notes: "Practice owner. Mobile audiologist servicing Melbourne metro.",
+      },
+    }),
+    prisma.nurse.create({
+      data: {
+        name: "Emma Taylor",
+        phone: "+61-4-0000-2222",
+        email: "emma@callonclare.com.au",
+        registration_number: "AUD0067890",
+      },
+    }),
+    prisma.nurse.create({
+      data: {
+        name: "Liam Patel",
+        phone: "+61-4-0000-3333",
+        email: "liam@callonclare.com.au",
+        registration_number: "PHY0045678",
+        notes: "Part-time. Available Mon/Wed/Fri.",
+      },
+    }),
+  ]);
+
+  const [clare, emma, liam] = nurses;
+
+  console.log("Creating nurse specialties...");
+  await Promise.all([
+    prisma.nurseSpecialty.create({
+      data: { specialty: "Audiologist", notes: "Primary — hearing assessments, aid fitting, programming", nurseId: clare.id },
+    }),
+    prisma.nurseSpecialty.create({
+      data: { specialty: "Hearing Aid Technician", notes: "Repairs, maintenance, troubleshooting", nurseId: clare.id },
+    }),
+    prisma.nurseSpecialty.create({
+      data: { specialty: "Audiologist", notes: "Graduate audiologist — supervised by Clare", nurseId: emma.id },
+    }),
+    prisma.nurseSpecialty.create({
+      data: { specialty: "Physiotherapist", notes: "Musculoskeletal and vestibular rehabilitation", nurseId: liam.id },
+    }),
+  ]);
+
   console.log("\nSeed complete! Summary:");
   const patientCount = await prisma.patient.count();
   const referralCount = await prisma.referral.count();
@@ -434,12 +484,16 @@ async function seed() {
   const hearingAidCount = await prisma.hearingAid.count();
   const personalNoteCount = await prisma.personalNote.count();
   const claimItemCount = await prisma.claimItem.count();
-  console.log(`  Patients:       ${patientCount}`);
-  console.log(`  Referrals:      ${referralCount}`);
-  console.log(`  Clinical Notes: ${clinicalNoteCount}`);
-  console.log(`  Hearing Aids:   ${hearingAidCount}`);
-  console.log(`  Personal Notes: ${personalNoteCount}`);
-  console.log(`  Claim Items:    ${claimItemCount}`);
+  const nurseCount = await prisma.nurse.count();
+  const nurseSpecialtyCount = await prisma.nurseSpecialty.count();
+  console.log(`  Patients:           ${patientCount}`);
+  console.log(`  Referrals:          ${referralCount}`);
+  console.log(`  Clinical Notes:     ${clinicalNoteCount}`);
+  console.log(`  Hearing Aids:       ${hearingAidCount}`);
+  console.log(`  Personal Notes:     ${personalNoteCount}`);
+  console.log(`  Claim Items:        ${claimItemCount}`);
+  console.log(`  Nurses:             ${nurseCount}`);
+  console.log(`  Nurse Specialties:  ${nurseSpecialtyCount}`);
   console.log("\nCoverage:");
   console.log("  - Patient with multiple referrals (Margaret — re-referred)");
   console.log("  - Patient with full note history (Margaret — assessment, progress, treatment plan)");
@@ -455,6 +509,9 @@ async function seed() {
   console.log("  - Claim items at every status: pending, claimed, paid, rejected");
   console.log("  - Rejected claim with reason (Susan — TCA session limit)");
   console.log("  - Maintenance plan expiry dates (Margaret Sep, James Jul, Susan May — expiring soon!)");
+  console.log("  - Nurse with multiple specialties (Clare — Audiologist + Hearing Aid Technician)");
+  console.log("  - Graduate nurse (Emma — supervised)");
+  console.log("  - Part-time nurse (Liam — Mon/Wed/Fri)");
   console.log("  - No attachments seeded (files require actual uploads)");
 }
 
