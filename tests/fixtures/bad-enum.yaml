@@ -1,0 +1,4 @@
+entities:
+  thing:
+    fields:
+      status: { type: enum }

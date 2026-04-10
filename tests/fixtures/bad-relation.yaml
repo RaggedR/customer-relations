@@ -1,0 +1,6 @@
+entities:
+  thing:
+    fields:
+      name: { type: string, required: true }
+    relations:
+      parent: { type: belongs_to, entity: nonexistent }

@@ -1,0 +1,42 @@
+entities:
+  company:
+    fields:
+      name: { type: string, required: true }
+      industry: { type: string }
+      website: { type: url }
+
+  contact:
+    fields:
+      name: { type: string, required: true }
+      email: { type: email }
+      phone: { type: phone }
+      role: { type: string }
+      notes: { type: text }
+    relations:
+      company: { type: belongs_to, entity: company }
+    carddav:
+      enabled: true
+      mapping:
+        name: fn
+        email: email
+        phone: tel
+        company: org
+
+  interaction:
+    fields:
+      summary: { type: text, required: true }
+      date: { type: datetime, required: true }
+      type: { type: enum, values: [call, email, meeting, note] }
+    relations:
+      contact: { type: belongs_to, entity: contact }
+
+  deal:
+    fields:
+      title: { type: string, required: true }
+      value: { type: number }
+      stage: { type: enum, values: [lead, qualified, proposal, negotiation, closed_won, closed_lost] }
+      expected_close: { type: date }
+      notes: { type: text }
+    relations:
+      contact: { type: belongs_to, entity: contact }
+      company: { type: belongs_to, entity: company }
