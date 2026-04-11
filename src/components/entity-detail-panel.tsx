@@ -16,7 +16,10 @@ interface EntityDetailPanelProps {
   features: string[];
   onOpenProperty: (entityName: string, parentId: number, label: string) => void;
   onEdit?: (id: number) => void;
+  onDelete?: (id: number) => void;
   onExport?: (id: number, format: string) => void;
+  /** Navigate to a related entity (e.g. click nurse name in appointment detail) */
+  onNavigateToRelated?: (entity: string, id: number, name: string) => void;
 }
 
 export function EntityDetailPanel({
@@ -28,10 +31,14 @@ export function EntityDetailPanel({
   features,
   onOpenProperty,
   onEdit,
+  onDelete,
   onExport,
+  onNavigateToRelated,
 }: EntityDetailPanelProps) {
   const [record, setRecord] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadCategory, setUploadCategory] = useState("other");
@@ -93,6 +100,26 @@ export function EntityDetailPanel({
                 <span className="text-foreground">
                   {renderFieldValue(value, field)}
                 </span>
+              </div>
+            );
+          })}
+          {/* Clickable relation links (e.g. nurse, patient on appointment) */}
+          {entityConfig.relations && onNavigateToRelated && Object.entries(entityConfig.relations).map(([relName, rel]) => {
+            const relObj = record[relName] as Record<string, unknown> | undefined;
+            if (!relObj || typeof relObj !== "object") return null;
+            const relId = relObj.id as number;
+            const relName_ = String(relObj.name ?? `${rel.entity} #${relId}`);
+            return (
+              <div key={relName} className="flex gap-2 text-xs">
+                <span className="text-muted-foreground shrink-0 w-28 text-right">
+                  {relName.replace(/_/g, " ")}
+                </span>
+                <button
+                  onClick={() => onNavigateToRelated(rel.entity, relId, relName_)}
+                  className="text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+                >
+                  {relName_}
+                </button>
               </div>
             );
           })}
@@ -203,6 +230,48 @@ export function EntityDetailPanel({
           <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => onEdit(entityId)}>
             Edit
           </Button>
+        )}
+        {hasFeature("delete") && onDelete && !confirmDelete && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+            onClick={() => setConfirmDelete(true)}
+          >
+            Delete
+          </Button>
+        )}
+        {confirmDelete && onDelete && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs text-destructive bg-destructive/10 border-destructive/40"
+              disabled={deleting}
+              onClick={async () => {
+                setDeleting(true);
+                try {
+                  const res = await fetch(`/api/${entityName}/${entityId}`, { method: "DELETE" });
+                  if (res.ok) {
+                    onDelete(entityId);
+                  }
+                } finally {
+                  setDeleting(false);
+                  setConfirmDelete(false);
+                }
+              }}
+            >
+              {deleting ? "..." : "Confirm delete"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => setConfirmDelete(false)}
+            >
+              Cancel
+            </Button>
+          </>
         )}
         {hasFeature("export-pdf") && onExport && (
           <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => onExport(entityId, "pdf")}>
@@ -415,6 +484,9 @@ function findReverseKey(
 
 function renderFieldValue(value: unknown, field: FieldConfig): React.ReactNode {
   if (value === null || value === undefined) return "—";
+  if (field.type === "time") {
+    return String(value); // "HH:MM" — display as-is
+  }
   if (field.type === "date" || field.type === "datetime") {
     return new Date(value as string).toLocaleDateString("en-AU", {
       day: "numeric",

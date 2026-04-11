@@ -6,6 +6,7 @@ import { layout } from "@/lib/layout";
 
 interface SidebarProps {
   firstOrderEntities: string[];
+  addableEntities?: string[];
   onOpenEntity: (entityName: string) => void;
   onAddEntity: (entityName: string) => void;
   onOpenAiChat: () => void;
@@ -13,10 +14,12 @@ interface SidebarProps {
 
 export function Sidebar({
   firstOrderEntities,
+  addableEntities,
   onOpenEntity,
   onAddEntity,
   onOpenAiChat,
 }: SidebarProps) {
+  const addList = addableEntities ?? firstOrderEntities;
   return (
     <aside className={`flex flex-col ${layout.sidebar.widthClass} border-r border-sidebar-border bg-sidebar text-sidebar-foreground`}>
       <div className="flex items-center gap-2 px-4 h-12 font-semibold text-sm tracking-tight">
@@ -45,7 +48,7 @@ export function Sidebar({
       </nav>
       <Separator />
       <div className="px-2 py-3 space-y-1.5">
-        {firstOrderEntities.map((name) => (
+        {addList.map((name) => (
           <button
             key={`add-${name}`}
             onClick={() => onAddEntity(name)}

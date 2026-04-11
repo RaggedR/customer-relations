@@ -97,6 +97,21 @@ PostgreSQL database with these tables:
   "patientId" INT REFERENCES "Patient"(id)
 )
 
+"Appointment" (
+  id SERIAL PRIMARY KEY,
+  "createdAt" TIMESTAMP DEFAULT now(),
+  "updatedAt" TIMESTAMP,
+  date TIMESTAMP NOT NULL,
+  start_time TEXT NOT NULL,  -- "HH:MM" wall-clock time
+  end_time TEXT NOT NULL,    -- "HH:MM" wall-clock time
+  location TEXT NOT NULL,
+  specialty TEXT NOT NULL,
+  status TEXT,  -- values: 'requested', 'confirmed', 'completed', 'cancelled', 'no_show'
+  notes TEXT,
+  "patientId" INT REFERENCES "Patient"(id),
+  "nurseId" INT REFERENCES "Nurse"(id)
+)
+
 "Nurse" (
   id SERIAL PRIMARY KEY,
   "createdAt" TIMESTAMP DEFAULT now(),
@@ -105,6 +120,8 @@ PostgreSQL database with these tables:
   phone TEXT,
   email TEXT,
   registration_number TEXT, -- AHPRA registration
+  caldav_url TEXT,
+  google_calendar_id TEXT,
   notes TEXT
 )
 
@@ -156,6 +173,10 @@ Common query patterns:
 - "Are any referrals expiring" → check Referral.expiry_date relative to today
 - "Main issues this week" → recent ClinicalNote entries, summarise content
 - "Claim summary for patient X" → aggregate ClaimItem by status
+- "Appointments this week" → query Appointment by date range, JOIN Nurse and Patient
+- "Who is nurse X seeing tomorrow" → query Appointment WHERE nurseId AND date
+- "Which nurse has the least appointments this week" → COUNT appointments per nurse
+- "Find free slots for next Tuesday" → query Appointment for that date, invert to find gaps
 
 Database schema:
 ${SCHEMA_DESCRIPTION}
@@ -286,6 +307,13 @@ async function resolveNames(question: string): Promise<NameResolution> {
       "are", "for", "from", "with", "how", "many", "show", "get",
       "all", "list", "plan", "date", "last", "next", "hearing",
       "aids", "aid", "notes", "note", "claim", "items", "referral",
+      // Calendar-related words
+      "free", "busy", "available", "times", "slots", "appointments",
+      "appointment", "schedule", "calendar", "week", "today", "tomorrow",
+      "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+      "january", "february", "march", "april", "may", "june",
+      "july", "august", "september", "october", "november", "december",
+      "morning", "afternoon", "evening", "which", "nurse", "most", "least",
     ]);
     const words = question
       .toLowerCase()

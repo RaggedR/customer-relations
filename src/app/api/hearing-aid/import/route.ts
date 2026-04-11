@@ -15,8 +15,13 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import ExcelJS from "exceljs";
 import { findAll, create, update } from "@/lib/repository";
+import {
+  parseCsv,
+  parseXlsx,
+  parseJson,
+  Row,
+} from "@/lib/parsers";
 
 /** Maps spreadsheet column headers to schema field names */
 const HEADER_MAP: Record<string, string> = {
@@ -35,8 +40,6 @@ const HEADER_MAP: Record<string, string> = {
   "last repair details": "last_repair_details",
   "repair address": "repair_address",
 };
-
-type Row = Record<string, unknown>;
 
 async function getPatientMap(): Promise<Map<string, number>> {
   const patients = (await findAll("patient")) as Row[];
@@ -77,84 +80,21 @@ function parseRows(raw: Row[]): Row[] {
   });
 }
 
-async function parseXlsx(buffer: Buffer): Promise<Row[]> {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
-  const sheet = workbook.worksheets[0];
-  if (!sheet) return [];
-
-  const headers: string[] = [];
-  const headerRow = sheet.getRow(1);
-  headerRow.eachCell((cell, colNum) => {
-    headers[colNum] = String(cell.value ?? "");
-  });
-
-  const rows: Row[] = [];
-  sheet.eachRow((row, rowNum) => {
-    if (rowNum === 1) return;
-    const obj: Row = {};
-    row.eachCell((cell, colNum) => {
-      const header = headers[colNum];
-      if (header) obj[header] = cell.value;
-    });
-    rows.push(obj);
-  });
-
+/** Wrap shared parsers with local header normalisation */
+function parseFileRows(rows: Row[]): Row[] {
   return parseRows(rows);
 }
 
-function parseCsv(text: string): Row[] {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) return [];
-
-  const headers = parseCsvLine(lines[0]);
-  const rows: Row[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCsvLine(lines[i]);
-    const obj: Row = {};
-    headers.forEach((h, idx) => {
-      obj[h] = values[idx] ?? "";
-    });
-    rows.push(obj);
-  }
-  return parseRows(rows);
+async function parseXlsxFile(buffer: Buffer): Promise<Row[]> {
+  return parseFileRows(await parseXlsx(buffer));
 }
 
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQuotes) {
-      if (ch === '"' && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else if (ch === '"') {
-        inQuotes = false;
-      } else {
-        current += ch;
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true;
-      } else if (ch === ",") {
-        result.push(current);
-        current = "";
-      } else {
-        current += ch;
-      }
-    }
-  }
-  result.push(current);
-  return result;
+function parseCsvFile(text: string): Row[] {
+  return parseFileRows(parseCsv(text));
 }
 
-function parseJson(text: string): Row[] {
-  const data = JSON.parse(text);
-  const arr = Array.isArray(data) ? data : [data];
-  return parseRows(arr);
+function parseJsonFile(text: string): Row[] {
+  return parseFileRows(parseJson(text));
 }
 
 export async function POST(request: NextRequest) {
@@ -179,11 +119,11 @@ export async function POST(request: NextRequest) {
   let rows: Row[];
   try {
     if (ext === "xlsx" || ext === "xls") {
-      rows = await parseXlsx(buffer);
+      rows = await parseXlsxFile(buffer);
     } else if (ext === "csv") {
-      rows = parseCsv(buffer.toString("utf-8"));
+      rows = parseCsvFile(buffer.toString("utf-8"));
     } else if (ext === "json") {
-      rows = parseJson(buffer.toString("utf-8"));
+      rows = parseJsonFile(buffer.toString("utf-8"));
     } else {
       return NextResponse.json(
         { error: "Unsupported file type. Use .xlsx, .csv, or .json" },

@@ -10,6 +10,25 @@ entities:
       status: { type: enum, values: [active, inactive, discharged] }
       maintenance_plan_expiry: { type: date }
       notes: { type: text }
+    representations:
+      vcard:
+        mapping:
+          name: FN
+          phone: TEL
+          email: EMAIL
+          address: ADR
+          date_of_birth: BDAY
+      csv:
+        headers:
+          name: "Patient Name"
+          phone: "Contact Number"
+          email: "Email"
+          date_of_birth: "Date of Birth"
+          medicare_number: "Medicare Number"
+          address: "Address"
+          status: "Status"
+      json:
+        include_relations: [referral, clinical_note, personal_note, hearing_aid, claim_item, attachment]
 
   referral:
     fields:
@@ -55,6 +74,28 @@ entities:
       repair_address: { type: text }
     relations:
       patient: { type: belongs_to, entity: patient }
+    representations:
+      csv:
+        headers:
+          ear: "Ear"
+          make: "Make"
+          model: "Model"
+          serial_number: "Serial Number"
+          battery_type: "Battery Type"
+          wax_filter: "Wax Filter"
+          dome: "Dome"
+          programming_cable: "Programming Cable"
+          programming_software: "Programming Software"
+          hsp_code: "HSP Code"
+          warranty_end_date: "Warranty End Date"
+          last_repair_details: "Last Repair Details"
+          repair_address: "Repair Address"
+      json:
+        groups:
+          device: [make, model, serial_number]
+          consumables: [battery_type, wax_filter, dome]
+          programming: [programming_cable, programming_software]
+          admin: [hsp_code, warranty_end_date, last_repair_details, repair_address]
 
   claim_item:
     fields:
@@ -67,18 +108,73 @@ entities:
     relations:
       patient: { type: belongs_to, entity: patient }
 
+  appointment:
+    fields:
+      date: { type: date, required: true }
+      start_time: { type: time, required: true }
+      end_time: { type: time, required: true }
+      location: { type: string, required: true }
+      specialty: { type: string, required: true }
+      status: { type: enum, values: [requested, confirmed, completed, cancelled, no_show] }
+      notes: { type: text }
+    relations:
+      patient: { type: belongs_to, entity: patient }
+      nurse: { type: belongs_to, entity: nurse }
+    representations:
+      ical:
+        mapping:
+          date: DTSTART_DATE
+          start_time: DTSTART_TIME
+          end_time: DTEND_TIME
+          location: LOCATION
+          notes: DESCRIPTION
+        summary_template: "{patient.name} — {specialty}"
+      csv:
+        headers:
+          date: "Date"
+          start_time: "Start Time"
+          end_time: "End Time"
+          location: "Location"
+          specialty: "Specialty"
+          status: "Status"
+          notes: "Notes"
+
   nurse:
     fields:
       name: { type: string, required: true }
       phone: { type: phone }
       email: { type: email }
       registration_number: { type: string }
+      caldav_url: { type: string }
+      google_calendar_id: { type: string }
       notes: { type: text }
+    representations:
+      vcard:
+        mapping:
+          name: FN
+          phone: TEL
+          email: EMAIL
+      csv:
+        headers:
+          name: "Nurse Name"
+          phone: "Phone"
+          email: "Email"
+          registration_number: "Registration Number"
 
   nurse_specialty:
     fields:
       specialty: { type: string, required: true }
       notes: { type: text }
+    relations:
+      nurse: { type: belongs_to, entity: nurse }
+
+  calendar_connection:
+    fields:
+      provider: { type: enum, values: [google, apple, caldav_generic] }
+      calendar_id: { type: string }
+      access_token: { type: string }
+      refresh_token: { type: string }
+      token_expiry: { type: datetime }
     relations:
       nurse: { type: belongs_to, entity: nurse }
 

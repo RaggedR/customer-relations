@@ -1,6 +1,8 @@
 # Navigation Model
 #
-# Defines the window types, their features, and transitions.
+# This is the source of truth for the UI structure.
+# Edit THIS FIRST when adding features or changing behaviour.
+# Then update the code to match.
 #
 # Window types: each is a "blob" in the navigation graph.
 #   - role: visual sizing/positioning (maps to layout.ts)
@@ -14,6 +16,17 @@
 #   - id: template for the window's unique ID (prevents duplicates)
 
 windows:
+  calendar:
+    role: calendar
+    title: "Calendar"
+    component: CalendarPanel
+    features:
+      - two_week_view        # default: 14-day grid
+      - day_view             # toggle to single-day column
+      - nurse_colour_coding  # each nurse gets a colour
+      - click_to_create      # click empty slot → new appointment form
+      - drag_to_reschedule   # drag event → update time
+
   search:
     role: search
     title: "{entity} list"
@@ -25,8 +38,8 @@ windows:
     component: EntityDetailPanel
     features:
       - edit           # opens form for this entity
-      - upload         # file upload to this entity's attachments
-      - more           # collapsible inline property summaries
+      - delete         # delete this entity (with confirmation)
+      - upload         # file upload (only shown if entity has attachment property)
       - export-pdf     # PDF export (entities with export endpoint)
       - export-json    # JSON export
       - export-xlsx    # hearing aid spreadsheet export
@@ -44,12 +57,56 @@ windows:
     title: "{mode} {entity}"
     component: EntityFormPanel
 
+  booking_wizard:
+    role: wizard
+    title: "Book Appointment"
+    component: BookingWizardPanel
+    steps:
+      - choose_specialty   # patient picks type of service
+      - choose_slot        # system shows available times from CalDAV
+      - confirm            # patient confirms → nurse auto-assigned
+
   ai:
     role: ai
     title: Ask AI
     component: AiChatPanel
+    features:
+      - fuzzy-names          # Levenshtein name resolution (0-1 auto, 2-3 asks)
+      - refuse-offtopic      # rejects questions not about practice data
+      - type-while-thinking  # input not disabled during query
+      - calendar-query       # natural language calendar search
 
 transitions:
+  # ── Calendar is home ──────────────────────────
+  - from: app
+    to: calendar
+    on: load
+    id: "calendar"
+
+  # ── Calendar → appointment detail ─────────────
+  - from: calendar
+    to: detail
+    on: click event
+    id: "detail-appointment-{id}"
+
+  # ── Calendar → new appointment form ───────────
+  - from: calendar
+    to: form
+    on: click empty slot
+    id: "form-appointment-new"
+
+  # ── Appointment detail → linked entities ──────
+  - from: detail[appointment]
+    to: detail
+    on: click nurse
+    id: "detail-nurse-{nurseId}"
+
+  - from: detail[appointment]
+    to: detail
+    on: click patient
+    id: "detail-patient-{patientId}"
+
+  # ── Sidebar → entity lists ────────────────────
   - from: sidebar
     to: search
     on: click entity
@@ -65,6 +122,7 @@ transitions:
     on: click ai
     id: ai-chat
 
+  # ── Search → detail → property (existing) ────
   - from: search
     to: detail
     on: select item
@@ -79,3 +137,9 @@ transitions:
     to: form
     on: click edit
     id: "form-{entity}-{id}"
+
+  # ── Public booking (separate route /book) ─────
+  - from: public
+    to: booking_wizard
+    on: visit /book
+    id: "booking-public"

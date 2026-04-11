@@ -43,6 +43,7 @@ export interface WindowState {
   propertyEntity?: string;
   parentKey?: string;
   label?: string;
+  initialValues?: Record<string, string>;
   zIndex: number;
 }
 
@@ -76,6 +77,8 @@ function formatLabel(name: string): string {
     hearing_aid: "Hearing Aids",
     claim_item: "Claim Items",
     nurse_specialty: "Specialties",
+    appointment: "Appointments",
+    calendar_connection: "Calendar Connections",
   };
   if (map[name]) return map[name];
   const label = name.replace(/_/g, " ");
