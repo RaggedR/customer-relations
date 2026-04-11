@@ -151,6 +151,7 @@ export async function findAll(
     sortBy?: string;
     sortOrder?: "asc" | "desc";
     filterBy?: Record<string, unknown>;
+    dateRange?: { field: string; from: string; to: string };
   }
 ) {
   const schema = getSchema();
@@ -172,6 +173,17 @@ export async function findAll(
     for (const [key, value] of Object.entries(options.filterBy)) {
       whereConditions.push({ [key]: value });
     }
+  }
+
+  // Date range filter (e.g. calendar view: dateFrom/dateTo)
+  if (options?.dateRange) {
+    const { field, from, to } = options.dateRange;
+    whereConditions.push({
+      [toSnakeCase(field)]: {
+        gte: new Date(from),
+        lte: new Date(to),
+      },
+    });
   }
 
   // Search across string fields

@@ -10,6 +10,7 @@ import { EntityFormPanel } from "@/components/entity-form-panel";
 import { PropertyPanel } from "@/components/patient-property-panel";
 import { AiChatPanel, type ChartConfig } from "@/components/ai-chat-panel";
 import { ChartDisplay } from "@/components/chart-display";
+import { CalendarPanel } from "@/components/calendar-panel";
 import { deriveHierarchy } from "@/lib/schema-hierarchy";
 import { layout, windowPosition } from "@/lib/layout";
 import {
@@ -23,14 +24,12 @@ import type { SchemaConfig } from "@/engine/schema-loader";
 /** Which entities have /api/{entity}/{id}/export endpoints */
 const EXPORTABLE = new Set(["patient"]);
 
+/** Roles that render in the main area, not as floating windows */
+const NON_FLOATING_ROLES = new Set(["calendar", "wizard"]);
+
 /**
  * Component registry: maps window type name (from navigation.yaml)
  * to the React element that renders it.
- *
- * To add a new window type:
- *   1. Add an entry to navigation.yaml
- *   2. Create the component
- *   3. Add a case here
  */
 function renderWindowContent(
   win: WindowState,
@@ -38,7 +37,8 @@ function renderWindowContent(
   hierarchy: ReturnType<typeof deriveHierarchy> | null,
   nav: NavigationConfig,
   navigate: (win: Omit<WindowState, "zIndex">) => void,
-  onChart: (chart: ChartConfig) => void
+  onChart: (chart: ChartConfig) => void,
+  onCloseWindow: (id: string) => void
 ): React.ReactNode {
   switch (win.type) {
     case "search": {
@@ -103,6 +103,16 @@ function renderWindowContent(
                   )
               : undefined
           }
+          onDelete={(_id: number) => onCloseWindow(win.id)}
+          onNavigateToRelated={(entity, id, name) =>
+            navigate({
+              id: `detail-${entity}-${id}`,
+              type: "detail",
+              entityName: entity,
+              entityId: id,
+              entityLabel: name,
+            })
+          }
         />
       );
     }
@@ -130,6 +140,7 @@ function renderWindowContent(
           entityName={win.entityName}
           schema={schema}
           entityId={win.entityId}
+          initialValues={win.initialValues}
         />
       );
     }
@@ -201,12 +212,45 @@ export function DashboardShell({ children }: { children?: React.ReactNode }) {
     [addWindow]
   );
 
+  // Calendar event handlers
+  const handleEventClick = useCallback(
+    (id: number, name: string) => {
+      if (!nav) return;
+      navigate({
+        id: `detail-appointment-${id}`,
+        type: "detail",
+        entityName: "appointment",
+        entityId: id,
+        entityLabel: name,
+      });
+    },
+    [nav, navigate]
+  );
+
+  const handleSlotClick = useCallback(
+    (date: string, time: string) => {
+      if (!nav) return;
+      navigate({
+        id: `form-appointment-new-${date}-${time}`,
+        type: "form",
+        entityName: "appointment",
+        initialValues: {
+          date,
+          start_time: time,
+          end_time: slotEndTime(time),
+        },
+      } as Omit<WindowState, "zIndex">);
+    },
+    [nav, navigate]
+  );
+
   if (!nav) return null; // wait for navigation config
 
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
         firstOrderEntities={hierarchy?.firstOrder ?? []}
+        addableEntities={[...(hierarchy?.firstOrder ?? []), "appointment"]}
         onOpenEntity={(name) =>
           navigate(transition(nav, "sidebar→search", { entity: name }))
         }
@@ -219,32 +263,43 @@ export function DashboardShell({ children }: { children?: React.ReactNode }) {
       />
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar title="Patient Management" />
-        <main className="relative flex-1 overflow-auto p-6">
+        <main className="relative flex-1 overflow-hidden">
+          {/* Calendar is the home view — always visible behind floating windows */}
           {chart ? (
             <ChartDisplay chart={chart} onClose={() => setChart(null)} />
           ) : (
-            children ?? (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                Select an entity from the sidebar
-              </div>
-            )
+            <CalendarPanel
+              onEventClick={handleEventClick}
+              onSlotClick={handleSlotClick}
+            />
           )}
           {openWindows.map((win, i) => {
             const def = nav.windows[win.type];
             if (!def) return null;
 
+            // Skip non-floating roles (calendar, wizard render in main area)
+            if (NON_FLOATING_ROLES.has(def.role)) return null;
+
             const content = renderWindowContent(
-              win, schema, hierarchy, nav, navigate, setChart
+              win, schema, hierarchy, nav, navigate, setChart, closeWindow
             );
             if (!content) return null;
+
+            // Use fallback sizes/positions for roles not in the layout config
+            const role = def.role as keyof typeof layout.window.sizes;
+            const size = layout.window.sizes[role] ?? layout.window.sizes.detail;
+            const pos = windowPosition(
+              (layout.window.positions[role] ? role : "detail") as keyof typeof layout.window.positions,
+              i
+            );
 
             return (
               <FloatingWindow
                 key={win.id}
                 title={windowTitle(nav, win)}
                 onClose={() => closeWindow(win.id)}
-                defaultPosition={windowPosition(def.role, i)}
-                defaultSize={layout.window.sizes[def.role]}
+                defaultPosition={pos}
+                defaultSize={size}
                 zIndex={win.zIndex}
                 onFocus={() => focusWindow(win.id)}
               >
@@ -256,4 +311,13 @@ export function DashboardShell({ children }: { children?: React.ReactNode }) {
       </div>
     </div>
   );
+}
+
+/** Compute a default end time 30 minutes after start */
+function slotEndTime(start: string): string {
+  const [h, m] = start.split(":").map(Number);
+  const totalMinutes = h * 60 + m + 30;
+  const eh = Math.floor(totalMinutes / 60);
+  const em = totalMinutes % 60;
+  return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
 }

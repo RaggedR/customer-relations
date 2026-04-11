@@ -23,10 +23,35 @@ export interface RelationConfig {
   entity: string;
 }
 
-export interface CardDAVMapping {
-  [fieldName: string]: string; // our field → vCard property
+// --- Representation types (external format mappings) ---
+
+export interface VCardRepresentation {
+  mapping: Record<string, string>; // our field → vCard property (FN, TEL, EMAIL, etc.)
 }
 
+export interface ICalRepresentation {
+  mapping: Record<string, string>; // our field → iCal property (DTSTART_DATE, DTEND_TIME, etc.)
+  summary_template?: string; // e.g. "{patient.name} — {specialty}"
+}
+
+export interface CsvRepresentation {
+  headers?: Record<string, string>; // our field → column header (defaults to field name)
+}
+
+export interface JsonRepresentation {
+  include_relations?: string[]; // which relations to include in export
+  groups?: Record<string, string[]>; // group fields into sub-objects
+}
+
+export interface RepresentationsConfig {
+  vcard?: VCardRepresentation;
+  ical?: ICalRepresentation;
+  csv?: CsvRepresentation;
+  json?: JsonRepresentation;
+}
+
+// Keep old types as aliases for backward compatibility during migration
+export type CardDAVMapping = Record<string, string>;
 export interface CardDAVConfig {
   enabled: boolean;
   mapping: CardDAVMapping;
@@ -35,7 +60,8 @@ export interface CardDAVConfig {
 export interface EntityConfig {
   fields: Record<string, FieldConfig>;
   relations?: Record<string, RelationConfig>;
-  carddav?: CardDAVConfig;
+  representations?: RepresentationsConfig;
+  carddav?: CardDAVConfig; // deprecated — use representations.vcard
 }
 
 export interface SchemaConfig {
@@ -115,7 +141,80 @@ function validateSchema(schema: SchemaConfig): void {
       }
     }
 
-    // Validate CardDAV config
+    // Validate representations
+    if (entity.representations) {
+      const reps = entity.representations;
+
+      // Validate vcard mapping
+      if (reps.vcard?.mapping) {
+        for (const fieldName of Object.keys(reps.vcard.mapping)) {
+          if (!entity.fields[fieldName] && !entity.relations?.[fieldName]) {
+            throw new Error(
+              `Entity "${entityName}" representations.vcard mapping references unknown field "${fieldName}"`
+            );
+          }
+        }
+      }
+
+      // Validate ical mapping
+      if (reps.ical?.mapping) {
+        for (const fieldName of Object.keys(reps.ical.mapping)) {
+          if (!entity.fields[fieldName] && !entity.relations?.[fieldName]) {
+            throw new Error(
+              `Entity "${entityName}" representations.ical mapping references unknown field "${fieldName}"`
+            );
+          }
+        }
+      }
+
+      // Validate csv headers reference real fields
+      if (reps.csv?.headers) {
+        for (const fieldName of Object.keys(reps.csv.headers)) {
+          if (!entity.fields[fieldName]) {
+            throw new Error(
+              `Entity "${entityName}" representations.csv headers references unknown field "${fieldName}"`
+            );
+          }
+        }
+      }
+
+      // Validate json include_relations reference real relations
+      if (reps.json?.include_relations) {
+        for (const relName of reps.json.include_relations) {
+          // Check both forward and reverse relations
+          const hasForward = entity.relations?.[relName];
+          const hasReverse = Object.entries(schema.entities).some(
+            ([name, e]) =>
+              name === relName ||
+              (e.relations &&
+                Object.values(e.relations).some(
+                  (r) => r.entity === entityName
+                ) &&
+                name === relName)
+          );
+          if (!hasForward && !hasReverse) {
+            throw new Error(
+              `Entity "${entityName}" representations.json.include_relations references unknown relation "${relName}"`
+            );
+          }
+        }
+      }
+
+      // Validate json groups reference real fields
+      if (reps.json?.groups) {
+        for (const [groupName, fields] of Object.entries(reps.json.groups)) {
+          for (const fieldName of fields) {
+            if (!entity.fields[fieldName]) {
+              throw new Error(
+                `Entity "${entityName}" representations.json.groups.${groupName} references unknown field "${fieldName}"`
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // Validate legacy CardDAV config (deprecated — use representations.vcard)
     if (entity.carddav) {
       if (typeof entity.carddav.enabled !== "boolean") {
         throw new Error(`Entity "${entityName}" carddav.enabled must be a boolean`);

@@ -8,7 +8,7 @@
  * the right layer for them. This file handles geometry and typography scale.
  */
 
-export type WindowRole = "search" | "detail" | "property" | "form" | "ai";
+export type WindowRole = "search" | "detail" | "property" | "form" | "ai" | "calendar" | "wizard";
 
 export const layout = {
   /** Sidebar */

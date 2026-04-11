@@ -27,6 +27,7 @@ model Patient {
   personal_notes PersonalNote[]
   hearing_aids HearingAid[]
   claim_items ClaimItem[]
+  appointments Appointment[]
   attachments Attachment[]
 }
 
@@ -102,6 +103,23 @@ model ClaimItem {
   patient Patient? @relation(fields: [patientId], references: [id])
 }
 
+model Appointment {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  date DateTime
+  start_time String
+  end_time String
+  location String
+  specialty String
+  status String?
+  notes String?
+  patientId Int?
+  patient Patient? @relation(fields: [patientId], references: [id])
+  nurseId Int?
+  nurse Nurse? @relation(fields: [nurseId], references: [id])
+}
+
 model Nurse {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())
@@ -110,8 +128,12 @@ model Nurse {
   phone String?
   email String?
   registration_number String?
+  caldav_url String?
+  google_calendar_id String?
   notes String?
+  appointments Appointment[]
   nurse_specialtys NurseSpecialty[]
+  calendar_connections CalendarConnection[]
 }
 
 model NurseSpecialty {
@@ -120,6 +142,19 @@ model NurseSpecialty {
   updatedAt DateTime @updatedAt
   specialty String
   notes String?
+  nurseId Int?
+  nurse Nurse? @relation(fields: [nurseId], references: [id])
+}
+
+model CalendarConnection {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  provider String?
+  calendar_id String?
+  access_token String?
+  refresh_token String?
+  token_expiry DateTime?
   nurseId Int?
   nurse Nurse? @relation(fields: [nurseId], references: [id])
 }

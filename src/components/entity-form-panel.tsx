@@ -13,6 +13,7 @@ interface EntityFormPanelProps {
   entityName: string;
   schema: SchemaConfig;
   entityId?: number; // edit mode if set
+  initialValues?: Record<string, string>; // pre-fill from calendar slot click
   onSaved?: (id: number, name: string) => void;
 }
 
@@ -20,10 +21,11 @@ export function EntityFormPanel({
   entityName,
   schema,
   entityId,
+  initialValues,
   onSaved,
 }: EntityFormPanelProps) {
   const entityConfig = schema.entities[entityName];
-  const [form, setForm] = useState<Record<string, string>>({});
+  const [form, setForm] = useState<Record<string, string>>(initialValues ?? {});
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{
     text: string;
@@ -41,6 +43,8 @@ export function EntityFormPanel({
             const val = data[fieldName] ?? data[toSnakeCase(fieldName)];
             if (val === null || val === undefined) {
               loaded[fieldName] = "";
+            } else if (field.type === "time") {
+              loaded[fieldName] = String(val); // "HH:MM" — pass through
             } else if (field.type === "date") {
               loaded[fieldName] = formatDate(val);
             } else if (field.type === "datetime") {
@@ -139,6 +143,17 @@ export function EntityFormPanel({
             field={field}
             value={form[name] ?? ""}
             onChange={(v) => set(name, v)}
+          />
+        ))}
+
+        {/* Relation fields — rendered as async select dropdowns */}
+        {entityConfig.relations && Object.entries(entityConfig.relations).map(([relName, rel]) => (
+          <RelationSelect
+            key={relName}
+            name={relName}
+            relatedEntity={rel.entity}
+            value={form[relName] ?? ""}
+            onChange={(v) => set(relName, v)}
           />
         ))}
 
@@ -245,4 +260,54 @@ function formatDatetime(val: unknown): string {
   if (!val) return "";
   const d = new Date(val as string);
   return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 16);
+}
+
+function RelationSelect({
+  name,
+  relatedEntity,
+  value,
+  onChange,
+}: {
+  name: string;
+  relatedEntity: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [options, setOptions] = useState<{ id: number; name: string }[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/${relatedEntity}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setOptions(
+            data.map((d: Record<string, unknown>) => ({
+              id: d.id as number,
+              name: String(d.name ?? d[Object.keys(d)[1]] ?? `#${d.id}`),
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, [relatedEntity]);
+
+  const label = name.replace(/_/g, " ");
+
+  return (
+    <div>
+      <Label className="mb-1.5 text-xs capitalize">{label}</Label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        <option value="">Select {label}...</option>
+        {options.map((opt) => (
+          <option key={opt.id} value={opt.id}>
+            {opt.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }

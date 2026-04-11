@@ -18,8 +18,8 @@ export interface SchemaHierarchy {
   firstOrder: string[];
   /** Map from first-order entity → its property entity names */
   propertiesOf: Record<string, string[]>;
-  /** Map from property entity → { parentEntity, foreignKey } */
-  parentOf: Record<string, { entity: string; foreignKey: string }>;
+  /** Map from property entity → all parents [{ parentEntity, foreignKey }] */
+  parentOf: Record<string, { entity: string; foreignKey: string }[]>;
 }
 
 export function deriveHierarchy(schema: SchemaConfig): SchemaHierarchy {
@@ -34,7 +34,7 @@ export function deriveHierarchy(schema: SchemaConfig): SchemaHierarchy {
   // Build propertiesOf: for each entity with relations, find which
   // first-order entity it belongs to
   const propertiesOf: Record<string, string[]> = {};
-  const parentOf: Record<string, { entity: string; foreignKey: string }> = {};
+  const parentOf: Record<string, { entity: string; foreignKey: string }[]> = {};
 
   for (const fo of firstOrder) {
     propertiesOf[fo] = [];
@@ -45,14 +45,17 @@ export function deriveHierarchy(schema: SchemaConfig): SchemaHierarchy {
     const entity = schema.entities[name];
     if (!entity.relations) continue;
 
+    if (!parentOf[name]) parentOf[name] = [];
+
     for (const [relName, rel] of Object.entries(entity.relations)) {
       if (rel.type === "belongs_to" && firstOrder.includes(rel.entity)) {
-        propertiesOf[rel.entity].push(name);
-        parentOf[name] = {
+        if (!propertiesOf[rel.entity].includes(name)) {
+          propertiesOf[rel.entity].push(name);
+        }
+        parentOf[name].push({
           entity: rel.entity,
           foreignKey: `${relName}Id`,
-        };
-        break; // assign to first matching first-order parent
+        });
       }
     }
   }
@@ -68,6 +71,7 @@ export function entityLabel(name: string): string {
     hearing_aid: "Hearing Aids",
     claim_item: "Claim Items",
     nurse_specialty: "Specialties",
+    calendar_connection: "Calendar Connections",
   };
   if (map[name]) return map[name];
   const label = name.replace(/_/g, " ");

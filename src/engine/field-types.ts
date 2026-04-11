@@ -68,6 +68,11 @@ export const fieldTypes: Record<string, FieldTypeDefinition> = {
     validate: (v) => typeof v === "boolean",
     htmlInputType: "checkbox",
   },
+  time: {
+    prismaType: "String",
+    validate: (v) => typeof v === "string" && /^\d{2}:\d{2}(:\d{2})?$/.test(v as string),
+    htmlInputType: "time",
+  },
   json: {
     prismaType: "Json",
     validate: (v) => v !== undefined,
