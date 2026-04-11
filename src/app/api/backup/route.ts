@@ -53,7 +53,12 @@ export async function GET() {
 
     const entities: Record<string, Row[]> = {};
 
+    // Entities with credentials — skip entirely (tokens must be re-authorized after restore)
+    const SENSITIVE_ENTITIES = ["calendar_connection"];
+
     for (const entityName of importOrder) {
+      if (SENSITIVE_ENTITIES.includes(entityName)) continue;
+
       const records = (await findAll(entityName)) as Row[];
       // Strip nested relation objects — just keep flat fields + FK IDs
       entities[entityName] = records.map((record) => {
@@ -65,10 +70,8 @@ export async function GET() {
         flat.createdAt = record.createdAt;
         flat.updatedAt = record.updatedAt;
 
-        // Schema fields (strip sensitive token/credential fields)
-        const SENSITIVE_FIELDS = ["access_token", "refresh_token"];
+        // Schema fields
         for (const fieldName of Object.keys(entity.fields)) {
-          if (SENSITIVE_FIELDS.includes(fieldName)) continue;
           flat[fieldName] = record[fieldName] ?? null;
         }
 
