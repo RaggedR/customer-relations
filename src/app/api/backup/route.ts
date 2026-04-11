@@ -65,8 +65,10 @@ export async function GET() {
         flat.createdAt = record.createdAt;
         flat.updatedAt = record.updatedAt;
 
-        // Schema fields
+        // Schema fields (strip sensitive token/credential fields)
+        const SENSITIVE_FIELDS = ["access_token", "refresh_token"];
         for (const fieldName of Object.keys(entity.fields)) {
+          if (SENSITIVE_FIELDS.includes(fieldName)) continue;
           flat[fieldName] = record[fieldName] ?? null;
         }
 

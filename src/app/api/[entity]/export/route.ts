@@ -119,6 +119,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     );
   }
 
+  // Block export of entities that contain sensitive fields (tokens, credentials)
+  const SENSITIVE_ENTITIES = ["calendar_connection"];
+  if (SENSITIVE_ENTITIES.includes(entityName)) {
+    return NextResponse.json(
+      { error: `Export of ${entityName} is not allowed` },
+      { status: 403 }
+    );
+  }
+
   const format =
     request.nextUrl.searchParams.get("format")?.toLowerCase() || "xlsx";
 

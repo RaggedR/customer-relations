@@ -22,10 +22,8 @@ windows:
     component: CalendarPanel
     features:
       - two_week_view        # default: 14-day grid
-      - day_view             # toggle to single-day column
       - nurse_colour_coding  # each nurse gets a colour
       - click_to_create      # click empty slot → new appointment form
-      - drag_to_reschedule   # drag event → update time
 
   search:
     role: search
@@ -56,15 +54,6 @@ windows:
     role: form
     title: "{mode} {entity}"
     component: EntityFormPanel
-
-  booking_wizard:
-    role: wizard
-    title: "Book Appointment"
-    component: BookingWizardPanel
-    steps:
-      - choose_specialty   # patient picks type of service
-      - choose_slot        # system shows available times from CalDAV
-      - confirm            # patient confirms → nurse auto-assigned
 
   ai:
     role: ai
@@ -137,9 +126,3 @@ transitions:
     to: form
     on: click edit
     id: "form-{entity}-{id}"
-
-  # ── Public booking (separate route /book) ─────
-  - from: public
-    to: booking_wizard
-    on: visit /book
-    id: "booking-public"

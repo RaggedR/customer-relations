@@ -31,6 +31,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
+  // Block import of entities that contain sensitive fields (tokens, credentials)
+  const SENSITIVE_ENTITIES = ["calendar_connection"];
+  if (SENSITIVE_ENTITIES.includes(entityName)) {
+    return NextResponse.json(
+      { error: `Import of ${entityName} is not allowed` },
+      { status: 403 }
+    );
+  }
+
   // Parse multipart form data
   let formData: FormData;
   try {
