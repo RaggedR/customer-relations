@@ -20,8 +20,9 @@ export type {
 } from "./schema-types";
 
 // Import for local use in this file
-import type {
-  FieldConfig, EntityConfig, SchemaConfig,
+import {
+  type FieldConfig, type EntityConfig, type SchemaConfig,
+  setSchemaCache,
 } from "./schema-types";
 
 // --- Loader ---
@@ -38,6 +39,7 @@ export function loadSchema(schemaPath?: string): SchemaConfig {
   validateSchema(parsed);
 
   cachedSchema = parsed;
+  setSchemaCache(parsed); // Populate the client-safe cache in schema-types.ts
   return parsed;
 }
 
@@ -91,12 +93,25 @@ function validateSchema(schema: SchemaConfig): void {
         );
       }
       if (field.default !== undefined) {
-        const expectedType = field.type === "boolean" ? "boolean" : field.type === "number" ? "number" : "string";
-        if (typeof field.default !== expectedType && !(field.type === "enum" && typeof field.default === "string")) {
+        const validTypes = ["string", "number", "boolean"];
+        if (!validTypes.includes(typeof field.default)) {
           throw new Error(
-            `Field "${entityName}.${fieldName}" default value type mismatch: expected ${expectedType}, got ${typeof field.default}`
+            `Field "${entityName}.${fieldName}" default must be a string, number, or boolean, got ${typeof field.default}`
           );
         }
+        // Reject Prisma function calls (now(), uuid(), etc.) — these are handled
+        // by the generator's hardcoded fields (createdAt, updatedAt), not schema.yaml
+        if (typeof field.default === "string" && /\(.*\)/.test(field.default)) {
+          throw new Error(
+            `Field "${entityName}.${fieldName}" default "${field.default}" looks like a function call. ` +
+            `Only literal values are supported in schema.yaml defaults.`
+          );
+        }
+      }
+      if (field.unique && field.indexed) {
+        throw new Error(
+          `Field "${entityName}.${fieldName}" has both unique and indexed — @unique already creates an index, indexed is redundant`
+        );
       }
     }
 

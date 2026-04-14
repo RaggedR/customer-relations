@@ -9,6 +9,8 @@ entities:
     fields:
       name: { type: string, required: true }
       date_of_birth: { type: date }
+      # Nullable unique: overseas patients / infants may not have a Medicare number.
+      # Multiple NULLs are allowed by PostgreSQL — only non-null values must be unique.
       medicare_number: { type: string, ai_visible: false, unique: true }
       phone: { type: phone, ai_visible: false }
       email: { type: email, ai_visible: false }

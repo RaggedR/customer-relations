@@ -17,7 +17,7 @@ export interface FieldConfig {
   required?: boolean;
   unique?: boolean; // Emits @unique constraint in Prisma schema
   indexed?: boolean;  // Emits @@index in Prisma schema
-  default?: unknown;  // Emits @default(...) in Prisma schema
+  default?: string | number | boolean;  // Emits @default(...) in Prisma schema (literal values only, not Prisma functions)
   values?: string[]; // For enum type
   ai_visible?: boolean; // false = excluded from AI schema description and result redaction
 }

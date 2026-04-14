@@ -63,8 +63,16 @@ describe("Prisma Generator", () => {
 
   it("generates @unique on fields with unique: true", () => {
     const output = generatePrismaSchema(schema);
-    // session.token has unique: true in schema.yaml
+    // session.token: required + unique
     expect(output).toContain("token String @unique");
+    // patient.medicare_number: optional + unique
+    expect(output).toContain("medicare_number String? @unique");
+  });
+
+  it("does not emit @unique on fields without unique: true", () => {
+    const output = generatePrismaSchema(schema);
+    // patient.name is required but NOT unique
+    expect(output).toMatch(/^\s+name String$/m);
   });
 
   it("generates @default on fields with default values", () => {
