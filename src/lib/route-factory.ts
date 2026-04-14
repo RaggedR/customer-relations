@@ -54,6 +54,8 @@ export function makeListCreateHandlers(entityName: string) {
     const search = searchParams.get("search") || undefined;
     const sortBy = searchParams.get("sortBy") || undefined;
     const sortOrder = (searchParams.get("sortOrder") as "asc" | "desc") || undefined;
+    const pageParam = searchParams.get("page");
+    const pageSizeParam = searchParams.get("pageSize");
 
     // Build filter from query params (e.g. ?patientId=5)
     // Uses relation names as filterBy keys — the repository resolves to FK names.
@@ -70,13 +72,16 @@ export function makeListCreateHandlers(entityName: string) {
     }
 
     return withErrorHandler(`GET /api/${entityName}`, async () => {
-      const items = await findAll(entityName, {
+      const result = await findAll(entityName, {
         search,
         sortBy,
         sortOrder,
         filterBy: Object.keys(filterBy).length > 0 ? filterBy : undefined,
+        page: pageParam ? parseInt(pageParam, 10) : undefined,
+        pageSize: pageSizeParam ? parseInt(pageSizeParam, 10) : undefined,
+        shallow: !!pageParam, // list views use shallow mode when paginating
       });
-      return NextResponse.json(items);
+      return NextResponse.json(result);
     });
   }
 

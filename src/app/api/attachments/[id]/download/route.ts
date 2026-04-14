@@ -8,7 +8,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs/promises";
+import { createReadStream, promises as fsp } from "fs";
+import { Readable } from "stream";
 import path from "path";
 import { findById } from "@/lib/repository";
 import { getClientIp } from "@/lib/api-helpers";
@@ -61,17 +62,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       userAgent: request.headers.get("user-agent") ?? undefined,
     });
 
-    const buffer = await fs.readFile(fullPath);
     const rawFilename = String(record.filename);
     // Sanitise for Content-Disposition header — strip quotes and control chars
     const safeFilename = rawFilename.replace(/["\r\n]/g, "_");
     const mimeType = String(record.mime_type || "application/octet-stream");
 
-    return new NextResponse(buffer, {
+    const fileStat = await fsp.stat(fullPath);
+    const nodeStream = createReadStream(fullPath);
+    const webStream = Readable.toWeb(nodeStream) as ReadableStream;
+
+    return new NextResponse(webStream, {
       headers: {
         "Content-Type": mimeType,
         "Content-Disposition": `attachment; filename="${safeFilename}"`,
-        "Content-Length": String(buffer.length),
+        "Content-Length": String(fileStat.size),
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "no-store",
       },

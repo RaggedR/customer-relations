@@ -18,6 +18,14 @@ export async function register() {
       process.exit(1);
     });
 
+    process.on("SIGTERM", async () => {
+      console.log("[shutdown] SIGTERM received, draining connections...");
+      // Dynamic import avoids pulling prisma into the instrumentation module at load time
+      const { prisma } = await import("@/lib/prisma");
+      await prisma.$disconnect();
+      process.exit(0);
+    });
+
     // Production startup checks: warn about missing optional env vars
     if (process.env.NODE_ENV === "production") {
       const warnings: string[] = [];
