@@ -110,17 +110,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  // Idempotency: clinical notes are immutable — duplicate creation is a medico-legal hazard
-  const idempotencyKey = request.headers.get("idempotency-key");
-  if (idempotencyKey) {
-    const cached = getIdempotentResponse(idempotencyKey);
-    if (cached) return cached;
-  }
-
   return withErrorHandler("POST /api/nurse/appointments/[id]/notes", async () => {
+    // Auth FIRST — idempotency check comes after to prevent cross-user key collisions
     const session = await getSessionUser(request);
     if (!session || session.role !== "nurse") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Idempotency: key scoped to user — prevents Nurse B from retrieving Nurse A's cached response.
+    // Clinical notes are immutable, so duplicate creation is a medico-legal hazard.
+    const rawKey = request.headers.get("idempotency-key");
+    const idempotencyKey = rawKey ? `nurse:${session.userId}:${rawKey}` : null;
+    if (idempotencyKey) {
+      const cached = getIdempotentResponse(idempotencyKey);
+      if (cached) return cached;
     }
 
     const { id } = await params;

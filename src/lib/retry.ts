@@ -17,6 +17,14 @@ export interface RetryOptions {
 }
 
 function isTransient(err: unknown): boolean {
+  // Check for HTTP status code on typed error objects (Gemini SDK, fetch, etc.)
+  const status = (err as { status?: number; statusCode?: number }).status
+    ?? (err as { status?: number; statusCode?: number }).statusCode;
+  if (status === 429 || status === 503 || status === 502 || status === 504) {
+    return true;
+  }
+
+  // Fall back to Node.js network error codes in error messages
   if (err instanceof Error) {
     const msg = err.message.toLowerCase();
     return (
@@ -24,8 +32,6 @@ function isTransient(err: unknown): boolean {
       msg.includes("econnrefused") ||
       msg.includes("etimedout") ||
       msg.includes("socket hang up") ||
-      msg.includes("503") ||
-      msg.includes("429") ||
       msg.includes("fetch failed")
     );
   }
@@ -40,14 +46,10 @@ export async function withRetry<T>(
   const baseDelayMs = options?.baseDelayMs ?? 500;
   const label = options?.label ?? "operation";
 
-  let lastError: unknown;
-
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await fn();
     } catch (err) {
-      lastError = err;
-
       if (attempt === maxAttempts || !isTransient(err)) {
         throw err;
       }
@@ -61,5 +63,6 @@ export async function withRetry<T>(
     }
   }
 
-  throw lastError;
+  // Unreachable — the loop always returns or throws — but TypeScript needs it
+  throw new Error(`${label} failed after ${maxAttempts} attempts`);
 }

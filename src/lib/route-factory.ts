@@ -81,8 +81,10 @@ export function makeListCreateHandlers(entityName: string) {
   }
 
   async function POST(request: NextRequest) {
-    // Idempotency: if the client sends an Idempotency-Key header, deduplicate
-    const idempotencyKey = request.headers.get("idempotency-key");
+    // Idempotency: key is scoped to the entity to prevent cross-endpoint collisions.
+    // These endpoints are admin-only (proxy-enforced), so per-user scoping is not needed.
+    const rawKey = request.headers.get("idempotency-key");
+    const idempotencyKey = rawKey ? `${entityName}:${rawKey}` : null;
     if (idempotencyKey) {
       const cached = getIdempotentResponse(idempotencyKey);
       if (cached) return cached;
