@@ -13,8 +13,9 @@
  */
 
 import { NextResponse } from "next/server";
-import { getSchema } from "@/engine/schema-loader";
+import { getSchema, foreignKeyName } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
+import { withErrorHandler } from "@/lib/api-helpers";
 
 type Row = Record<string, unknown>;
 
@@ -47,7 +48,7 @@ function getImportOrder(schema: ReturnType<typeof getSchema>): string[] {
 }
 
 export async function GET() {
-  try {
+  return withErrorHandler("GET /api/backup", async () => {
     const schema = getSchema();
     const importOrder = getImportOrder(schema);
 
@@ -78,7 +79,7 @@ export async function GET() {
         // FK IDs (not nested objects)
         if (entity.relations) {
           for (const relName of Object.keys(entity.relations)) {
-            const fkKey = `${relName}Id`;
+            const fkKey = foreignKeyName(relName);
             flat[fkKey] = record[fkKey] ?? null;
 
             // Also include parent name for human readability + re-import
@@ -110,11 +111,5 @@ export async function GET() {
         "Content-Disposition": `attachment; filename="backup-${dateStr}.json"`,
       },
     });
-  } catch (error) {
-    console.error("Backup error:", error);
-    return NextResponse.json(
-      { error: "Backup failed" },
-      { status: 500 }
-    );
-  }
+  });
 }

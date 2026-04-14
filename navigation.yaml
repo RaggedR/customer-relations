@@ -18,6 +18,7 @@
 windows:
   calendar:
     role: calendar
+    floating: false    # renders in main area, not as a floating window
     title: "Calendar"
     component: CalendarPanel
     features:
@@ -52,7 +53,7 @@ windows:
 
   form:
     role: form
-    title: "{mode} {entity}"
+    title: "{mode} {entitySingular}"
     component: EntityFormPanel
 
   ai:

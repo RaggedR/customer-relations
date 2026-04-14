@@ -9,7 +9,7 @@
  */
 
 import { DAVClient } from "tsdav";
-import { generateVEvent } from "./ical";
+import { generateVEvent, makeUid } from "./ical";
 import { findAll } from "./repository";
 
 type Row = Record<string, unknown>;
@@ -66,7 +66,7 @@ export async function pushAppointment(
   if (connections.length === 0) return;
 
   const ical = generateVEvent(appointment);
-  const uid = `appointment-${appointment.id}@customer-relations`;
+  const uid = makeUid("appointment", appointment.id);
 
   for (const conn of connections) {
     try {
@@ -102,7 +102,7 @@ export async function updateAppointment(
   if (connections.length === 0) return;
 
   const ical = generateVEvent(appointment);
-  const uid = `appointment-${appointment.id}@customer-relations`;
+  const uid = makeUid("appointment", appointment.id);
 
   for (const conn of connections) {
     try {
@@ -147,7 +147,7 @@ export async function deleteAppointment(
   const connections = await getConnectionsForNurse(nurseId);
   if (connections.length === 0) return;
 
-  const uid = `appointment-${appointmentId}@customer-relations`;
+  const uid = makeUid("appointment", appointmentId);
 
   for (const conn of connections) {
     try {

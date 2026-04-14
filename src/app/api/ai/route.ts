@@ -12,142 +12,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
-
-const SCHEMA_DESCRIPTION = `
-PostgreSQL database with these tables:
-
-"Patient" (
-  id SERIAL PRIMARY KEY,
-  "createdAt" TIMESTAMP DEFAULT now(),
-  "updatedAt" TIMESTAMP,
-  name TEXT NOT NULL,
-  date_of_birth TIMESTAMP,
-  medicare_number TEXT,
-  phone TEXT,
-  email TEXT,
-  address TEXT,
-  status TEXT, -- values: 'active', 'inactive', 'discharged'
-  maintenance_plan_expiry TIMESTAMP, -- GPMP/TCA plan expiry date
-  notes TEXT
-)
-
-"Referral" (
-  id SERIAL PRIMARY KEY,
-  "createdAt" TIMESTAMP DEFAULT now(),
-  "updatedAt" TIMESTAMP,
-  referring_gp TEXT NOT NULL,
-  gp_practice TEXT,
-  referral_date TIMESTAMP NOT NULL,
-  reason TEXT,
-  expiry_date TIMESTAMP,
-  notes TEXT,
-  "patientId" INT REFERENCES "Patient"(id)
-)
-
-"ClinicalNote" (
-  id SERIAL PRIMARY KEY,
-  "createdAt" TIMESTAMP DEFAULT now(),
-  "updatedAt" TIMESTAMP,
-  date TIMESTAMP NOT NULL,
-  note_type TEXT, -- values: 'initial_assessment', 'progress_note', 'discharge_summary', 'treatment_plan'
-  content TEXT NOT NULL,
-  clinician TEXT,
-  "patientId" INT REFERENCES "Patient"(id)
-)
-
-"PersonalNote" (
-  id SERIAL PRIMARY KEY,
-  "createdAt" TIMESTAMP DEFAULT now(),
-  "updatedAt" TIMESTAMP,
-  date TIMESTAMP NOT NULL,
-  content TEXT NOT NULL,
-  "patientId" INT REFERENCES "Patient"(id)
-)
-
-"HearingAid" (
-  id SERIAL PRIMARY KEY,
-  "createdAt" TIMESTAMP DEFAULT now(),
-  "updatedAt" TIMESTAMP,
-  ear TEXT, -- values: 'left', 'right'
-  make TEXT,
-  model TEXT,
-  serial_number TEXT,
-  battery_type TEXT,
-  wax_filter TEXT,
-  dome TEXT,
-  programming_cable TEXT,
-  programming_software TEXT,
-  hsp_code TEXT,
-  warranty_end_date TIMESTAMP,
-  last_repair_details TEXT,
-  repair_address TEXT,
-  "patientId" INT REFERENCES "Patient"(id)
-)
-
-"ClaimItem" (
-  id SERIAL PRIMARY KEY,
-  "createdAt" TIMESTAMP DEFAULT now(),
-  "updatedAt" TIMESTAMP,
-  item_number TEXT NOT NULL, -- MBS item number e.g. '10960'
-  description TEXT,
-  date_of_service TIMESTAMP NOT NULL,
-  amount FLOAT,
-  status TEXT, -- values: 'pending', 'claimed', 'paid', 'rejected'
-  notes TEXT,
-  "patientId" INT REFERENCES "Patient"(id)
-)
-
-"Appointment" (
-  id SERIAL PRIMARY KEY,
-  "createdAt" TIMESTAMP DEFAULT now(),
-  "updatedAt" TIMESTAMP,
-  date TIMESTAMP NOT NULL,
-  start_time TEXT NOT NULL,  -- "HH:MM" wall-clock time
-  end_time TEXT NOT NULL,    -- "HH:MM" wall-clock time
-  location TEXT NOT NULL,
-  specialty TEXT NOT NULL,
-  status TEXT,  -- values: 'requested', 'confirmed', 'completed', 'cancelled', 'no_show'
-  notes TEXT,
-  "patientId" INT REFERENCES "Patient"(id),
-  "nurseId" INT REFERENCES "Nurse"(id)
-)
-
-"Nurse" (
-  id SERIAL PRIMARY KEY,
-  "createdAt" TIMESTAMP DEFAULT now(),
-  "updatedAt" TIMESTAMP,
-  name TEXT NOT NULL,
-  phone TEXT,
-  email TEXT,
-  registration_number TEXT, -- AHPRA registration
-  caldav_url TEXT,
-  google_calendar_id TEXT,
-  notes TEXT
-)
-
-"NurseSpecialty" (
-  id SERIAL PRIMARY KEY,
-  "createdAt" TIMESTAMP DEFAULT now(),
-  "updatedAt" TIMESTAMP,
-  specialty TEXT NOT NULL,
-  notes TEXT,
-  "nurseId" INT REFERENCES "Nurse"(id)
-)
-
-"Attachment" (
-  id SERIAL PRIMARY KEY,
-  "createdAt" TIMESTAMP DEFAULT now(),
-  "updatedAt" TIMESTAMP,
-  filename TEXT NOT NULL,
-  storage_path TEXT NOT NULL,
-  mime_type TEXT,
-  size_bytes FLOAT,
-  category TEXT, -- values: 'referral_letter', 'test_result', 'clinical_document', 'other'
-  description TEXT,
-  "patientId" INT REFERENCES "Patient"(id),
-  "clinicalNoteId" INT REFERENCES "ClinicalNote"(id)
-)
-`;
+import { validateAiSql } from "@/lib/sql-safety";
+import { generateSchemaDescription } from "@/lib/generate-schema-description";
+import { withErrorHandler } from "@/lib/api-helpers";
+import { resolveNames } from "@/lib/name-resolution";
+import { logAuditEvent } from "@/lib/audit";
 
 const SYSTEM_PROMPT = `You are a healthcare practice assistant. You help clinicians query their patient management database.
 
@@ -179,7 +48,7 @@ Common query patterns:
 - "Find free slots for next Tuesday" → query Appointment for that date, invert to find gaps
 
 Database schema:
-${SCHEMA_DESCRIPTION}
+${generateSchemaDescription()}
 
 IMPORTANT RULES:
 - If the question is not related to the practice data (patients, nurses, referrals, clinical notes, hearing aids, claims, attachments), respond with: {"refused": true, "message": "Sorry, I can't help you with that. I can only answer questions about your patient and practice data."}
@@ -239,134 +108,16 @@ function getGenAI() {
   return new GoogleGenerativeAI(apiKey);
 }
 
-/**
- * Levenshtein distance — number of single-character edits
- * (insertions, deletions, substitutions) to transform a into b.
- */
-function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
-    }
-  }
-  return dp[m][n];
-}
-
-/** Distance 0–1: confident match, auto-resolve */
-const CONFIDENT_DISTANCE = 1;
-/** Distance 2–3: uncertain, ask the user to confirm */
-const MAX_DISTANCE = 3;
-
-/**
- * Resolve fuzzy names before sending to Gemini.
- *
- * Loads all patient and nurse names, splits them into parts,
- * and compares each word in the question using Levenshtein distance.
- * If the closest match is within MAX_DISTANCE edits, appends the
- * exact name to the question so Gemini generates clean SQL.
- */
-interface NameResolution {
-  question: string;
-  clarify?: string; // if set, ask the user this instead of querying
-}
-
-async function resolveNames(question: string): Promise<NameResolution> {
-  try {
-    // Load all names (tiny tables — fast)
-    const [patients, nurses] = await Promise.all([
-      prisma.patient.findMany({ select: { name: true } }),
-      prisma.nurse.findMany({ select: { name: true } }),
-    ]);
-
-    const allNames: { name: string; type: string; parts: string[] }[] = [];
-    for (const p of patients) {
-      allNames.push({
-        name: p.name,
-        type: "patient",
-        parts: p.name.toLowerCase().replace(/'/g, "").split(/\s+/),
-      });
-    }
-    for (const n of nurses) {
-      allNames.push({
-        name: n.name,
-        type: "nurse",
-        parts: n.name.toLowerCase().replace(/'/g, "").split(/\s+/),
-      });
-    }
-
-    // Extract words from question (3+ chars, skip common words)
-    const skipWords = new Set([
-      "the", "about", "tell", "what", "when", "does", "has", "have",
-      "are", "for", "from", "with", "how", "many", "show", "get",
-      "all", "list", "plan", "date", "last", "next", "hearing",
-      "aids", "aid", "notes", "note", "claim", "items", "referral",
-      // Calendar-related words
-      "free", "busy", "available", "times", "slots", "appointments",
-      "appointment", "schedule", "calendar", "week", "today", "tomorrow",
-      "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-      "january", "february", "march", "april", "may", "june",
-      "july", "august", "september", "october", "november", "december",
-      "morning", "afternoon", "evening", "which", "nurse", "most", "least",
-    ]);
-    const words = question
-      .toLowerCase()
-      .replace(/['']/g, "")
-      .split(/\s+/)
-      .filter((w) => w.length >= 3 && !skipWords.has(w));
-
-    let bestMatch: { name: string; type: string; distance: number } | null = null;
-
-    for (const word of words) {
-      for (const entry of allNames) {
-        // Check against each part of the name (first name, last name)
-        for (const part of entry.parts) {
-          const dist = levenshtein(word, part);
-          if (dist <= MAX_DISTANCE && (!bestMatch || dist < bestMatch.distance)) {
-            bestMatch = { name: entry.name, type: entry.type, distance: dist };
-          }
-        }
-        // Also check against the full name (stripped of apostrophes)
-        const fullName = entry.parts.join("");
-        const distFull = levenshtein(word, fullName);
-        if (distFull <= MAX_DISTANCE && (!bestMatch || distFull < bestMatch.distance)) {
-          bestMatch = { name: entry.name, type: entry.type, distance: distFull };
-        }
-      }
-    }
-
-    if (bestMatch) {
-      if (bestMatch.distance <= CONFIDENT_DISTANCE) {
-        // Confident — auto-resolve
-        return {
-          question: question + `\n\n[Name resolved: the ${bestMatch.type} is "${bestMatch.name}"]`,
-        };
-      } else {
-        // Uncertain — ask the user to confirm
-        return {
-          question,
-          clarify: `Did you mean ${bestMatch.name}?`,
-        };
-      }
-    }
-  } catch {
-    // If name resolution fails, continue with the original question
-  }
-  return { question };
-}
-
 export async function POST(request: NextRequest) {
-  try {
+  return withErrorHandler("POST /api/ai", async () => {
     const { question, model: modelName } = await request.json();
 
     if (!question || typeof question !== "string") {
       return NextResponse.json({ error: "Question is required" }, { status: 400 });
+    }
+
+    if (question.length > 2000) {
+      return NextResponse.json({ error: "Question too long (max 2000 characters)" }, { status: 400 });
     }
 
     // Resolve fuzzy names before sending to the LLM
@@ -423,11 +174,12 @@ export async function POST(request: NextRequest) {
 
     const sql = sqlResult.sql;
 
-    // Safety check: only allow SELECT
-    const normalised = sql.trim().toUpperCase();
-    if (!normalised.startsWith("SELECT") && !normalised.startsWith("WITH")) {
+    // Safety check: scan the entire query for DML/DDL, system catalog access,
+    // multi-statement attacks, and SQL comments. See src/lib/sql-safety.ts.
+    const safety = validateAiSql(sql);
+    if (!safety.safe) {
       return NextResponse.json({
-        error: "AI generated a non-SELECT query. Only read operations are allowed.",
+        error: `AI generated an unsafe query: ${safety.reason}`,
         sql,
       }, { status: 400 });
     }
@@ -443,6 +195,15 @@ export async function POST(request: NextRequest) {
         detail: (dbError as Error).message,
       }, { status: 500 });
     }
+
+    // Audit: log AI query execution (fire-and-forget)
+    logAuditEvent({
+      userId: "admin",
+      action: "ai_query",
+      entity: "sql",
+      entityId: String(rows.length),
+      details: sql,
+    });
 
     // Serialize BigInt values to numbers
     const serializedRows = rows.map((row) => {
@@ -479,11 +240,5 @@ export async function POST(request: NextRequest) {
       rows: serializedRows,
       rowCount: serializedRows.length,
     });
-  } catch (error) {
-    console.error("AI query error:", error);
-    return NextResponse.json(
-      { error: (error as Error).message || "Internal server error" },
-      { status: 500 }
-    );
-  }
+  });
 }

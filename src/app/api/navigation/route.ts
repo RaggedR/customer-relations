@@ -7,16 +7,11 @@
 
 import { NextResponse } from "next/server";
 import { loadNavigationYaml } from "@/lib/navigation-loader";
+import { withErrorHandler } from "@/lib/api-helpers";
 
 export async function GET() {
-  try {
+  return withErrorHandler("GET /api/navigation", async () => {
     const nav = loadNavigationYaml();
     return NextResponse.json(nav);
-  } catch (error) {
-    console.error("GET /api/navigation error:", error);
-    return NextResponse.json(
-      { error: "Failed to load navigation config" },
-      { status: 500 }
-    );
-  }
+  });
 }

@@ -9,34 +9,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findById, update } from "@/lib/repository";
 import { generateVCard, parseVCard } from "@/lib/vcard";
+import { checkAuth, addressBookToEntity } from "@/lib/carddav-auth";
+import { withErrorHandler } from "@/lib/api-helpers";
 
 interface RouteParams {
   params: Promise<{ addressbook: string; id: string }>;
 }
 
 type Row = Record<string, unknown>;
-
-const CARDDAV_PASSWORD = process.env.CARDDAV_PASSWORD || "";
-
-function checkAuth(request: Request): boolean {
-  if (!CARDDAV_PASSWORD) return true;
-  const auth = request.headers.get("authorization");
-  if (!auth?.startsWith("Basic ")) return false;
-  const decoded = Buffer.from(auth.slice(6), "base64").toString();
-  const [, password] = decoded.split(":");
-  return password === CARDDAV_PASSWORD;
-}
-
-function addressBookToEntity(addressbook: string): string | null {
-  switch (addressbook) {
-    case "patients":
-      return "patient";
-    case "nurses":
-      return "nurse";
-    default:
-      return null;
-  }
-}
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   if (!checkAuth(request)) {
@@ -54,7 +34,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  try {
+  return withErrorHandler(`GET /api/carddav/${addressbook}/${idStr}`, async () => {
     const record = (await findById(entityName, id)) as Row | null;
     if (!record) {
       return new NextResponse("Not found", { status: 404 });
@@ -68,10 +48,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         "ETag": `"${record.updatedAt}"`,
       },
     });
-  } catch (error) {
-    console.error(`CardDAV GET error:`, error);
-    return new NextResponse("Internal server error", { status: 500 });
-  }
+  });
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
@@ -90,7 +67,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  try {
+  return withErrorHandler(`PUT /api/carddav/${addressbook}/${idStr}`, async () => {
     const body = await request.text();
     const parsed = parseVCard(entityName, body);
 
@@ -101,8 +78,5 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     await update(entityName, id, parsed);
 
     return new NextResponse("", { status: 204 });
-  } catch (error) {
-    console.error(`CardDAV PUT error:`, error);
-    return new NextResponse("Internal server error", { status: 500 });
-  }
+  });
 }

@@ -11,9 +11,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import { getSchema } from "@/engine/schema-loader";
-import { getCsvRepresentation } from "@/lib/representations";
+import { getSchema } from "@/lib/schema";
+import { getCsvRepresentation } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
+import { withErrorHandler } from "@/lib/api-helpers";
 
 interface RouteParams {
   params: Promise<{ entity: string }>;
@@ -140,7 +141,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const slug = entityName.replace(/_/g, "-");
 
-  try {
+  return withErrorHandler(`GET /api/${entityName}/export`, async () => {
     const items = (await findAll(entityName)) as Row[];
     const columns = buildColumns(entityName);
     const rows = items.map((item) => flattenRow(item, entityName, columns));
@@ -213,11 +214,5 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         "Content-Disposition": `attachment; filename="${slug}s.xlsx"`,
       },
     });
-  } catch (error) {
-    console.error(`Export error for ${entityName}:`, error);
-    return NextResponse.json(
-      { error: `Failed to export ${entityName}` },
-      { status: 500 }
-    );
-  }
+  });
 }

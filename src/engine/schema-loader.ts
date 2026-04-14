@@ -50,18 +50,30 @@ export interface RepresentationsConfig {
   json?: JsonRepresentation;
 }
 
-// Keep old types as aliases for backward compatibility during migration
-export type CardDAVMapping = Record<string, string>;
-export interface CardDAVConfig {
-  enabled: boolean;
-  mapping: CardDAVMapping;
+export interface DisplayAction {
+  label: string;                   // button text (e.g. "Download")
+  href: string;                    // URL template with {field} interpolation
+}
+
+export interface DisplayConfig {
+  title?: string;                  // field name or "{field} — {field}" template
+  subtitle?: string | string[];   // field name(s) to show below title
+  badge?: string;                 // enum field name → rendered as colored pill
+  summary?: string;               // text field for truncated preview
+  summary_max?: number;           // truncation length (default 80)
+  actions?: DisplayAction[];       // URL-based actions with template interpolation
 }
 
 export interface EntityConfig {
+  label?: string;
+  label_singular?: string;
   fields: Record<string, FieldConfig>;
   relations?: Record<string, RelationConfig>;
   representations?: RepresentationsConfig;
-  carddav?: CardDAVConfig; // deprecated — use representations.vcard
+  upsert_keys?: string[];
+  display?: DisplayConfig;
+  sidebar_addable?: boolean;
+  exportable?: boolean;
 }
 
 export interface SchemaConfig {
@@ -214,25 +226,76 @@ function validateSchema(schema: SchemaConfig): void {
       }
     }
 
-    // Validate legacy CardDAV config (deprecated — use representations.vcard)
-    if (entity.carddav) {
-      if (typeof entity.carddav.enabled !== "boolean") {
-        throw new Error(`Entity "${entityName}" carddav.enabled must be a boolean`);
-      }
-      if (entity.carddav.enabled && !entity.carddav.mapping) {
+    // Validate display block
+    if (entity.display) {
+      const d = entity.display;
+      // Validate title field reference (plain field or template)
+      if (d.title && !d.title.includes("{") && !entity.fields[d.title]) {
         throw new Error(
-          `Entity "${entityName}" has carddav enabled but no mapping defined`
+          `Entity "${entityName}" display.title references unknown field "${d.title}"`
         );
       }
-      if (entity.carddav.mapping) {
-        for (const fieldName of Object.keys(entity.carddav.mapping)) {
-          if (!entity.fields[fieldName] && !entity.relations?.[fieldName]) {
+      // Validate subtitle field references
+      if (d.subtitle) {
+        const subs = Array.isArray(d.subtitle) ? d.subtitle : [d.subtitle];
+        for (const s of subs) {
+          if (!s.includes("{") && !entity.fields[s]) {
             throw new Error(
-              `Entity "${entityName}" carddav mapping references unknown field "${fieldName}"`
+              `Entity "${entityName}" display.subtitle references unknown field "${s}"`
+            );
+          }
+        }
+      }
+      // Validate badge field reference
+      if (d.badge && !entity.fields[d.badge]) {
+        throw new Error(
+          `Entity "${entityName}" display.badge references unknown field "${d.badge}"`
+        );
+      }
+      // Validate summary field reference
+      if (d.summary && !entity.fields[d.summary]) {
+        throw new Error(
+          `Entity "${entityName}" display.summary references unknown field "${d.summary}"`
+        );
+      }
+      // Validate actions
+      if (d.actions) {
+        if (!Array.isArray(d.actions)) {
+          throw new Error(
+            `Entity "${entityName}" display.actions must be an array`
+          );
+        }
+        for (const action of d.actions) {
+          if (!action.label || typeof action.label !== "string") {
+            throw new Error(
+              `Entity "${entityName}" display.actions entries must have a "label" string`
+            );
+          }
+          if (!action.href || typeof action.href !== "string") {
+            throw new Error(
+              `Entity "${entityName}" display.actions entries must have an "href" string`
             );
           }
         }
       }
     }
+
+    // Validate upsert keys
+    if (entity.upsert_keys) {
+      if (!Array.isArray(entity.upsert_keys)) {
+        throw new Error(`Entity "${entityName}" upsert_keys must be an array`);
+      }
+      for (const key of entity.upsert_keys) {
+        const isField = !!entity.fields[key];
+        const isRelName = key.endsWith("_name") &&
+          !!entity.relations?.[key.replace(/_name$/, "")];
+        if (!isField && !isRelName) {
+          throw new Error(
+            `Entity "${entityName}" upsert_keys references unknown field "${key}"`
+          );
+        }
+      }
+    }
+
   }
 }

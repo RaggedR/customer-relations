@@ -19,7 +19,8 @@ import { randomUUID } from "crypto";
 import fs from "fs/promises";
 import path from "path";
 import { create } from "@/lib/repository";
-import { getSchema } from "@/engine/schema-loader";
+import { getSchema } from "@/lib/schema";
+import { withErrorHandler } from "@/lib/api-helpers";
 
 const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
 
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  try {
+  return withErrorHandler("POST /api/attachments/upload", async () => {
     await fs.mkdir(patientDir, { recursive: true });
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -105,11 +106,5 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(record, { status: 201 });
-  } catch (error) {
-    console.error("Upload error:", error);
-    return NextResponse.json(
-      { error: "Failed to upload file" },
-      { status: 500 }
-    );
-  }
+  });
 }

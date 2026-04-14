@@ -10,34 +10,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findAll } from "@/lib/repository";
 import { generateVCards } from "@/lib/vcard";
+import { checkAuth, addressBookToEntity } from "@/lib/carddav-auth";
+import { withErrorHandler } from "@/lib/api-helpers";
 
 interface RouteParams {
   params: Promise<{ addressbook: string }>;
 }
 
 type Row = Record<string, unknown>;
-
-const CARDDAV_PASSWORD = process.env.CARDDAV_PASSWORD || "";
-
-function checkAuth(request: Request): boolean {
-  if (!CARDDAV_PASSWORD) return true;
-  const auth = request.headers.get("authorization");
-  if (!auth?.startsWith("Basic ")) return false;
-  const decoded = Buffer.from(auth.slice(6), "base64").toString();
-  const [, password] = decoded.split(":");
-  return password === CARDDAV_PASSWORD;
-}
-
-function addressBookToEntity(addressbook: string): string | null {
-  switch (addressbook) {
-    case "patients":
-      return "patient";
-    case "nurses":
-      return "nurse";
-    default:
-      return null;
-  }
-}
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   if (!checkAuth(request)) {
@@ -53,7 +33,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  try {
+  return withErrorHandler(`GET /api/carddav/${addressbook}`, async () => {
     const records = (await findAll(entityName)) as Row[];
     const vcards = generateVCards(entityName, records);
 
@@ -63,8 +43,5 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         "Content-Disposition": `inline; filename="${addressbook}.vcf"`,
       },
     });
-  } catch (error) {
-    console.error(`CardDAV listing error for ${addressbook}:`, error);
-    return new NextResponse("Internal server error", { status: 500 });
-  }
+  });
 }

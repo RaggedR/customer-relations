@@ -174,3 +174,44 @@ model Attachment {
   clinical_noteId Int?
   clinical_note ClinicalNote? @relation(fields: [clinical_noteId], references: [id])
 }
+
+model User {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  email String
+  name String
+  password_hash String
+  role String
+  active Boolean?
+  sessions Session[]
+  audit_logs AuditLog[]
+}
+
+model Session {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  token String
+  last_active DateTime
+  expires_at DateTime
+  ip String?
+  user_agent String?
+  userId Int?
+  user User? @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  timestamp DateTime
+  action String
+  entity String
+  entity_id String
+  details String?
+  ip String?
+  user_agent String?
+  userId Int?
+  user User? @relation(fields: [userId], references: [id])
+}

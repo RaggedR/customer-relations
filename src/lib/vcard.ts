@@ -5,7 +5,7 @@
  * Generates vCard 3.0 format for patient and nurse contacts.
  */
 
-import { getVCardRepresentation, reverseMapping } from "./representations";
+import { getVCardRepresentation, reverseMapping } from "@/lib/schema";
 
 type Row = Record<string, unknown>;
 

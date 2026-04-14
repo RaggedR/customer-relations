@@ -14,6 +14,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
+import { withErrorHandler } from "@/lib/api-helpers";
+import { logAuditEvent } from "@/lib/audit";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -201,12 +203,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  try {
+  return withErrorHandler(`GET /api/patient/${numId}/export`, async () => {
     const patient = await loadPatient(numId);
 
     if (!patient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
+
+    // Audit: log patient data export (fire-and-forget)
+    logAuditEvent({
+      userId: "admin",
+      action: "export",
+      entity: "patient",
+      entityId: String(numId),
+      details: `format=${format}`,
+    });
 
     const safeName = patient.name.replace(/\s+/g, "-").toLowerCase();
     const dateStr = new Date().toISOString().split("T")[0];
@@ -258,11 +269,5 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         "Content-Disposition": `attachment; filename="patient-${safeName}-${dateStr}.json"`,
       },
     });
-  } catch (error) {
-    console.error("Patient export error:", error);
-    return NextResponse.json(
-      { error: "Failed to export patient" },
-      { status: 500 }
-    );
-  }
+  });
 }

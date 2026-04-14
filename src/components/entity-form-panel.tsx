@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { SchemaConfig, FieldConfig } from "@/engine/schema-loader";
-import { entityLabelSingular } from "@/lib/schema-hierarchy";
-import { fieldTypes } from "@/engine/field-types";
+import type { SchemaConfig, FieldConfig } from "@/lib/schema";
+import { entityLabelSingular, fieldTypes, toSnakeCase } from "@/lib/schema";
+import { recordDisplayName, formatDateForInput, formatDatetimeForInput } from "@/lib/renderers";
 
 interface EntityFormPanelProps {
   entityName: string;
@@ -46,9 +46,9 @@ export function EntityFormPanel({
             } else if (field.type === "time") {
               loaded[fieldName] = String(val); // "HH:MM" — pass through
             } else if (field.type === "date") {
-              loaded[fieldName] = formatDate(val);
+              loaded[fieldName] = formatDateForInput(val);
             } else if (field.type === "datetime") {
-              loaded[fieldName] = formatDatetime(val);
+              loaded[fieldName] = formatDatetimeForInput(val);
             } else {
               loaded[fieldName] = String(val);
             }
@@ -87,15 +87,12 @@ export function EntityFormPanel({
           data.errors?.join(", ") || data.error || "Save failed"
         );
       }
-      const name =
-        data.name ??
-        data[Object.keys(entityConfig.fields)[0]] ??
-        `#${data.id}`;
+      const displayName = recordDisplayName(data, entityConfig);
       showMessage(
-        entityId ? "Updated" : `${entityLabelSingular(entityName)} created`,
+        entityId ? "Updated" : `${entityLabelSingular(entityName, schema)} created`,
         "success"
       );
-      onSaved?.(data.id, String(name));
+      onSaved?.(data.id, displayName);
       if (!entityId) {
         // Clear form after create
         setForm({});
@@ -163,7 +160,7 @@ export function EntityFormPanel({
               ? "Saving..."
               : entityId
                 ? "Update"
-                : `Create ${entityLabelSingular(entityName)}`}
+                : `Create ${entityLabelSingular(entityName, schema)}`}
           </Button>
         </div>
       </form>
@@ -246,22 +243,6 @@ function FieldInput({
   );
 }
 
-function toSnakeCase(str: string): string {
-  return str.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
-}
-
-function formatDate(val: unknown): string {
-  if (!val) return "";
-  const d = new Date(val as string);
-  return isNaN(d.getTime()) ? "" : d.toISOString().split("T")[0];
-}
-
-function formatDatetime(val: unknown): string {
-  if (!val) return "";
-  const d = new Date(val as string);
-  return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 16);
-}
-
 function RelationSelect({
   name,
   relatedEntity,
@@ -283,7 +264,7 @@ function RelationSelect({
           setOptions(
             data.map((d: Record<string, unknown>) => ({
               id: d.id as number,
-              name: String(d.name ?? d[Object.keys(d)[1]] ?? `#${d.id}`),
+              name: recordDisplayName(d),
             }))
           );
         }

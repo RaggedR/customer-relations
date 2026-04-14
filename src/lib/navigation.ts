@@ -12,6 +12,7 @@
  */
 
 import type { WindowRole } from "@/lib/layout";
+import { entityLabel, entityLabelSingular, type SchemaConfig } from "@/lib/schema";
 
 // --- Types ---
 
@@ -20,6 +21,7 @@ export interface WindowDef {
   titleTemplate: string;
   component: string;
   features?: string[];
+  floating?: boolean; // default true — set false for windows rendered in main area
 }
 
 export interface TransitionDef {
@@ -39,7 +41,8 @@ export interface WindowState {
   type: string;
   entityName?: string;
   entityId?: number;
-  entityLabel?: string;
+  /** Display name of the specific record (e.g. "John Smith"), not the entity type label */
+  displayName?: string;
   propertyEntity?: string;
   parentKey?: string;
   label?: string;
@@ -52,55 +55,50 @@ export interface WindowState {
 interface TransitionContext {
   entity?: string;
   id?: number;
-  name?: string;
+  /** Display name of the specific record (e.g. "John Smith") */
+  displayName?: string;
   label?: string;
   propertyEntity?: string;
   parentKey?: string;
   mode?: string;
 }
 
-/** Resolve "{entity}", "{id}", "{name}", "{label}", "{mode}" in a template */
-function interpolate(template: string, ctx: TransitionContext): string {
+/** Resolve template tokens: {entity}, {entitySingular}, {id}, {name}, {label}, {mode} */
+function interpolate(template: string, ctx: TransitionContext, schema?: SchemaConfig): string {
   return template
-    .replace(/\{entity\}/g, formatLabel(ctx.entity ?? ""))
+    .replace(/\{entity\}/g, entityLabel(ctx.entity ?? "", schema))
+    .replace(/\{entitySingular\}/g, entityLabelSingular(ctx.entity ?? "", schema))
     .replace(/\{id\}/g, String(ctx.id ?? ""))
-    .replace(/\{name\}/g, ctx.name ?? "")
+    .replace(/\{name\}/g, ctx.displayName ?? "")
     .replace(/\{label\}/g, ctx.label ?? "")
     .replace(/\{propertyEntity\}/g, ctx.propertyEntity ?? "")
     .replace(/\{mode\}/g, ctx.mode ?? "Add");
 }
 
-function formatLabel(name: string): string {
-  const map: Record<string, string> = {
-    clinical_note: "Clinical Notes",
-    personal_note: "Personal Notes",
-    hearing_aid: "Hearing Aids",
-    claim_item: "Claim Items",
-    nurse_specialty: "Specialties",
-    appointment: "Appointments",
-    calendar_connection: "Calendar Connections",
-  };
-  if (map[name]) return map[name];
-  const label = name.replace(/_/g, " ");
-  return label.charAt(0).toUpperCase() + label.slice(1) + "s";
-}
-
-function formatSingular(name: string): string {
-  const label = name.replace(/_/g, " ");
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
 // --- Public API ---
 
-/** Build a WindowState for a transition */
+/** Structured key for transition lookup — replaces the fragile "from→to" string */
+interface TransitionKey {
+  from: string;
+  to: string;
+}
+
+/**
+ * Build a WindowState for a transition.
+ *
+ * @param key — { from, to } identifying which transition to follow,
+ *   e.g. { from: "sidebar", to: "search" }.
+ *   Matched against the `from` and `to` fields in navigation.yaml.
+ */
 export function transition(
   nav: NavigationConfig,
-  transitionName: string,
-  ctx: TransitionContext
+  key: TransitionKey,
+  ctx: TransitionContext,
+  schema?: SchemaConfig
 ): Omit<WindowState, "zIndex"> {
-  const def = nav.transitions.find((t) => `${t.from}→${t.to}` === transitionName);
+  const def = nav.transitions.find((t) => t.from === key.from && t.to === key.to);
   if (!def) {
-    throw new Error(`Unknown transition: ${transitionName}`);
+    throw new Error(`Unknown transition: ${key.from} → ${key.to}`);
   }
 
   // Build the mode for form titles
@@ -108,11 +106,11 @@ export function transition(
   const fullCtx = { ...ctx, mode };
 
   return {
-    id: interpolate(def.idTemplate, fullCtx),
+    id: interpolate(def.idTemplate, fullCtx, schema),
     type: def.to,
     entityName: ctx.entity,
     entityId: ctx.id,
-    entityLabel: ctx.name,
+    displayName: ctx.displayName,
     propertyEntity: ctx.propertyEntity,
     parentKey: ctx.parentKey,
     label: ctx.label,
@@ -122,7 +120,8 @@ export function transition(
 /** Resolve the title for a window */
 export function windowTitle(
   nav: NavigationConfig,
-  win: WindowState
+  win: WindowState,
+  schema?: SchemaConfig
 ): string {
   const def = nav.windows[win.type];
   if (!def) return win.type;
@@ -130,21 +129,13 @@ export function windowTitle(
   const ctx: TransitionContext = {
     entity: win.entityName,
     id: win.entityId,
-    name: win.entityLabel,
+    displayName: win.displayName,
     label: win.label,
     propertyEntity: win.propertyEntity,
     mode: win.entityId ? "Edit" : "Add",
   };
 
-  // Special case: for entity lists, pluralize; for singular, use the label
-  let title = interpolate(def.titleTemplate, ctx);
-
-  // Replace raw entity name with formatted version for form titles
-  if (win.type === "form" && win.entityName) {
-    title = `${win.entityId ? "Edit" : "Add"} ${formatSingular(win.entityName)}`;
-  }
-
-  return title;
+  return interpolate(def.titleTemplate, ctx, schema);
 }
 
 // YAML loader is in navigation-loader.ts (server-side only)

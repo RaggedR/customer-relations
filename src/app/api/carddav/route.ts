@@ -10,19 +10,7 @@
  */
 
 import { NextResponse } from "next/server";
-
-const CARDDAV_PASSWORD = process.env.CARDDAV_PASSWORD || "";
-
-function checkAuth(request: Request): boolean {
-  if (!CARDDAV_PASSWORD) return true; // No password = no auth required
-
-  const auth = request.headers.get("authorization");
-  if (!auth?.startsWith("Basic ")) return false;
-
-  const decoded = Buffer.from(auth.slice(6), "base64").toString();
-  const [, password] = decoded.split(":");
-  return password === CARDDAV_PASSWORD;
-}
+import { checkAuth } from "@/lib/carddav-auth";
 
 export async function GET(request: Request) {
   if (!checkAuth(request)) {

@@ -5,12 +5,20 @@
  * - prismaType: The Prisma scalar type for DB column generation
  * - validate: Runtime validation function
  * - htmlInputType: HTML input type for auto-generated forms
+ *
+ * Design decision: DB types and UI types live together deliberately.
+ * The coupling is one field (htmlInputType) and keeps the registry as
+ * a single lookup for all three concerns. Splitting would add a file
+ * and import chain for minimal gain. See docs/ARCHITECTURE-REVIEW.md.
  */
 
 export interface FieldTypeDefinition {
   prismaType: string;
   validate: (value: unknown) => boolean;
   htmlInputType: string;
+  /** Normalize a value for persistence. Converts any accepted input representation
+   *  to the canonical form expected by Prisma. Called by repository.transformInput. */
+  normalize?: (value: unknown) => unknown;
 }
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -47,16 +55,19 @@ export const fieldTypes: Record<string, FieldTypeDefinition> = {
     prismaType: "Float",
     validate: (v) => typeof v === "number" && !isNaN(v as number),
     htmlInputType: "number",
+    normalize: (v) => (v !== null && v !== undefined ? Number(v) : null),
   },
   date: {
     prismaType: "DateTime",
     validate: (v) => typeof v === "string" && !isNaN(Date.parse(v as string)),
     htmlInputType: "date",
+    normalize: (v) => (v instanceof Date ? v : v ? new Date(v as string) : null),
   },
   datetime: {
     prismaType: "DateTime",
     validate: (v) => typeof v === "string" && !isNaN(Date.parse(v as string)),
     htmlInputType: "datetime-local",
+    normalize: (v) => (v instanceof Date ? v : v ? new Date(v as string) : null),
   },
   enum: {
     prismaType: "String",

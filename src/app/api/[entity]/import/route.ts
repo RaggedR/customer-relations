@@ -10,9 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSchema } from "@/engine/schema-loader";
-import { parseFile, normaliseRows } from "@/lib/parsers";
+import { getSchema } from "@/lib/schema";
+import { parseFile } from "@/lib/parsers";
 import { importEntities } from "@/lib/import";
+import { withErrorHandler } from "@/lib/api-helpers";
 
 interface RouteParams {
   params: Promise<{ entity: string }>;
@@ -79,14 +80,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   // Import with schema-driven upsert
-  try {
+  return withErrorHandler(`POST /api/${entityName}/import`, async () => {
     const result = await importEntities(entityName, rows);
     return NextResponse.json(result);
-  } catch (error) {
-    console.error(`Import error for ${entityName}:`, error);
-    return NextResponse.json(
-      { error: `Import failed: ${(error as Error).message}` },
-      { status: 500 }
-    );
-  }
+  });
 }

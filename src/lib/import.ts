@@ -10,9 +10,10 @@
  * - Unknown columns are skipped (logged but not rejected)
  */
 
-import { getSchema, EntityConfig } from "../engine/schema-loader";
-import { create, update, findAll } from "./repository";
-import { normaliseRows, Row } from "./parsers";
+import { getSchema, EntityConfig, foreignKeyName } from "@/lib/schema";
+import { create, update, findAll, validateEntity } from "./repository";
+import type { Row } from "./parsers";
+import { getCsvRepresentation } from "@/lib/schema";
 
 export interface ImportOptions {
   /** Fields that uniquely identify a record for upsert. Default: entity-specific. */
@@ -29,19 +30,60 @@ export interface ImportResult {
   errors: string[];
 }
 
+// ── Header Normalisation (moved from parsers.ts — import is the sole consumer) ──
+
 /**
- * Default upsert keys per entity.
- * These determine when an existing record is updated vs a new one created.
+ * Build a header normalisation map for an entity.
+ * Maps lowercased column headers → schema field names.
  */
-const DEFAULT_UPSERT_KEYS: Record<string, string[]> = {
-  patient: ["name", "date_of_birth"],
-  nurse: ["name"],
-  hearing_aid: ["serial_number"],
-  referral: ["referring_gp", "referral_date"],
-  appointment: ["date", "start_time", "patient_name"],
-  clinical_note: ["date", "content"],
-  claim_item: ["item_number", "date_of_service"],
-};
+function buildHeaderMap(entityName: string): Record<string, string> {
+  const schema = getSchema();
+  const entity = schema.entities[entityName];
+  if (!entity) throw new Error(`Unknown entity: ${entityName}`);
+
+  const map: Record<string, string> = {};
+
+  for (const fieldName of Object.keys(entity.fields)) {
+    map[fieldName.toLowerCase()] = fieldName;
+    map[fieldName.replace(/_/g, " ").toLowerCase()] = fieldName;
+  }
+
+  if (entity.relations) {
+    for (const relName of Object.keys(entity.relations)) {
+      map[relName.toLowerCase()] = relName;
+      map[`${relName} name`] = `${relName}_name`;
+      map[`${relName}_name`] = `${relName}_name`;
+    }
+  }
+
+  const csvRep = getCsvRepresentation(entityName);
+  if (csvRep.headers) {
+    for (const [fieldName, header] of Object.entries(csvRep.headers)) {
+      map[header.toLowerCase().trim()] = fieldName;
+    }
+  }
+
+  return map;
+}
+
+function normaliseHeader(
+  header: string,
+  headerMap: Record<string, string>
+): string {
+  const key = header.toLowerCase().trim();
+  return headerMap[key] || headerMap[key.replace(/[-_]/g, " ")] || key;
+}
+
+function normaliseRows(rows: Row[], entityName: string): Row[] {
+  const headerMap = buildHeaderMap(entityName);
+  return rows.map((row) => {
+    const out: Row = {};
+    for (const [key, val] of Object.entries(row)) {
+      out[normaliseHeader(key, headerMap)] = val;
+    }
+    return out;
+  });
+}
 
 /**
  * Import entities from parsed data.
@@ -61,7 +103,7 @@ export async function importEntities(
   if (!entity) throw new Error(`Unknown entity: ${entityName}`);
 
   const skipInvalid = options?.skipInvalid ?? true;
-  const upsertKeys = options?.upsertKeys ?? DEFAULT_UPSERT_KEYS[entityName] ?? [];
+  const upsertKeys = options?.upsertKeys ?? entity.upsert_keys ?? [];
 
   // Normalise headers
   const rows = normaliseRows(rawRows, entityName);
@@ -94,6 +136,16 @@ export async function importEntities(
 
       // Strip unknown fields
       const cleanData = stripUnknownFields(data, entity);
+
+      // Validate against schema (previously missing — see security tests)
+      const validationErrors = validateEntity(entityName, cleanData);
+      if (validationErrors.length > 0) {
+        for (const err of validationErrors) {
+          result.errors.push(`Row ${rowNum}: ${err}`);
+        }
+        result.skipped++;
+        continue;
+      }
 
       // Find existing record for upsert
       const existingId = findExistingRecord(
@@ -168,7 +220,7 @@ async function loadExistingRecords(
     // Copy relation IDs
     if (entity.relations) {
       for (const relName of Object.keys(entity.relations)) {
-        const fkKey = `${relName}Id`;
+        const fkKey = foreignKeyName(relName);
         flat[fkKey] = r[fkKey];
         // Also store the parent name for matching
         const parent = r[relName] as Row | null;
@@ -246,7 +298,7 @@ function coerceTypes(data: Row, entity: EntityConfig): void {
         break;
       case "date":
       case "datetime":
-        // Keep as string — repository.transformInput handles Date conversion
+        // Stays as string here — field-type normalize() handles Date conversion
         break;
       case "enum":
         // Normalise to lowercase to match enum values
@@ -307,7 +359,7 @@ function findExistingRecord(
         if (entity.relations[relName]) {
           // Compare the resolved FK ID
           dataVal = data[relName];
-          recVal = record[`${relName}Id`];
+          recVal = record[foreignKeyName(relName)];
           return dataVal != null && recVal != null && Number(dataVal) === Number(recVal);
         }
       }

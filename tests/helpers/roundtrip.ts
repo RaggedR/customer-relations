@@ -6,7 +6,7 @@
  * comparisons work across serialization boundaries.
  */
 
-import { getSchema } from "@/engine/schema-loader";
+import { getSchema } from "@/lib/schema";
 
 const BASE_URL = "http://localhost:3000";
 
