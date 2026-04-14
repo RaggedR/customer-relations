@@ -10,7 +10,7 @@
  */
 
 import ExcelJS from "exceljs";
-import { getVCardRepresentation, reverseMapping } from "@/lib/schema";
+import { parseVCards as parseVCardsFromVCard } from "@/lib/vcard";
 
 export type Row = Record<string, unknown>;
 
@@ -126,14 +126,42 @@ function parseCsvLine(line: string): string[] {
 
 // ── xlsx Parser ─────────────────────────────────────────────
 
+/** Maximum rows allowed in an xlsx import — guards against zip bombs */
+const MAX_XLSX_ROWS = 100_000;
+/**
+ * Maximum compressed XLSX buffer size (5 MB) — blocks zip bombs before decompression.
+ * Tighter than MAX_IMPORT_BYTES (10 MB) because XLSX zip compression ratios
+ * mean a 5 MB archive can decompress to hundreds of MB in memory.
+ */
+const MAX_XLSX_BUFFER = 5 * 1024 * 1024;
+
 /**
  * Parse an xlsx buffer into row objects.
  */
 async function parseXlsx(buffer: Buffer): Promise<Row[]> {
+  // Guard against zip bombs: check compressed size before ExcelJS decompresses
+  if (buffer.length > MAX_XLSX_BUFFER) {
+    throw new Error(
+      `XLSX file too large: ${(buffer.length / 1024 / 1024).toFixed(1)} MB compressed (max 5 MB)`
+    );
+  }
+
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+  try {
+    await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+  } catch (err) {
+    throw new Error("Failed to parse XLSX file: possibly corrupted or too large");
+  }
+
   const sheet = workbook.worksheets[0];
   if (!sheet) return [];
+
+  if (sheet.rowCount > MAX_XLSX_ROWS) {
+    throw new Error(
+      `XLSX file has ${sheet.rowCount} rows (max ${MAX_XLSX_ROWS}). ` +
+      `Split the file or use a smaller dataset.`
+    );
+  }
 
   const headers: string[] = [];
   const headerRow = sheet.getRow(1);
@@ -186,37 +214,11 @@ function parseJson(text: string): Row[] {
 
 /**
  * Parse a vCard string (one or more vCards) into row objects.
- * Uses the reverse of the vCard mapping from schema.yaml.
+ * Delegates to the canonical parser in vcard.ts which handles
+ * line unfolding, escaping, and ADR decomposition.
  */
-function parseVCards(
-  text: string,
-  entityName: string
-): Row[] {
-  const vcard = getVCardRepresentation(entityName);
-  if (!vcard?.mapping) return [];
-
-  const reverse = reverseMapping(vcard.mapping);
-  const cards = text.split("END:VCARD").filter((c) => c.includes("BEGIN:VCARD"));
-  const rows: Row[] = [];
-
-  for (const card of cards) {
-    const row: Row = {};
-    const lines = card.split(/\r?\n/);
-    for (const line of lines) {
-      const colonIdx = line.indexOf(":");
-      if (colonIdx === -1) continue;
-      const prop = line.slice(0, colonIdx).split(";")[0].toUpperCase();
-      const value = line.slice(colonIdx + 1).trim();
-      if (reverse[prop]) {
-        row[reverse[prop]] = value;
-      }
-    }
-    if (Object.keys(row).length > 0) {
-      rows.push(row);
-    }
-  }
-
-  return rows;
+function parseVCards(text: string, entityName: string): Row[] {
+  return parseVCardsFromVCard(entityName, text);
 }
 
 // ── Format Detection ────────────────────────────────────────

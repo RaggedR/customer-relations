@@ -8,7 +8,7 @@
  * never block the HTTP response.
  */
 
-import { DAVClient } from "tsdav";
+import { DAVClient, type DAVCalendar } from "tsdav";
 import { generateVEvent, makeUid } from "./ical";
 import { findAll } from "./repository";
 import { decryptToken } from "./token-crypto";
@@ -66,96 +66,18 @@ async function getClient(conn: CalendarConnection): Promise<DAVClient> {
 }
 
 /**
- * Push a new appointment to all connected calendars for the assigned nurse.
+ * Shared scaffolding for push/update/delete operations.
+ * Loads calendar connections for a nurse, loops over them, creates a DAV
+ * client, fetches calendars, builds the UID, then calls the action callback.
+ * Failures are logged per-connection but never propagated.
  */
-export async function pushAppointment(
-  appointment: Row
+async function withCalendarConnections(
+  nurseId: number | undefined,
+  action: string,
+  appointmentId: number | string,
+  fn: (client: DAVClient, calendar: DAVCalendar, uid: string) => Promise<void>,
 ): Promise<void> {
-  const nurseId = appointment.nurseId as number | undefined;
   if (!nurseId) return;
-
-  const connections = await getConnectionsForNurse(nurseId);
-  if (connections.length === 0) return;
-
-  const ical = generateVEvent(appointment);
-  const uid = makeUid("appointment", appointment.id);
-
-  for (const conn of connections) {
-    try {
-      const client = await getClient(conn);
-      const calendars = await client.fetchCalendars();
-      if (calendars.length === 0) continue;
-
-      const calendar = calendars[0];
-      await client.createCalendarObject({
-        calendar,
-        filename: `${uid}.ics`,
-        iCalString: ical,
-      });
-    } catch (err) {
-      console.error(
-        `CalDAV push failed for connection ${conn.id}:`,
-        (err as Error).message
-      );
-    }
-  }
-}
-
-/**
- * Update an existing appointment on all connected calendars.
- */
-export async function updateAppointment(
-  appointment: Row
-): Promise<void> {
-  const nurseId = appointment.nurseId as number | undefined;
-  if (!nurseId) return;
-
-  const connections = await getConnectionsForNurse(nurseId);
-  if (connections.length === 0) return;
-
-  const ical = generateVEvent(appointment);
-  const uid = makeUid("appointment", appointment.id);
-
-  for (const conn of connections) {
-    try {
-      const client = await getClient(conn);
-      const calendars = await client.fetchCalendars();
-      if (calendars.length === 0) continue;
-
-      const calendar = calendars[0];
-      const objects = await client.fetchCalendarObjects({ calendar });
-      const existing = objects.find(
-        (o) => o.data?.includes(uid) || o.url.includes(uid)
-      );
-
-      if (existing) {
-        await client.updateCalendarObject({
-          calendarObject: { ...existing, data: ical },
-        });
-      } else {
-        // Event doesn't exist yet — create it
-        await client.createCalendarObject({
-          calendar,
-          filename: `${uid}.ics`,
-          iCalString: ical,
-        });
-      }
-    } catch (err) {
-      console.error(
-        `CalDAV update failed for connection ${conn.id}:`,
-        (err as Error).message
-      );
-    }
-  }
-}
-
-/**
- * Delete an appointment from all connected calendars.
- */
-export async function deleteAppointment(
-  appointmentId: number,
-  nurseId: number
-): Promise<void> {
   const connections = await getConnectionsForNurse(nurseId);
   if (connections.length === 0) return;
 
@@ -168,23 +90,79 @@ export async function deleteAppointment(
       if (calendars.length === 0) continue;
 
       const calendar = calendars[0];
-      const objects = await client.fetchCalendarObjects({ calendar });
-      const existing = objects.find(
-        (o) => o.data?.includes(uid) || o.url.includes(uid)
-      );
-
-      if (existing) {
-        await client.deleteCalendarObject({
-          calendarObject: existing,
-        });
-      }
+      await fn(client, calendar, uid);
     } catch (err) {
       console.error(
-        `CalDAV delete failed for connection ${conn.id}:`,
+        `CalDAV ${action} failed for connection ${conn.id}:`,
         (err as Error).message
       );
     }
   }
+}
+
+/**
+ * Push a new appointment to all connected calendars for the assigned nurse.
+ */
+export async function pushAppointment(
+  appointment: Row
+): Promise<void> {
+  await withCalendarConnections(appointment.nurseId as number | undefined, "push", appointment.id as number, async (client, calendar, uid) => {
+    const ical = generateVEvent(appointment);
+    await client.createCalendarObject({
+      calendar,
+      filename: `${uid}.ics`,
+      iCalString: ical,
+    });
+  });
+}
+
+/**
+ * Update an existing appointment on all connected calendars.
+ */
+export async function updateAppointment(
+  appointment: Row
+): Promise<void> {
+  await withCalendarConnections(appointment.nurseId as number | undefined, "update", appointment.id as number, async (client, calendar, uid) => {
+    const ical = generateVEvent(appointment);
+    const objects = await client.fetchCalendarObjects({ calendar });
+    const existing = objects.find(
+      (o) => o.data?.includes(uid) || o.url.includes(uid)
+    );
+
+    if (existing) {
+      await client.updateCalendarObject({
+        calendarObject: { ...existing, data: ical },
+      });
+    } else {
+      // Event doesn't exist yet — create it
+      await client.createCalendarObject({
+        calendar,
+        filename: `${uid}.ics`,
+        iCalString: ical,
+      });
+    }
+  });
+}
+
+/**
+ * Delete an appointment from all connected calendars.
+ */
+export async function deleteAppointment(
+  appointmentId: number,
+  nurseId: number
+): Promise<void> {
+  await withCalendarConnections(nurseId, "delete", appointmentId, async (client, calendar, uid) => {
+    const objects = await client.fetchCalendarObjects({ calendar });
+    const existing = objects.find(
+      (o) => o.data?.includes(uid) || o.url.includes(uid)
+    );
+
+    if (existing) {
+      await client.deleteCalendarObject({
+        calendarObject: existing,
+      });
+    }
+  });
 }
 
 /**

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { sanitiseName, levenshtein } from "@/lib/name-resolution";
+import { _testing } from "@/lib/name-resolution";
+const { sanitiseName, levenshtein } = _testing;
 
 describe("sanitiseName", () => {
   it("passes through normal names unchanged", () => {
