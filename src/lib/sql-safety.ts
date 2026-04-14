@@ -8,7 +8,8 @@
  * 1. Block SQL comments (LLM has no legitimate reason to generate them)
  * 2. Block multi-statement queries (semicolons outside string literals)
  * 3. Strip string literals, then scan for DML/DDL keywords at word boundaries
- * 4. Block system catalog access (pg_catalog, information_schema, pg_*)
+ * 4. Block dangerous built-in functions (pg_sleep, dblink, lo_import, etc.)
+ * 5. Block system catalog access (pg_catalog, information_schema, pg_*)
  */
 
 export interface SqlValidationResult {
@@ -30,6 +31,8 @@ const BLOCKED_KEYWORDS = [
   "COPY",
   "EXECUTE",
   "CALL",
+  // Session-manipulation commands: LOAD can execute arbitrary shared libraries;
+  // SET could alter search_path to redirect function resolution (SET search_path attack).
   "LOAD",
   "SET",
 ];
@@ -117,8 +120,10 @@ export function validateAiSql(sql: string): SqlValidationResult {
     return { safe: false, reason: "Query must start with SELECT or WITH" };
   }
 
-  // 4. Strip string literals, then scan for blocked keywords at word boundaries
+  // 4. Strip string literals, then scan for blocked keywords at word boundaries.
+  // strippedUpper is derived from stripped — both are used downstream (steps 4 and 5).
   const stripped = stripStringLiterals(sql);
+  const strippedUpper = stripped.toUpperCase();
   for (const keyword of BLOCKED_KEYWORDS) {
     // Word boundary match — avoids false positives on "updatedAt", "createdAt"
     const regex = new RegExp(`\\b${keyword}\\b`, "i");
@@ -129,7 +134,6 @@ export function validateAiSql(sql: string): SqlValidationResult {
 
   // 5. Block dangerous built-in functions (match with trailing paren to avoid
   //    false-positives on column names containing these substrings)
-  const strippedUpper = stripped.toUpperCase();
   for (const fn of BLOCKED_FUNCTIONS) {
     if (strippedUpper.includes(fn.toUpperCase() + "(")) {
       return { safe: false, reason: `Query contains blocked function: ${fn}` };

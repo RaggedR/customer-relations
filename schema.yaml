@@ -173,6 +173,8 @@ entities:
           end_time: DTEND_TIME
           location: LOCATION
           notes: DESCRIPTION
+        # APP 8 (cross-border disclosure): patient name removed from iCal summary
+        # so that patient PII is not sent to Google Calendar / Apple Calendar servers.
         summary_template: "{specialty} — Appt #{id}"
       csv:
         headers:
