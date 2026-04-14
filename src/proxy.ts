@@ -2,15 +2,14 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyToken, hasRole, requiresRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+// getSecret is a pure env-var accessor with no mutable state, so it's safe to
+// share across the proxy boundary despite the Next.js 16 proxy docs warning
+// about shared modules. COOKIE_NAME is kept duplicated here as a precaution.
+import { getSecret } from "@/lib/session";
 
 const COOKIE_NAME = "session";
 const NURSE_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-
-function getSecret(): string {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error("SESSION_SECRET env var is not set");
-  return secret;
-}
+const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 function parseCookie(request: NextRequest): string | undefined {
   return request.cookies.get(COOKIE_NAME)?.value;
@@ -23,9 +22,9 @@ function parseCookie(request: NextRequest): string | undefined {
  * - Public routes (/login, /_next/) pass through
  * - Protected routes require a valid session cookie with sufficient role
  *
- * Security headers: nurse and patient portals get `Cache-Control: no-store`
- * because these portals are accessed from unmanaged personal devices where
- * browser caches cannot be trusted to clear clinical data.
+ * Security headers: all authenticated routes get `Cache-Control: no-store`
+ * because clinical data and admin interfaces must never be served from
+ * browser cache, especially on shared or unmanaged devices.
  */
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
@@ -60,10 +59,17 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Idle timeout for nurse sessions (10 minutes)
-  if (payload.role === "nurse") {
+  // Idle timeout: nurses 10 min, admins 30 min.
+  // Patient sessions have no idle timeout (null) — patients access read-only
+  // appointment summaries from personal devices and may have long gaps between views.
+  const idleTimeoutMs =
+    payload.role === "nurse" ? NURSE_IDLE_TIMEOUT_MS :
+    payload.role === "admin" ? ADMIN_IDLE_TIMEOUT_MS :
+    null;
+
+  if (idleTimeoutMs !== null) {
     const idleMs = Date.now() - dbSession.last_active.getTime();
-    if (idleMs > NURSE_IDLE_TIMEOUT_MS) {
+    if (idleMs > idleTimeoutMs) {
       await prisma.session.delete({ where: { id: dbSession.id } });
       return NextResponse.redirect(new URL("/login", request.url));
     }
@@ -72,18 +78,20 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   // Update last_active (sliding window) — fire-and-forget, non-blocking
   prisma.session
     .update({ where: { id: dbSession.id }, data: { last_active: new Date() } })
-    .catch(() => {});
+    .catch((err) => {
+      console.error("[proxy] Failed to update session last_active:", err);
+    });
 
-  // Authorized — build response with security headers for sensitive portals
+  // Authorized — build response with security headers
   const response = NextResponse.next();
 
-  // Anti-caching for nurse and patient portals (unmanaged devices)
-  if (requiredRole === "nurse" || requiredRole === "patient") {
-    response.headers.set(
-      "cache-control",
-      "no-store, no-cache, must-revalidate",
-    );
-  }
+  // Anti-caching for all authenticated routes: clinical data and admin
+  // interfaces must never be served from browser cache (especially on
+  // shared or unmanaged devices).
+  response.headers.set(
+    "cache-control",
+    "no-store, no-cache, must-revalidate",
+  );
 
   return response;
 }

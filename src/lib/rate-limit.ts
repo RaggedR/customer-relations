@@ -6,6 +6,7 @@
  * within a sliding time window.
  */
 
+import { createHash } from "crypto";
 import type { NextRequest } from "next/server";
 
 interface Window {
@@ -66,7 +67,9 @@ export function createRateLimiter(
  */
 export function getRateLimitKey(request: NextRequest): string {
   const session = request.cookies.get("session")?.value;
-  if (session) return `session:${session}`;
+  // Hash the session token before using it as a map key — no raw JWTs in memory.
+  // Use 128-bit (32 hex chars) to prevent pre-image collision attacks on attacker-controlled input.
+  if (session) return `session:${createHash("sha256").update(session).digest("hex").slice(0, 32)}`;
 
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) return `ip:${forwarded.split(",")[0].trim()}`;

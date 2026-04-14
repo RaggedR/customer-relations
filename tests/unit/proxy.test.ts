@@ -153,10 +153,12 @@ describe("Proxy — anti-caching headers", () => {
     expect(cc).toContain("must-revalidate");
   });
 
-  it("admin route response does NOT include anti-caching headers", async () => {
+  it("admin route response includes anti-caching headers", async () => {
     const res = await proxy(makeRequest("/patients", adminToken));
     const cc = res.headers.get("cache-control") ?? "";
-    expect(cc).not.toContain("no-store");
+    expect(cc).toContain("no-store");
+    expect(cc).toContain("no-cache");
+    expect(cc).toContain("must-revalidate");
   });
 
   it("portal route response includes no-store", async () => {

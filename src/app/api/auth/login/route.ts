@@ -13,17 +13,11 @@ import { prisma } from "@/lib/prisma";
 import { signSession, type Role } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
 import { logAuditEvent } from "@/lib/audit";
-import { COOKIE_NAME, COOKIE_OPTIONS } from "@/lib/session";
+import { COOKIE_NAME, COOKIE_OPTIONS, getSecret } from "@/lib/session";
 import { createRateLimiter } from "@/lib/rate-limit";
 
 const SESSION_MAX_AGE = 8 * 60 * 60; // 8 hours in seconds
 const loginLimiter = createRateLimiter(5, 60_000); // 5 attempts per minute
-
-function getSecret(): string {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error("SESSION_SECRET env var is not set");
-  return secret;
-}
 
 export async function POST(request: NextRequest) {
   // Extract client IP once — used for rate limiting and audit logging
