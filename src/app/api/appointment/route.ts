@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { findAll, create, validateEntity } from "@/lib/repository";
 import { pushAppointment } from "@/lib/caldav-client";
 import { withErrorHandler } from "@/lib/api-helpers";
+import { logger } from "@/lib/logger";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     // CalDAV push (fire-and-forget, don't block the response)
     pushAppointment(item as Record<string, unknown>).catch((err) =>
-      console.error("CalDAV push failed:", err)
+      logger.error({ err }, "CalDAV push failed")
     );
 
     return NextResponse.json(item, { status: 201 });

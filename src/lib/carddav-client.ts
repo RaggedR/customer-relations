@@ -11,6 +11,7 @@
 import { DAVClient } from "tsdav";
 import { generateVCard } from "./vcard";
 import { decryptToken } from "./token-crypto";
+import { logger } from "@/lib/logger";
 import type { Row } from "./parsers";
 
 interface ContactConnection {
@@ -44,10 +45,7 @@ export async function pushContact(
       vCardString: vcard,
     });
   } catch (err) {
-    console.error(
-      `CardDAV push failed for connection ${connection.id}:`,
-      (err as Error).message
-    );
+    logger.error({ err, connectionId: connection.id, action: "push" }, "CardDAV operation failed");
   }
 }
 
@@ -85,10 +83,7 @@ export async function updateContact(
       });
     }
   } catch (err) {
-    console.error(
-      `CardDAV update failed for connection ${connection.id}:`,
-      (err as Error).message
-    );
+    logger.error({ err, connectionId: connection.id, action: "update" }, "CardDAV operation failed");
   }
 }
 
@@ -117,10 +112,7 @@ export async function deleteContact(
       await client.deleteVCard({ vCard: existing });
     }
   } catch (err) {
-    console.error(
-      `CardDAV delete failed for connection ${connection.id}:`,
-      (err as Error).message
-    );
+    logger.error({ err, connectionId: connection.id, action: "delete" }, "CardDAV operation failed");
   }
 }
 

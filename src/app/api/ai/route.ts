@@ -18,8 +18,10 @@ import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
 import { resolveNames } from "@/lib/name-resolution";
 import { getSchema } from "@/lib/schema";
 import { logAuditEvent } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { getSessionUser } from "@/lib/session";
 import { createRateLimiter, getRateLimitKey } from "@/lib/rate-limit";
+import { withRetry } from "@/lib/retry";
 
 const aiLimiter = createRateLimiter(30, 60_000); // 30 requests per minute
 
@@ -242,10 +244,13 @@ export async function POST(request: NextRequest) {
     const model = genAI.getGenerativeModel({ model: resolvedModelName });
 
     // Step 1: Generate SQL
-    const sqlResponse = await model.generateContent([
-      { text: SYSTEM_PROMPT },
-      { text: `User question: ${resolved.question}` },
-    ]);
+    const sqlResponse = await withRetry(
+      () => model.generateContent([
+        { text: SYSTEM_PROMPT },
+        { text: `User question: ${resolved.question}` },
+      ]),
+      { label: "Gemini SQL generation" },
+    );
 
     const sqlText = sqlResponse.response.text().trim();
     let sqlResult;
@@ -279,7 +284,7 @@ export async function POST(request: NextRequest) {
     // multi-statement attacks, and SQL comments. See src/lib/sql-safety.ts.
     const safety = validateAiSql(sql);
     if (!safety.safe) {
-      console.warn("AI generated unsafe query:", { sql, reason: safety.reason });
+      logger.warn({ sql, reason: safety.reason }, "AI generated unsafe query");
       return NextResponse.json({
         error: "The AI generated an unsafe query. Please rephrase your question.",
       }, { status: 400 });
@@ -293,7 +298,7 @@ export async function POST(request: NextRequest) {
         return await tx.$queryRawUnsafe(sql) as Record<string, unknown>[];
       });
     } catch (dbError) {
-      console.error("AI SQL execution failed:", { sql, error: (dbError as Error).message });
+      logger.error({ err: dbError, sql }, "AI SQL execution failed");
       return NextResponse.json({
         error: "Query execution failed. Please try rephrasing your question.",
       }, { status: 500 });
@@ -347,12 +352,15 @@ export async function POST(request: NextRequest) {
     });
 
     // Step 4: Generate natural language answer + chart
-    const resultsResponse = await model.generateContent([
-      { text: RESULTS_PROMPT },
-      { text: `User question: ${aiQuestion}` },
-      { text: `SQL executed: ${sql}` },
-      { text: `Results (${aiRows.length} rows): ${JSON.stringify(aiRows.slice(0, 100))}` },
-    ]);
+    const resultsResponse = await withRetry(
+      () => model.generateContent([
+        { text: RESULTS_PROMPT },
+        { text: `User question: ${aiQuestion}` },
+        { text: `SQL executed: ${sql}` },
+        { text: `Results (${aiRows.length} rows): ${JSON.stringify(aiRows.slice(0, 100))}` },
+      ]),
+      { label: "Gemini answer generation" },
+    );
 
     const resultsText = resultsResponse.response.text().trim();
     let answerResult;

@@ -15,6 +15,7 @@ import {
   deleteAppointment,
 } from "@/lib/caldav-client";
 import { withErrorHandler } from "@/lib/api-helpers";
+import { logger } from "@/lib/logger";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -52,7 +53,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     // CalDAV update (fire-and-forget)
     updateAppointment(item as Record<string, unknown>).catch((err) =>
-      console.error("CalDAV update failed:", err)
+      logger.error({ err }, "CalDAV update failed")
     );
 
     return NextResponse.json(item);
@@ -75,7 +76,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     // CalDAV delete (fire-and-forget)
     if (nurseId) {
       deleteAppointment(numId, nurseId).catch((err) =>
-        console.error("CalDAV delete failed:", err)
+        logger.error({ err }, "CalDAV delete failed")
       );
     }
 

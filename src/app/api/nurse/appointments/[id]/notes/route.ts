@@ -11,8 +11,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
-import { withErrorHandler } from "@/lib/api-helpers";
+import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
+import { getIdempotentResponse, cacheIdempotentResponse } from "@/lib/idempotency";
 import { renderWatermarkedImage } from "@/lib/image-renderer";
 import { resolveNurse, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
 import { findAll, create } from "@/lib/repository";
@@ -92,7 +93,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     ].sort((a, b) => new Date(b.date as string).getTime() - new Date(a.date as string).getTime());
 
     // 3D: Audit log — nurse viewed patient notes
-    const ip = request.headers.get("x-forwarded-for") ?? undefined;
+    const ip = getClientIp(request);
     const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
       userId: session.userId,
@@ -110,9 +111,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   return withErrorHandler("POST /api/nurse/appointments/[id]/notes", async () => {
+    // Auth FIRST — idempotency check comes after to prevent cross-user key collisions
     const session = await getSessionUser(request);
     if (!session || session.role !== "nurse") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Idempotency: key scoped to user — prevents Nurse B from retrieving Nurse A's cached response.
+    // Clinical notes are immutable, so duplicate creation is a medico-legal hazard.
+    const rawKey = request.headers.get("idempotency-key");
+    const idempotencyKey = rawKey ? `nurse:${session.userId}:${rawKey}` : null;
+    if (idempotencyKey) {
+      const cached = getIdempotentResponse(idempotencyKey);
+      if (cached) return cached;
     }
 
     const { id } = await params;
@@ -178,7 +189,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // 3D: Audit log — nurse created note
     const entity = noteType === "personal" ? "personal_note" : "clinical_note";
-    const ip = request.headers.get("x-forwarded-for") ?? undefined;
+    const ip = getClientIp(request);
     const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
       userId: session.userId,
@@ -191,11 +202,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     // Return pseudonymised — no patient name
-    return NextResponse.json({
+    const response = NextResponse.json({
       id: created.id,
       date: created.date,
       noteType: entity,
       patientRef: `Patient #${patientId}`,
     }, { status: 201 });
+
+    if (idempotencyKey) {
+      await cacheIdempotentResponse(idempotencyKey, response);
+    }
+
+    return response;
   });
 }

@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSchema, foreignKeyName } from "@/lib/schema";
 import { findAll, findById, create, update, remove, validateEntity } from "@/lib/repository";
 import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
+import { getIdempotentResponse, cacheIdempotentResponse } from "@/lib/idempotency";
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -80,6 +81,15 @@ export function makeListCreateHandlers(entityName: string) {
   }
 
   async function POST(request: NextRequest) {
+    // Idempotency: key is scoped to the entity to prevent cross-endpoint collisions.
+    // These endpoints are admin-only (proxy-enforced), so per-user scoping is not needed.
+    const rawKey = request.headers.get("idempotency-key");
+    const idempotencyKey = rawKey ? `${entityName}:${rawKey}` : null;
+    if (idempotencyKey) {
+      const cached = getIdempotentResponse(idempotencyKey);
+      if (cached) return cached;
+    }
+
     return withErrorHandler(`POST /api/${entityName}`, async () => {
       const body = await request.json();
       const errors = validateEntity(entityName, body);
@@ -88,7 +98,13 @@ export function makeListCreateHandlers(entityName: string) {
       }
 
       const item = await create(entityName, body);
-      return NextResponse.json(item, { status: 201 });
+      const response = NextResponse.json(item, { status: 201 });
+
+      if (idempotencyKey) {
+        await cacheIdempotentResponse(idempotencyKey, response);
+      }
+
+      return response;
     });
   }
 

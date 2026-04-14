@@ -10,6 +10,7 @@
  */
 
 import { NextRequest } from "next/server";
+import { getClientIp } from "@/lib/api-helpers";
 import { makeGetUpdateDeleteHandlers } from "@/lib/route-factory";
 import { logAuditEvent } from "@/lib/audit";
 import { getSessionUser } from "@/lib/session";
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     action: "view",
     entity: "patient",
     entityId: id,
-    ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined,
+    ip: getClientIp(request),
     userAgent: request.headers.get("user-agent") ?? undefined,
   });
 

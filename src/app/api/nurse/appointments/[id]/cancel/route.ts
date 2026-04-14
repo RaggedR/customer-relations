@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
-import { withErrorHandler } from "@/lib/api-helpers";
+import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { resolveNurse, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
 import { prisma } from "@/lib/prisma";
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     // Audit log — nurse cancelled appointment
-    const ip = request.headers.get("x-forwarded-for") ?? undefined;
+    const ip = getClientIp(request);
     const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
       userId: session.userId,

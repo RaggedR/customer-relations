@@ -12,7 +12,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signSession, type Role } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
+import { getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { COOKIE_NAME, COOKIE_OPTIONS, getSecret } from "@/lib/session";
 import { createRateLimiter } from "@/lib/rate-limit";
 
@@ -21,9 +23,7 @@ const loginLimiter = createRateLimiter(5, 60_000); // 5 attempts per minute
 
 export async function POST(request: NextRequest) {
   // Extract client IP once — used for rate limiting and audit logging
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim()
-    ?? request.headers.get("x-real-ip")
-    ?? "unknown";
+  const clientIp = getClientIp(request) ?? "unknown";
   const userAgent = request.headers.get("user-agent") ?? undefined;
 
   // Rate limit by IP (no session exists yet at login)
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error("Login error:", error);
+    logger.error({ err: error }, "Login error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

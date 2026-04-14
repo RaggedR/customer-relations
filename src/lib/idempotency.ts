@@ -62,10 +62,8 @@ export function getIdempotentResponse(key: string): NextResponse | null {
 /**
  * Cache a response for an idempotency key.
  *
- * NOTE: This module is not yet wired into route-factory.ts — it is
- * infrastructure prepared for POST deduplication. When integrated,
- * the caller can fire-and-forget (no await needed) because store.set
- * runs synchronously after the internal await.
+ * Wired into route-factory.ts POST handlers and nurse notes POST.
+ * Clients send an `Idempotency-Key` header to opt in.
  */
 export async function cacheIdempotentResponse(
   key: string,

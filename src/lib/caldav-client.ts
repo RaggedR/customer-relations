@@ -12,6 +12,8 @@ import { DAVClient, type DAVCalendar } from "tsdav";
 import { generateVEvent, makeUid } from "./ical";
 import { findAll } from "./repository";
 import { decryptToken } from "./token-crypto";
+import { withRetry } from "./retry";
+import { logger } from "@/lib/logger";
 import type { Row } from "./parsers";
 
 interface CalendarConnection {
@@ -85,17 +87,16 @@ async function withCalendarConnections(
 
   for (const conn of connections) {
     try {
-      const client = await getClient(conn);
-      const calendars = await client.fetchCalendars();
-      if (calendars.length === 0) continue;
+      await withRetry(async () => {
+        const client = await getClient(conn);
+        const calendars = await client.fetchCalendars();
+        if (calendars.length === 0) return;
 
-      const calendar = calendars[0];
-      await fn(client, calendar, uid);
+        const calendar = calendars[0];
+        await fn(client, calendar, uid);
+      }, { label: `CalDAV ${action} (conn ${conn.id})` });
     } catch (err) {
-      console.error(
-        `CalDAV ${action} failed for connection ${conn.id}:`,
-        (err as Error).message
-      );
+      logger.error({ err, connectionId: conn.id, action }, "CalDAV operation failed");
     }
   }
 }
@@ -179,35 +180,34 @@ export async function fetchBusySlots(
 
   for (const conn of connections) {
     try {
-      const client = await getClient(conn);
-      const calendars = await client.fetchCalendars();
-      if (calendars.length === 0) continue;
+      await withRetry(async () => {
+        const client = await getClient(conn);
+        const calendars = await client.fetchCalendars();
+        if (calendars.length === 0) return;
 
-      const calendar = calendars[0];
-      const objects = await client.fetchCalendarObjects({
-        calendar,
-        timeRange: {
-          start: new Date(dateFrom).toISOString(),
-          end: new Date(dateTo).toISOString(),
-        },
-      });
+        const calendar = calendars[0];
+        const objects = await client.fetchCalendarObjects({
+          calendar,
+          timeRange: {
+            start: new Date(dateFrom).toISOString(),
+            end: new Date(dateTo).toISOString(),
+          },
+        });
 
-      for (const obj of objects) {
-        if (!obj.data) continue;
-        const dtstart = obj.data.match(/DTSTART[^:]*:(\d{8}T\d{6})/);
-        const dtend = obj.data.match(/DTEND[^:]*:(\d{8}T\d{6})/);
-        if (dtstart && dtend) {
-          slots.push({
-            start: parseICalDate(dtstart[1]),
-            end: parseICalDate(dtend[1]),
-          });
+        for (const obj of objects) {
+          if (!obj.data) continue;
+          const dtstart = obj.data.match(/DTSTART[^:]*:(\d{8}T\d{6})/);
+          const dtend = obj.data.match(/DTEND[^:]*:(\d{8}T\d{6})/);
+          if (dtstart && dtend) {
+            slots.push({
+              start: parseICalDate(dtstart[1]),
+              end: parseICalDate(dtend[1]),
+            });
+          }
         }
-      }
+      }, { label: `CalDAV fetch (conn ${conn.id})` });
     } catch (err) {
-      console.error(
-        `CalDAV fetch failed for connection ${conn.id}:`,
-        (err as Error).message
-      );
+      logger.error({ err, connectionId: conn.id, action: "fetch" }, "CalDAV operation failed");
     }
   }
 

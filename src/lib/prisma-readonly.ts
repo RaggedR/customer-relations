@@ -13,12 +13,13 @@
 
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { logger } from "@/lib/logger";
 
 const connectionString =
   process.env.DATABASE_URL_READONLY || process.env.DATABASE_URL || "";
 
 if (!process.env.DATABASE_URL_READONLY) {
-  console.warn(
+  logger.warn(
     "prisma-readonly: DATABASE_URL_READONLY not set — AI queries using read-write DATABASE_URL. " +
     "Set DATABASE_URL_READONLY to the crm_ai_user connection string for write protection.",
   );

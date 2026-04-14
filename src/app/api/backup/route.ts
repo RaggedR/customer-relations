@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSchema, foreignKeyName } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
-import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
+import { withErrorHandler, SENSITIVE_ENTITIES, getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { getSessionUser } from "@/lib/session";
 import type { Row } from "@/lib/parsers";
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
       entity: "backup",
       entityId: "full",
       details: `entities=${Object.keys(entities).length}`,
-      ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined,
+      ip: getClientIp(request),
       userAgent: request.headers.get("user-agent") ?? undefined,
     });
 
