@@ -1,5 +1,11 @@
 entities:
   patient:
+    exportable: true
+    display:
+      title: name
+      subtitle: [phone, email]
+      badge: status
+    upsert_keys: [name, date_of_birth]
     fields:
       name: { type: string, required: true }
       date_of_birth: { type: date }
@@ -31,6 +37,10 @@ entities:
         include_relations: [referral, clinical_note, personal_note, hearing_aid, claim_item, attachment]
 
   referral:
+    display:
+      title: referring_gp
+      subtitle: [referral_date, gp_practice]
+    upsert_keys: [referring_gp, referral_date]
     fields:
       referring_gp: { type: string, required: true }
       gp_practice: { type: string }
@@ -42,6 +52,14 @@ entities:
       patient: { type: belongs_to, entity: patient }
 
   clinical_note:
+    label: "Clinical Notes"
+    label_singular: "Clinical Note"
+    display:
+      title: date
+      badge: note_type
+      summary: content
+      summary_max: 100
+    upsert_keys: [date, content]
     fields:
       date: { type: datetime, required: true }
       note_type: { type: enum, values: [initial_assessment, progress_note, discharge_summary, treatment_plan] }
@@ -51,6 +69,12 @@ entities:
       patient: { type: belongs_to, entity: patient }
 
   personal_note:
+    label: "Personal Notes"
+    label_singular: "Personal Note"
+    display:
+      title: date
+      summary: content
+      summary_max: 120
     fields:
       date: { type: datetime, required: true }
       content: { type: text, required: true }
@@ -58,6 +82,12 @@ entities:
       patient: { type: belongs_to, entity: patient }
 
   hearing_aid:
+    label: "Hearing Aids"
+    label_singular: "Hearing Aid"
+    display:
+      title: "{ear} — {make} {model}"
+      subtitle: serial_number
+    upsert_keys: [serial_number, patient_name]
     fields:
       ear: { type: enum, values: [left, right] }
       make: { type: string }
@@ -98,6 +128,13 @@ entities:
           admin: [hsp_code, warranty_end_date, last_repair_details, repair_address]
 
   claim_item:
+    label: "Claim Items"
+    label_singular: "Claim Item"
+    display:
+      title: item_number
+      subtitle: [date_of_service, description]
+      badge: status
+    upsert_keys: [item_number, date_of_service]
     fields:
       item_number: { type: string, required: true }
       description: { type: string }
@@ -109,6 +146,12 @@ entities:
       patient: { type: belongs_to, entity: patient }
 
   appointment:
+    sidebar_addable: true
+    display:
+      title: "{specialty}"
+      subtitle: [date, start_time]
+      badge: status
+    upsert_keys: [date, start_time, patient_name]
     fields:
       date: { type: date, required: true }
       start_time: { type: time, required: true }
@@ -140,6 +183,7 @@ entities:
           notes: "Notes"
 
   nurse:
+    upsert_keys: [name]
     fields:
       name: { type: string, required: true }
       phone: { type: phone }
@@ -162,6 +206,11 @@ entities:
           registration_number: "Registration Number"
 
   nurse_specialty:
+    label: "Specialties"
+    label_singular: "Specialty"
+    display:
+      title: specialty
+      subtitle: notes
     fields:
       specialty: { type: string, required: true }
       notes: { type: text }
@@ -169,6 +218,8 @@ entities:
       nurse: { type: belongs_to, entity: nurse }
 
   calendar_connection:
+    label: "Calendar Connections"
+    label_singular: "Calendar Connection"
     fields:
       provider: { type: enum, values: [google, apple, caldav_generic] }
       calendar_id: { type: string }
@@ -179,6 +230,12 @@ entities:
       nurse: { type: belongs_to, entity: nurse }
 
   attachment:
+    display:
+      title: filename
+      subtitle: category
+      actions:
+        - label: Download
+          href: "/api/attachments/{id}/download"
     fields:
       filename: { type: string, required: true }
       storage_path: { type: string, required: true }
@@ -189,3 +246,37 @@ entities:
     relations:
       patient: { type: belongs_to, entity: patient }
       clinical_note: { type: belongs_to, entity: clinical_note }
+
+  # --- Auth & compliance entities (infrastructure, not shown in sidebar) ---
+
+  user:
+    fields:
+      email: { type: email, required: true }
+      name: { type: string, required: true }
+      password_hash: { type: string, required: true }
+      role: { type: enum, values: [admin, nurse, patient], required: true }
+      active: { type: boolean }
+
+  session:
+    fields:
+      token: { type: string, required: true }
+      last_active: { type: datetime, required: true }
+      expires_at: { type: datetime, required: true }
+      ip: { type: string }
+      user_agent: { type: string }
+    relations:
+      user: { type: belongs_to, entity: user }
+
+  audit_log:
+    label: "Audit Logs"
+    label_singular: "Audit Log"
+    fields:
+      timestamp: { type: datetime, required: true }
+      action: { type: string, required: true }
+      entity: { type: string, required: true }
+      entity_id: { type: string, required: true }
+      details: { type: text }
+      ip: { type: string }
+      user_agent: { type: string }
+    relations:
+      user: { type: belongs_to, entity: user }

@@ -11,12 +11,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findAll, findById } from "@/lib/repository";
 import { generateCalendarFeed } from "@/lib/ical";
+import { withErrorHandler } from "@/lib/api-helpers";
+import type { Row } from "@/lib/parsers";
 
 interface RouteParams {
   params: Promise<{ nurseId: string }>;
 }
-
-type Row = Record<string, unknown>;
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const { nurseId: nurseIdStr } = await params;
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return new NextResponse("Invalid nurse ID", { status: 400 });
   }
 
-  try {
+  return withErrorHandler(`GET /api/calendar/${nurseId}/feed.ics`, async () => {
     const nurse = (await findById("nurse", nurseId)) as Row | null;
     if (!nurse) {
       return new NextResponse("Nurse not found", { status: 404 });
@@ -48,8 +48,5 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         "Cache-Control": "no-cache, no-store, must-revalidate",
       },
     });
-  } catch (error) {
-    console.error(`iCal feed error for nurse ${nurseId}:`, error);
-    return new NextResponse("Internal server error", { status: 500 });
-  }
+  });
 }

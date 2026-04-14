@@ -10,9 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSchema } from "@/engine/schema-loader";
-import { parseFile, normaliseRows } from "@/lib/parsers";
+import { getSchema } from "@/lib/schema";
+import { parseFile } from "@/lib/parsers";
 import { importEntities } from "@/lib/import";
+import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
 
 interface RouteParams {
   params: Promise<{ entity: string }>;
@@ -31,9 +32,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  // Block import of entities that contain sensitive fields (tokens, credentials)
-  const SENSITIVE_ENTITIES = ["calendar_connection"];
-  if (SENSITIVE_ENTITIES.includes(entityName)) {
+  if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) {
     return NextResponse.json(
       { error: `Import of ${entityName} is not allowed` },
       { status: 403 }
@@ -79,14 +78,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   // Import with schema-driven upsert
-  try {
+  return withErrorHandler(`POST /api/${entityName}/import`, async () => {
     const result = await importEntities(entityName, rows);
     return NextResponse.json(result);
-  } catch (error) {
-    console.error(`Import error for ${entityName}:`, error);
-    return NextResponse.json(
-      { error: `Import failed: ${(error as Error).message}` },
-      { status: 500 }
-    );
-  }
+  });
 }

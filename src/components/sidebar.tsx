@@ -1,12 +1,14 @@
 "use client";
 
 import { Separator } from "@/components/ui/separator";
-import { entityLabel, entityLabelSingular } from "@/lib/schema-hierarchy";
+import { entityLabel, entityLabelSingular } from "@/lib/schema";
 import { layout } from "@/lib/layout";
+import type { SchemaConfig } from "@/lib/schema";
 
 interface SidebarProps {
   firstOrderEntities: string[];
   addableEntities?: string[];
+  schema?: SchemaConfig | null;
   onOpenEntity: (entityName: string) => void;
   onAddEntity: (entityName: string) => void;
   onOpenAiChat: () => void;
@@ -15,6 +17,7 @@ interface SidebarProps {
 export function Sidebar({
   firstOrderEntities,
   addableEntities,
+  schema,
   onOpenEntity,
   onAddEntity,
   onOpenAiChat,
@@ -42,7 +45,7 @@ export function Sidebar({
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" />
             </svg>
-            {entityLabel(name)}
+            {entityLabel(name, schema ?? undefined)}
           </button>
         ))}
       </nav>
@@ -58,7 +61,7 @@ export function Sidebar({
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            Add {entityLabelSingular(name)}
+            Add {entityLabelSingular(name, schema ?? undefined)}
           </button>
         ))}
         <button

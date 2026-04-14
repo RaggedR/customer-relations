@@ -18,13 +18,14 @@ export function loadNavigationYaml(): NavigationConfig {
 
   const windows: Record<string, WindowDef> = {};
   for (const [name, def] of Object.entries(
-    parsed.windows as Record<string, Record<string, string>>
+    parsed.windows as Record<string, Record<string, unknown>>
   )) {
     windows[name] = {
       role: def.role as WindowRole,
-      titleTemplate: def.title,
-      component: def.component,
+      titleTemplate: def.title as string,
+      component: def.component as string,
       features: Array.isArray(def.features) ? (def.features as string[]) : undefined,
+      floating: def.floating === false ? false : undefined,
     };
   }
 

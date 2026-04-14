@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import { SchemaConfig, EntityConfig } from "./schema-loader";
 import { getFieldType } from "./field-types";
+import { toSnakeCase, toPascalCase, reverseRelationKey, foreignKeyName } from "./naming";
 
 export function generatePrismaSchema(schema: SchemaConfig): string {
   const lines: string[] = [];
@@ -63,7 +64,7 @@ function generateModel(
   if (entity.relations) {
     for (const [relName, rel] of Object.entries(entity.relations)) {
       const relModelName = toPascalCase(rel.entity);
-      const fkName = `${toSnakeCase(relName)}Id`;
+      const fkName = foreignKeyName(toSnakeCase(relName));
       lines.push(`  ${fkName} Int?`);
       lines.push(
         `  ${relName} ${relModelName}? @relation(fields: [${fkName}], references: [id])`
@@ -77,7 +78,7 @@ function generateModel(
     if (!otherEntity.relations) continue;
     for (const [, rel] of Object.entries(otherEntity.relations)) {
       if (rel.entity === entityName) {
-        const reverseFieldName = `${otherName}s`;
+        const reverseFieldName = reverseRelationKey(otherName);
         const otherModelName = toPascalCase(otherName);
         lines.push(`  ${reverseFieldName} ${otherModelName}[]`);
       }
@@ -88,16 +89,6 @@ function generateModel(
   return lines;
 }
 
-function toPascalCase(str: string): string {
-  return str
-    .split(/[_\-\s]/)
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join("");
-}
-
-function toSnakeCase(str: string): string {
-  return str.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
-}
 
 export function writePrismaSchema(schema: SchemaConfig): void {
   const content = generatePrismaSchema(schema);

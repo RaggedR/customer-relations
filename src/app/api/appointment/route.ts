@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findAll, create, validateEntity } from "@/lib/repository";
 import { pushAppointment } from "@/lib/caldav-client";
+import { withErrorHandler } from "@/lib/api-helpers";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
   const filterBy: Record<string, unknown> = {};
   if (nurseId) filterBy.nurseId = parseInt(nurseId, 10);
 
-  try {
+  return withErrorHandler("GET /api/appointment", async () => {
     const items = await findAll("appointment", {
       search,
       filterBy: Object.keys(filterBy).length > 0 ? filterBy : undefined,
@@ -33,14 +34,11 @@ export async function GET(request: NextRequest) {
       sortOrder: "asc",
     });
     return NextResponse.json(items);
-  } catch (error) {
-    console.error("GET /api/appointment error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  });
 }
 
 export async function POST(request: NextRequest) {
-  try {
+  return withErrorHandler("POST /api/appointment", async () => {
     const body = await request.json();
     const errors = validateEntity("appointment", body);
     if (errors.length > 0) {
@@ -55,8 +53,5 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json(item, { status: 201 });
-  } catch (error) {
-    console.error("POST /api/appointment error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  });
 }

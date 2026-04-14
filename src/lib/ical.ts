@@ -5,35 +5,39 @@
  * to build VEVENT strings and parse them back.
  */
 
-import { getICalRepresentation } from "./representations";
+import { getICalRepresentation } from "@/lib/schema";
+import type { Row } from "@/lib/parsers";
 
-type Row = Record<string, unknown>;
+/** Build a UID string for an entity record (exported for CalDAV client reuse) */
+export function makeUid(entityName: string, id: unknown): string {
+  return `${entityName}-${id}@customer-relations`;
+}
 
 /**
- * Generate a VCALENDAR string containing one VEVENT for an appointment.
+ * Generate a VCALENDAR string containing one VEVENT.
  *
- * The appointment object should be hydrated (with nested patient/nurse).
+ * The record should be hydrated (with nested relations like patient/nurse).
  * The iCal mapping in schema.yaml determines which fields map to which
  * iCal properties.
  */
-export function generateVEvent(appointment: Row): string {
-  const ical = getICalRepresentation("appointment");
+export function generateVEvent(record: Row, entityName = "appointment"): string {
+  const ical = getICalRepresentation(entityName);
 
-  const id = appointment.id;
-  const date = formatDate(appointment.date);
-  const startTime = appointment.start_time as string;
-  const endTime = appointment.end_time as string;
-  const location = appointment.location as string || "";
-  const notes = appointment.notes as string || "";
+  const id = record.id;
+  const date = formatDate(record.date);
+  const startTime = record.start_time as string;
+  const endTime = record.end_time as string;
+  const location = record.location as string || "";
+  const notes = record.notes as string || "";
 
   // Build summary from template
   let summary = ical?.summary_template ?? "{specialty}";
   summary = summary.replace(/\{(\w+)\.(\w+)\}/g, (_match, rel, field) => {
-    const parent = appointment[rel] as Row | null;
+    const parent = record[rel] as Row | null;
     return parent ? String(parent[field] ?? "") : "";
   });
   summary = summary.replace(/\{(\w+)\}/g, (_match, field) => {
-    return String(appointment[field] ?? "");
+    return String(record[field] ?? "");
   });
 
   const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
@@ -43,7 +47,7 @@ export function generateVEvent(appointment: Row): string {
     "VERSION:2.0",
     "PRODID:-//Customer Relations//EN",
     "BEGIN:VEVENT",
-    `UID:appointment-${id}@customer-relations`,
+    `UID:${makeUid(entityName, id)}`,
     `DTSTAMP:${now}`,
     `DTSTART:${date}T${formatTime(startTime)}00`,
     `DTEND:${date}T${formatTime(endTime)}00`,
@@ -58,7 +62,7 @@ export function generateVEvent(appointment: Row): string {
   }
 
   // Add status mapping
-  const status = appointment.status as string;
+  const status = record.status as string;
   if (status === "confirmed") lines.push("STATUS:CONFIRMED");
   else if (status === "cancelled") lines.push("STATUS:CANCELLED");
   else if (status === "completed") lines.push("STATUS:COMPLETED");
@@ -99,7 +103,7 @@ export function generateCalendarFeed(
  * Parse a VEVENT string back into appointment fields.
  * Returns a partial record with the fields found.
  */
-export function parseVEvent(icalText: string): Row {
+export function parseVEvent(icalText: string, entityName = "appointment"): Row {
   const result: Row = {};
 
   const lines = unfoldICalLines(icalText);
@@ -113,7 +117,7 @@ export function parseVEvent(icalText: string): Row {
 
     switch (prop) {
       case "UID": {
-        const match = value.match(/appointment-(\d+)@/);
+        const match = value.match(new RegExp(`${entityName}-(\\d+)@`));
         if (match) result.id = parseInt(match[1], 10);
         break;
       }

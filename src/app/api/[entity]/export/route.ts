@@ -11,15 +11,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import { getSchema } from "@/engine/schema-loader";
-import { getCsvRepresentation } from "@/lib/representations";
+import { getSchema, getCsvRepresentation } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
+import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
+import type { Row } from "@/lib/parsers";
 
 interface RouteParams {
   params: Promise<{ entity: string }>;
 }
-
-type Row = Record<string, unknown>;
 
 /**
  * Build column definitions from the schema and CSV representation.
@@ -119,9 +118,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  // Block export of entities that contain sensitive fields (tokens, credentials)
-  const SENSITIVE_ENTITIES = ["calendar_connection"];
-  if (SENSITIVE_ENTITIES.includes(entityName)) {
+  if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) {
     return NextResponse.json(
       { error: `Export of ${entityName} is not allowed` },
       { status: 403 }
@@ -140,7 +137,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const slug = entityName.replace(/_/g, "-");
 
-  try {
+  return withErrorHandler(`GET /api/${entityName}/export`, async () => {
     const items = (await findAll(entityName)) as Row[];
     const columns = buildColumns(entityName);
     const rows = items.map((item) => flattenRow(item, entityName, columns));
@@ -213,11 +210,5 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         "Content-Disposition": `attachment; filename="${slug}s.xlsx"`,
       },
     });
-  } catch (error) {
-    console.error(`Export error for ${entityName}:`, error);
-    return NextResponse.json(
-      { error: `Failed to export ${entityName}` },
-      { status: 500 }
-    );
-  }
+  });
 }

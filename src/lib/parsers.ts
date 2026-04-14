@@ -2,87 +2,17 @@
  * File Format Parsers
  *
  * Parse any input format into an array of row objects.
- * Schema-driven: uses representations.csv.headers for column mapping.
+ *
+ * Public API: parseFile, Row, detectFormat
+ * Internal: parseCsv, parseXlsx, parseJson, parseVCards
  *
  * Supported: xlsx/xls, csv, json, vcf (vCard)
  */
 
 import ExcelJS from "exceljs";
-import { getCsvRepresentation } from "./representations";
-import { getSchema } from "../engine/schema-loader";
+import { getVCardRepresentation, reverseMapping } from "@/lib/schema";
 
 export type Row = Record<string, unknown>;
-
-/**
- * Build a header normalisation map for an entity.
- * Maps lowercased column headers → schema field names.
- *
- * Sources:
- * 1. representations.csv.headers (explicit mapping)
- * 2. Field names themselves (snake_case and space-separated)
- * 3. Relation names (e.g. "patient" → "patient")
- */
-export function buildHeaderMap(entityName: string): Record<string, string> {
-  const schema = getSchema();
-  const entity = schema.entities[entityName];
-  if (!entity) throw new Error(`Unknown entity: ${entityName}`);
-
-  const map: Record<string, string> = {};
-
-  // Add field names as-is (both snake_case and space-separated)
-  for (const fieldName of Object.keys(entity.fields)) {
-    map[fieldName.toLowerCase()] = fieldName;
-    map[fieldName.replace(/_/g, " ").toLowerCase()] = fieldName;
-  }
-
-  // Add relation names
-  if (entity.relations) {
-    for (const relName of Object.keys(entity.relations)) {
-      map[relName.toLowerCase()] = relName;
-      // Also map "Patient Name" → relation name for parent resolution
-      map[`${relName} name`] = `${relName}_name`;
-      map[`${relName}_name`] = `${relName}_name`;
-    }
-  }
-
-  // Add CSV header mappings (these take priority)
-  const csvRep = getCsvRepresentation(entityName);
-  if (csvRep.headers) {
-    for (const [fieldName, header] of Object.entries(csvRep.headers)) {
-      map[header.toLowerCase().trim()] = fieldName;
-    }
-  }
-
-  return map;
-}
-
-/**
- * Normalise a header string: lowercase, trim, strip underscores/dashes.
- */
-function normaliseHeader(
-  header: string,
-  headerMap: Record<string, string>
-): string {
-  const key = header.toLowerCase().trim();
-  return headerMap[key] || headerMap[key.replace(/[-_]/g, " ")] || key;
-}
-
-/**
- * Apply header normalisation to all keys in an array of row objects.
- */
-export function normaliseRows(
-  rows: Row[],
-  entityName: string
-): Row[] {
-  const headerMap = buildHeaderMap(entityName);
-  return rows.map((row) => {
-    const out: Row = {};
-    for (const [key, val] of Object.entries(row)) {
-      out[normaliseHeader(key, headerMap)] = val;
-    }
-    return out;
-  });
-}
 
 // ── CSV Parser ──────────────────────────────────────────────
 
@@ -90,7 +20,7 @@ export function normaliseRows(
  * Parse a CSV string into row objects.
  * Handles quoted fields with commas, quotes, and newlines.
  */
-export function parseCsv(text: string): Row[] {
+function parseCsv(text: string): Row[] {
   const lines = splitCsvLines(text);
   if (lines.length < 2) return [];
 
@@ -196,7 +126,7 @@ function parseCsvLine(line: string): string[] {
 /**
  * Parse an xlsx buffer into row objects.
  */
-export async function parseXlsx(buffer: Buffer): Promise<Row[]> {
+async function parseXlsx(buffer: Buffer): Promise<Row[]> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
   const sheet = workbook.worksheets[0];
@@ -230,7 +160,7 @@ export async function parseXlsx(buffer: Buffer): Promise<Row[]> {
  * Parse a JSON string into row objects.
  * Handles arrays, { entities: { ... } } format, and single objects.
  */
-export function parseJson(text: string): Row[] {
+function parseJson(text: string): Row[] {
   const data = JSON.parse(text);
 
   // Array of rows
@@ -255,11 +185,10 @@ export function parseJson(text: string): Row[] {
  * Parse a vCard string (one or more vCards) into row objects.
  * Uses the reverse of the vCard mapping from schema.yaml.
  */
-export function parseVCards(
+function parseVCards(
   text: string,
   entityName: string
 ): Row[] {
-  const { getVCardRepresentation, reverseMapping } = require("./representations");
   const vcard = getVCardRepresentation(entityName);
   if (!vcard?.mapping) return [];
 

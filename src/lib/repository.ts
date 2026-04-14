@@ -6,19 +6,7 @@
  */
 
 import { prisma } from "./prisma";
-import { getSchema, EntityConfig } from "../engine/schema-loader";
-import { validateFieldValue } from "../engine/field-types";
-
-function toPascalCase(str: string): string {
-  return str
-    .split(/[_\-\s]/)
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join("");
-}
-
-function toSnakeCase(str: string): string {
-  return str.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
-}
+import { getSchema, EntityConfig, validateFieldValue, toSnakeCase, toPascalCase, reverseRelationKey, foreignKeyName, getFieldType } from "@/lib/schema";
 
 /**
  * Get the Prisma model delegate for an entity name.
@@ -58,7 +46,7 @@ function buildIncludes(
     for (const rel of Object.values(otherEntity.relations)) {
       if (rel.entity === entityName) {
         // Prisma uses the plural form: "referrals", "clinical_notes", etc.
-        includes[`${otherName}s`] = true;
+        includes[reverseRelationKey(otherName)] = true;
         break;
       }
     }
@@ -84,25 +72,18 @@ function transformInput(
 
     // Check if this is a relation field
     if (entity.relations && entity.relations[key]) {
-      const fkName = `${toSnakeCase(key)}Id`;
-      result[fkName] = value ? Number(value) : null;
+      result[foreignKeyName(toSnakeCase(key))] = value ? Number(value) : null;
       continue;
     }
 
-    // Regular field
+    // Regular field — normalize via field-type registry
     const snakeKey = toSnakeCase(key);
     const fieldConfig = entity.fields[key] || entity.fields[snakeKey];
     if (fieldConfig) {
-      if (fieldConfig.type === "number" && value !== null && value !== undefined) {
-        result[snakeKey] = Number(value);
-      } else if (
-        (fieldConfig.type === "date" || fieldConfig.type === "datetime") &&
-        value
-      ) {
-        result[snakeKey] = new Date(value as string);
-      } else {
-        result[snakeKey] = value;
-      }
+      const ft = getFieldType(fieldConfig.type);
+      result[snakeKey] = ft.normalize && value !== null && value !== undefined
+        ? ft.normalize(value)
+        : value;
     }
   }
 
@@ -144,6 +125,15 @@ export function validateEntity(
 
 // --- CRUD Operations ---
 
+/**
+ * Find all records for an entity, with optional search, sort, filter, and date range.
+ *
+ * @param options.search — Full-text search across all string/text/email/phone/url fields (case-insensitive)
+ * @param options.sortBy — Schema field name to sort by (converted to snake_case for Prisma)
+ * @param options.filterBy — Exact-match filters. Accepts both schema relation names (e.g. `{ patient: 5 }`)
+ *   and Prisma FK keys (e.g. `{ patientId: 5 }`). Relation names are auto-mapped to FK keys.
+ * @param options.dateRange — Filter by date range; `field` is a schema field name (e.g. "date", not "date_of_birth")
+ */
 export async function findAll(
   entityName: string,
   options?: {
@@ -168,10 +158,11 @@ export async function findAll(
 
   const whereConditions: Record<string, unknown>[] = [];
 
-  // Exact-match filters (e.g. patientId=5)
+  // Exact-match filters — resolve relation names to FK keys (e.g. patient → patientId)
   if (options?.filterBy) {
     for (const [key, value] of Object.entries(options.filterBy)) {
-      whereConditions.push({ [key]: value });
+      const fkKey = entity.relations?.[key] ? foreignKeyName(key) : key;
+      whereConditions.push({ [fkKey]: value });
     }
   }
 

@@ -10,8 +10,7 @@
 
 import { DAVClient } from "tsdav";
 import { generateVCard } from "./vcard";
-
-type Row = Record<string, unknown>;
+import type { Row } from "./parsers";
 
 interface ContactConnection {
   id: number;

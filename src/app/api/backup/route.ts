@@ -13,10 +13,10 @@
  */
 
 import { NextResponse } from "next/server";
-import { getSchema } from "@/engine/schema-loader";
+import { getSchema, foreignKeyName } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
-
-type Row = Record<string, unknown>;
+import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
+import type { Row } from "@/lib/parsers";
 
 /**
  * Determine the correct import order based on FK dependencies.
@@ -47,17 +47,14 @@ function getImportOrder(schema: ReturnType<typeof getSchema>): string[] {
 }
 
 export async function GET() {
-  try {
+  return withErrorHandler("GET /api/backup", async () => {
     const schema = getSchema();
     const importOrder = getImportOrder(schema);
 
     const entities: Record<string, Row[]> = {};
 
-    // Entities with credentials — skip entirely (tokens must be re-authorized after restore)
-    const SENSITIVE_ENTITIES = ["calendar_connection"];
-
     for (const entityName of importOrder) {
-      if (SENSITIVE_ENTITIES.includes(entityName)) continue;
+      if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) continue;
 
       const records = (await findAll(entityName)) as Row[];
       // Strip nested relation objects — just keep flat fields + FK IDs
@@ -78,7 +75,7 @@ export async function GET() {
         // FK IDs (not nested objects)
         if (entity.relations) {
           for (const relName of Object.keys(entity.relations)) {
-            const fkKey = `${relName}Id`;
+            const fkKey = foreignKeyName(relName);
             flat[fkKey] = record[fkKey] ?? null;
 
             // Also include parent name for human readability + re-import
@@ -110,11 +107,5 @@ export async function GET() {
         "Content-Disposition": `attachment; filename="backup-${dateStr}.json"`,
       },
     });
-  } catch (error) {
-    console.error("Backup error:", error);
-    return NextResponse.json(
-      { error: "Backup failed" },
-      { status: 500 }
-    );
-  }
+  });
 }

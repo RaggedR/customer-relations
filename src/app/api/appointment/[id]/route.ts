@@ -14,6 +14,7 @@ import {
   updateAppointment,
   deleteAppointment,
 } from "@/lib/caldav-client";
+import { withErrorHandler } from "@/lib/api-helpers";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -21,28 +22,27 @@ interface RouteParams {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  try {
-    const item = await findById("appointment", parseInt(id, 10));
+  const numId = parseInt(id, 10);
+  return withErrorHandler(`GET /api/appointment/${numId}`, async () => {
+    const item = await findById("appointment", numId);
     if (!item) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     return NextResponse.json(item);
-  } catch (error) {
-    console.error(`GET /api/appointment/${id} error:`, error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  });
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  try {
+  const numId = parseInt(id, 10);
+  return withErrorHandler(`PUT /api/appointment/${numId}`, async () => {
     const body = await request.json();
     const errors = validateEntity("appointment", body);
     if (errors.length > 0) {
       return NextResponse.json({ errors }, { status: 400 });
     }
 
-    const item = await update("appointment", parseInt(id, 10), body);
+    const item = await update("appointment", numId, body);
 
     // CalDAV update (fire-and-forget)
     updateAppointment(item as Record<string, unknown>).catch((err) =>
@@ -50,31 +50,26 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     );
 
     return NextResponse.json(item);
-  } catch (error) {
-    console.error(`PUT /api/appointment/${id} error:`, error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  });
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  try {
+  const numId = parseInt(id, 10);
+  return withErrorHandler(`DELETE /api/appointment/${numId}`, async () => {
     // Get the appointment first to know the nurseId
-    const existing = (await findById("appointment", parseInt(id, 10))) as Record<string, unknown> | null;
+    const existing = (await findById("appointment", numId)) as Record<string, unknown> | null;
     const nurseId = existing?.nurseId as number | undefined;
 
-    await remove("appointment", parseInt(id, 10));
+    await remove("appointment", numId);
 
     // CalDAV delete (fire-and-forget)
     if (nurseId) {
-      deleteAppointment(parseInt(id, 10), nurseId).catch((err) =>
+      deleteAppointment(numId, nurseId).catch((err) =>
         console.error("CalDAV delete failed:", err)
       );
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error(`DELETE /api/appointment/${id} error:`, error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  });
 }

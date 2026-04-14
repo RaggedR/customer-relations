@@ -3,10 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import type { EntityConfig, FieldConfig } from "@/engine/schema-loader";
-import { fieldTypes } from "@/engine/field-types";
-import { Linkify } from "@/components/linkify";
+import type { EntityConfig } from "@/lib/schema";
+import { foreignKeyName, toSnakeCase } from "@/lib/schema";
+import { renderFieldValue, renderEntitySummary, recordDisplayName } from "@/lib/renderers";
 
 interface EntitySearchPanelProps {
   entityName: string;
@@ -112,8 +111,7 @@ export function EntitySearchPanel({ entityName, entity, onItemSelect }: EntitySe
                 item={item}
                 onClick={() => {
                   if (onItemSelect) {
-                    const name = String(item.name ?? item[Object.keys(entity.fields)[0]] ?? `#${item.id}`);
-                    onItemSelect(item.id as number, name);
+                    onItemSelect(item.id as number, recordDisplayName(item, entity));
                   } else {
                     setSelectedItem(item);
                   }
@@ -143,27 +141,7 @@ function ResultRow({
   item: Record<string, unknown>;
   onClick: () => void;
 }) {
-  // Find the best display fields: first string/email field as title, second as subtitle
-  const fieldEntries = Object.entries(entity.fields);
-  const titleField = fieldEntries[0];
-  const subtitleField = fieldEntries.find(
-    ([, f]) => f.type === "email" || f.type === "string"
-  );
-
-  const title = titleField ? String(item[toSnakeCase(titleField[0])] ?? "") : `#${item.id}`;
-  const subtitle =
-    subtitleField && subtitleField[0] !== titleField?.[0]
-      ? String(item[toSnakeCase(subtitleField[0])] ?? "")
-      : null;
-
-  // Find enum fields to show as badges
-  const badges = fieldEntries
-    .filter(([, f]) => f.type === "enum")
-    .map(([name]) => ({
-      name,
-      value: item[toSnakeCase(name)] as string | null,
-    }))
-    .filter((b) => b.value);
+  const summary = renderEntitySummary(entityName, item, entity);
 
   return (
     <button
@@ -171,24 +149,17 @@ function ResultRow({
       className="w-full text-left px-3 py-2.5 hover:bg-floating-muted transition-colors flex items-center justify-between gap-2"
     >
       <div className="min-w-0">
-        <div className="text-sm font-medium truncate">{title}</div>
-        {subtitle && (
-          <div className="text-xs text-muted-foreground truncate">{subtitle}</div>
+        <div className="text-sm font-medium truncate">{summary.title}</div>
+        {summary.subtitle && (
+          <div className="text-xs text-muted-foreground truncate">{summary.subtitle}</div>
+        )}
+        {summary.summary && (
+          <div className="text-xs text-muted-foreground truncate">{summary.summary}</div>
         )}
       </div>
-      {badges.length > 0 && (
+      {summary.badge && (
         <div className="flex gap-1 shrink-0">
-          {badges.map((b) => (
-            <span
-              key={b.name}
-              className={cn(
-                "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                getStageBadgeClass(b.value!)
-              )}
-            >
-              {b.value!.replace(/_/g, " ")}
-            </span>
-          ))}
+          {summary.badge}
         </div>
       )}
     </button>
@@ -230,7 +201,7 @@ function DetailView({
                   {name.replace(/_/g, " ")}
                 </dt>
                 <dd className="text-sm mt-0.5">
-                  {formatValue(value, field)}
+                  {renderFieldValue(value, field, "list")}
                 </dd>
               </div>
             );
@@ -239,7 +210,7 @@ function DetailView({
           {/* Relations */}
           {Object.entries(entity.relations ?? {}).map(([relName]) => {
               const snakeKey = toSnakeCase(relName);
-              const fkValue = item[`${snakeKey}Id`] ?? item[`${snakeKey}_id`];
+              const fkValue = item[foreignKeyName(snakeKey)] ?? item[`${snakeKey}_id`];
               const relData = item[relName] ?? item[snakeKey];
               return (
                 <div key={relName}>
@@ -248,7 +219,7 @@ function DetailView({
                   </dt>
                   <dd className="text-sm mt-0.5">
                     {relData && typeof relData === "object"
-                      ? String((relData as Record<string, unknown>).name ?? JSON.stringify(relData))
+                      ? recordDisplayName(relData as Record<string, unknown>)
                       : fkValue
                         ? `ID: ${String(fkValue)}`
                         : "—"}
@@ -314,9 +285,7 @@ function ReverseRelations({ item }: { item: Record<string, unknown> }) {
                         <span className="truncate">
                           {v === null
                             ? "—"
-                            : typeof v === "string" && !isNaN(Date.parse(v)) && (k.includes("date") || k.includes("close"))
-                              ? new Date(v).toLocaleDateString()
-                              : <Linkify>{String(v).replace(/_/g, " ")}</Linkify>}
+                            : String(v).replace(/_/g, " ")}
                         </span>
                       </div>
                     ))}
@@ -344,41 +313,3 @@ function getArrayEntries(
   return result;
 }
 
-function toSnakeCase(str: string): string {
-  return str.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
-}
-
-function formatValue(value: unknown, field: FieldConfig): React.ReactNode {
-  if (value === null || value === undefined) return "—";
-  if (field.type === "date" || field.type === "datetime") {
-    return new Date(value as string).toLocaleDateString();
-  }
-  if (field.type === "enum") {
-    return String(value).replace(/_/g, " ");
-  }
-  if (field.type === "number") {
-    const num = Number(value);
-    if (!isNaN(num)) return num.toLocaleString();
-  }
-  const str = String(value);
-  return <Linkify>{str}</Linkify>;
-}
-
-function getStageBadgeClass(stage: string): string {
-  switch (stage) {
-    case "lead":
-      return "bg-blue-500/15 text-blue-400";
-    case "qualified":
-      return "bg-indigo-500/15 text-indigo-400";
-    case "proposal":
-      return "bg-violet-500/15 text-violet-400";
-    case "negotiation":
-      return "bg-amber-500/15 text-amber-400";
-    case "closed_won":
-      return "bg-emerald-500/15 text-emerald-400";
-    case "closed_lost":
-      return "bg-red-500/15 text-red-400";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
