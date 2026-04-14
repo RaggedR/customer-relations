@@ -15,7 +15,7 @@ import { getSessionUser } from "@/lib/session";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { renderWatermarkedImage } from "@/lib/image-renderer";
-import { resolveNurse, resolveNurseName, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
+import { resolveNurse, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const patientId = appointment.patientId;
     const patientRef = `Patient #${patientId}`;
-    const nurseName = await resolveNurseName(session.userId) ?? "Unknown Nurse";
+    const nurseName = nurse.name ?? "Unknown Nurse";
     const now = new Date();
 
     // Load clinical and personal notes for this patient
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const patientId = appointment.patientId;
-    const nurseName = (await resolveNurseName(session.userId)) ?? "Unknown Nurse";
+    const nurseName = nurse.name ?? "Unknown Nurse";
     const now = new Date();
 
     let created;

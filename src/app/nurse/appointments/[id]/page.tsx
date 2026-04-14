@@ -58,11 +58,9 @@ export default function NurseAppointmentDetailPage() {
   // Load appointment details and notes
   useEffect(() => {
     Promise.all([
-      fetch(`/api/nurse/appointments?from=1970-01-01&to=2099-12-31`)
-        .then((r) => r.json())
-        .then((appointments: Appointment[]) =>
-          appointments.find((a) => a.id === Number(id)) ?? null
-        ),
+      fetch(`/api/nurse/appointments/${id}`).then((r) =>
+        r.ok ? r.json() : null
+      ),
       fetch(`/api/nurse/appointments/${id}/notes`).then((r) => r.json()),
     ])
       .then(([appt, notes]) => {

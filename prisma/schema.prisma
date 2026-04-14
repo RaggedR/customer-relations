@@ -194,7 +194,7 @@ model Session {
   updatedAt DateTime @updatedAt
   token       String   @unique
   last_active DateTime
-  expires_at  DateTime
+  expires_at DateTime
   ip String?
   user_agent String?
   userId Int?
