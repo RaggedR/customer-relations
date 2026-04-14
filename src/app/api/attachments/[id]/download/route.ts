@@ -69,6 +69,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const fileStat = await fsp.stat(fullPath);
     const nodeStream = createReadStream(fullPath);
+
+    // Clean up file descriptor on stream error or client disconnect
+    nodeStream.on("error", () => nodeStream.destroy());
+    request.signal.addEventListener("abort", () => nodeStream.destroy());
+
     const webStream = Readable.toWeb(nodeStream) as ReadableStream;
 
     return new NextResponse(webStream, {

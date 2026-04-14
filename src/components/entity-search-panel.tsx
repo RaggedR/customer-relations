@@ -90,9 +90,10 @@ export function EntitySearchPanel({ entityName, entity, onItemSelect }: EntitySe
               <select
                 key={name}
                 value={filters[name] || ""}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, [name]: e.target.value }))
-                }
+                onChange={(e) => {
+                  setFilters((prev) => ({ ...prev, [name]: e.target.value }));
+                  setPage(1);
+                }}
                 className="h-7 rounded-md border border-input bg-transparent px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <option value="">All {name.replace(/_/g, " ")}s</option>

@@ -219,7 +219,8 @@ export async function findAll(
 
   // Pagination — when page is provided, return { items, totalCount, page, pageSize }
   if (options?.page) {
-    const pageSize = options.pageSize ?? 50;
+    const MAX_PAGE_SIZE = 200;
+    const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, options.pageSize ?? 50));
     const page = Math.max(1, options.page);
     args.take = pageSize;
     args.skip = (page - 1) * pageSize;

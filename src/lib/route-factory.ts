@@ -79,7 +79,9 @@ export function makeListCreateHandlers(entityName: string) {
         filterBy: Object.keys(filterBy).length > 0 ? filterBy : undefined,
         page: pageParam ? parseInt(pageParam, 10) : undefined,
         pageSize: pageSizeParam ? parseInt(pageSizeParam, 10) : undefined,
-        shallow: !!pageParam, // list views use shallow mode when paginating
+        // Paginated list views use shallow mode (no relation includes) for performance.
+        // Detail views (findById) still load full relations when the user clicks through.
+        shallow: !!pageParam,
       });
       return NextResponse.json(result);
     });
