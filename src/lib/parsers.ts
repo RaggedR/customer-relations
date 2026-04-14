@@ -128,7 +128,11 @@ function parseCsvLine(line: string): string[] {
 
 /** Maximum rows allowed in an xlsx import — guards against zip bombs */
 const MAX_XLSX_ROWS = 100_000;
-/** Maximum compressed XLSX buffer size (5 MB) — blocks zip bombs before decompression */
+/**
+ * Maximum compressed XLSX buffer size (5 MB) — blocks zip bombs before decompression.
+ * Tighter than MAX_IMPORT_BYTES (10 MB) because XLSX zip compression ratios
+ * mean a 5 MB archive can decompress to hundreds of MB in memory.
+ */
 const MAX_XLSX_BUFFER = 5 * 1024 * 1024;
 
 /**
