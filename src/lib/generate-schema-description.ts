@@ -5,11 +5,14 @@
  * for the AI query endpoint. This replaces the hardcoded SCHEMA_DESCRIPTION
  * constant, ensuring the AI always sees the current schema.
  *
- * Infrastructure entities (auth, sessions, audit) are excluded by default
- * since the AI should not query them.
+ * Sensitive entities (calendar_connection, user, session, audit_log) are
+ * excluded by default — they contain OAuth tokens, credentials, or audit
+ * records that the AI must never see. The excluded set is the single source
+ * of truth in SENSITIVE_ENTITIES (api-helpers.ts).
  */
 
 import { getSchema, fieldTypes, toPascalCase } from "@/lib/schema";
+import { SENSITIVE_ENTITIES } from "@/lib/api-helpers";
 
 /** Map Prisma types to SQL types for the DDL */
 const PRISMA_TO_SQL: Record<string, string> = {
@@ -21,10 +24,8 @@ const PRISMA_TO_SQL: Record<string, string> = {
   Json: "JSONB",
 };
 
-const DEFAULT_EXCLUDED = ["user", "session", "audit_log", "calendar_connection"];
-
 export function generateSchemaDescription(
-  exclude: string[] = DEFAULT_EXCLUDED
+  exclude: readonly string[] = SENSITIVE_ENTITIES
 ): string {
   const schema = getSchema();
   const lines: string[] = [
