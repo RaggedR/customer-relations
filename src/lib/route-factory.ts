@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSchema, foreignKeyName } from "@/lib/schema";
 import { findAll, findById, create, update, remove, validateEntity } from "@/lib/repository";
-import { withErrorHandler } from "@/lib/api-helpers";
+import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -42,6 +42,12 @@ async function parseIdParam(params: Promise<{ id: string }>): Promise<number | N
  * Includes search, sort, and relation filtering.
  */
 export function makeListCreateHandlers(entityName: string) {
+  if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) {
+    const blocked = async () =>
+      NextResponse.json({ error: `Access to ${entityName} is not allowed` }, { status: 403 });
+    return { GET: blocked, POST: blocked };
+  }
+
   async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || undefined;
@@ -95,6 +101,12 @@ export function makeListCreateHandlers(entityName: string) {
  * Create GET, PUT, and DELETE handlers for a named entity by ID.
  */
 export function makeGetUpdateDeleteHandlers(entityName: string) {
+  if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) {
+    const blocked = async () =>
+      NextResponse.json({ error: `Access to ${entityName} is not allowed` }, { status: 403 });
+    return { GET: blocked, PUT: blocked, DELETE: blocked };
+  }
+
   async function GET(request: NextRequest, { params }: IdRouteParams) {
     const result = await parseIdParam(params);
     if (result instanceof NextResponse) return result;

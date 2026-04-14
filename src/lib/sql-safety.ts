@@ -68,8 +68,8 @@ function containsMultipleStatements(sql: string): boolean {
 }
 
 /**
- * Check for SQL comments (block-style and line-style --)
- * Run BEFORE stripping string literals — comments can contain anything.
+ * Check for SQL comments (block-style and line-style --).
+ * Strips string literals first so '--' inside strings doesn't false-positive.
  */
 function containsComments(sql: string): boolean {
   // Strip string literals first so '--' inside strings doesn't false-positive

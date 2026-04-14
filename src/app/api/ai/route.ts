@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
     // Audit: log AI query execution (fire-and-forget)
     // TODO: extract userId from session once auth is wired
     logAuditEvent({
-      userId: "admin",
+      userId: null,
       action: "ai_query",
       entity: "sql",
       entityId: String(rows.length),

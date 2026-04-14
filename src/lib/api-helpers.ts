@@ -7,10 +7,17 @@
 import { NextResponse } from "next/server";
 
 /**
- * Entities containing sensitive fields (tokens, credentials) that must not
- * be exported, imported, or included in backups.
+ * Entities containing sensitive fields (tokens, passwords, credentials) that
+ * must not be accessible via the generic CRUD API, export, import, or backups.
+ * Infrastructure entities (auth, sessions, audit) are excluded because they
+ * contain password hashes, live session tokens, or tamper-evident logs.
  */
-export const SENSITIVE_ENTITIES = ["calendar_connection"] as const;
+export const SENSITIVE_ENTITIES = [
+  "calendar_connection",
+  "user",
+  "session",
+  "audit_log",
+] as const;
 
 /**
  * Wrap a route handler with standardised error handling.

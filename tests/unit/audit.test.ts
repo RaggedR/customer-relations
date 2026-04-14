@@ -23,7 +23,7 @@ describe("Audit — logAuditEvent", () => {
     mockCreate.mockResolvedValue({ id: "log-1" });
 
     await logAuditEvent({
-      userId: "1",
+      userId: 1,
       action: "view",
       entity: "patient",
       entityId: "p42",
@@ -47,7 +47,7 @@ describe("Audit — logAuditEvent", () => {
     // Should not throw
     await expect(
       logAuditEvent({
-        userId: "1",
+        userId: 1,
         action: "view",
         entity: "patient",
         entityId: "p1",
@@ -62,7 +62,7 @@ describe("Audit — logAuditEvent", () => {
     mockCreate.mockResolvedValue({ id: "log-2" });
 
     await logAuditEvent({
-      userId: "1",
+      userId: 1,
       action: "update",
       entity: "appointment",
       entityId: "a5",

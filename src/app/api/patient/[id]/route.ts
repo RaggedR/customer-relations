@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   // Audit: log access to patient record (fire-and-forget)
   // TODO: extract userId from session once auth is wired
   logAuditEvent({
-    userId: "admin",
+    userId: null,
     action: "view",
     entity: "patient",
     entityId: id,

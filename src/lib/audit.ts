@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
 export interface AuditEvent {
-  userId: string;
+  /** Numeric user ID, or null if auth is not yet wired */
+  userId: number | null;
   action: string;
   entity: string;
   entityId: string;
@@ -18,7 +19,7 @@ export async function logAuditEvent(event: AuditEvent): Promise<void> {
   try {
     await prisma.auditLog.create({
       data: {
-        userId: typeof event.userId === "string" ? parseInt(event.userId, 10) : event.userId,
+        userId: event.userId,
         action: event.action,
         entity: event.entity,
         entity_id: event.entityId,

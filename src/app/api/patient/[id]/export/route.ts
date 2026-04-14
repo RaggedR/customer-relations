@@ -213,7 +213,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Audit: log patient data export (fire-and-forget)
     // TODO: extract userId from session once auth is wired
     logAuditEvent({
-      userId: "admin",
+      userId: null,
       action: "export",
       entity: "patient",
       entityId: String(numId),
