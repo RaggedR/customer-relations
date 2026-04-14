@@ -49,6 +49,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ? body.reason.slice(0, MAX_REASON_LENGTH)
       : "";
 
+    // Direct Prisma: atomic ownership check prevents TOCTOU — repository.update() cannot express WHERE { id, nurseId }
     await prisma.appointment.update({
       where: { id: appointmentId },
       data: {

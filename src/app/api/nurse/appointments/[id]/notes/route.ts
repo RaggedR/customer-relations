@@ -10,12 +10,13 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { renderWatermarkedImage } from "@/lib/image-renderer";
 import { resolveNurse, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
+import { findAll, create } from "@/lib/repository";
+import { getSchema } from "@/lib/schema";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -52,14 +53,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // Load clinical and personal notes for this patient
     const [clinicalNotes, personalNotes] = await Promise.all([
-      prisma.clinicalNote.findMany({
-        where: { patientId },
-        orderBy: { date: "desc" },
-      }),
-      prisma.personalNote.findMany({
-        where: { patientId },
-        orderBy: { date: "desc" },
-      }),
+      findAll("clinical_note", {
+        filterBy: { patientId },
+        sortBy: "date",
+        sortOrder: "desc",
+      }) as Promise<Record<string, unknown>[]>,
+      findAll("personal_note", {
+        filterBy: { patientId },
+        sortBy: "date",
+        sortOrder: "desc",
+      }) as Promise<Record<string, unknown>[]>,
     ]);
 
     // Render each note as a watermarked PNG (base64 data URI)
@@ -67,10 +70,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ...clinicalNotes.map((n) => ({
         id: n.id,
         date: n.date,
-        noteType: n.note_type ?? "clinical_note",
+        noteType: (n.note_type as string) ?? "clinical_note",
         clinician: n.clinician,
         imageDataUri: `data:image/png;base64,${renderWatermarkedImage(
-          n.content,
+          n.content as string,
           nurseName,
           now,
         ).toString("base64")}`,
@@ -81,12 +84,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         noteType: "personal_note",
         clinician: null,
         imageDataUri: `data:image/png;base64,${renderWatermarkedImage(
-          n.content,
+          n.content as string,
           nurseName,
           now,
         ).toString("base64")}`,
       })),
-    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    ].sort((a, b) => new Date(b.date as string).getTime() - new Date(a.date as string).getTime());
 
     // 3D: Audit log — nurse viewed patient notes
     const ip = request.headers.get("x-forwarded-for") ?? undefined;
@@ -125,7 +128,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "content is required" }, { status: 400 });
     }
 
-    const validTypes = ["progress_note", "initial_assessment", "discharge_summary", "treatment_plan", "personal"];
+    if (content.length > 50_000) {
+      return NextResponse.json({ error: "Note content too long (max 50,000 characters)" }, { status: 400 });
+    }
+
+    // Read valid note types from schema instead of hardcoding
+    const schema = getSchema();
+    const clinicalTypes = schema.entities.clinical_note.fields.note_type.values ?? [];
+    const validTypes = [...clinicalTypes, "personal"];
     if (!noteType || !validTypes.includes(noteType)) {
       return NextResponse.json(
         { error: `noteType must be one of: ${validTypes.join(", ")}` },
@@ -148,25 +158,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const nurseName = nurse.name ?? "Unknown Nurse";
     const now = new Date();
 
-    let created;
+    let created: Record<string, unknown>;
     if (noteType === "personal") {
-      created = await prisma.personalNote.create({
-        data: {
-          date: now,
-          content,
-          patientId,
-        },
-      });
+      created = await create("personal_note", {
+        date: now,
+        content,
+        patient: patientId,
+      }) as Record<string, unknown>;
     } else {
-      created = await prisma.clinicalNote.create({
-        data: {
-          date: now,
-          content,
-          note_type: noteType,
-          clinician: nurseName,
-          patientId,
-        },
-      });
+      created = await create("clinical_note", {
+        date: now,
+        content,
+        note_type: noteType,
+        clinician: nurseName,
+        patient: patientId,
+      }) as Record<string, unknown>;
     }
 
     // 3D: Audit log — nurse created note

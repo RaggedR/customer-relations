@@ -8,10 +8,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { resolveNurse } from "@/lib/nurse-helpers";
+import { findById } from "@/lib/repository";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -35,17 +35,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
     }
 
-    const appointment = await prisma.appointment.findUnique({
-      where: { id: appointmentId },
-      include: {
-        patient: { select: { id: true, name: true } },
-      },
-    });
+    const appointment = await findById("appointment", appointmentId) as Record<string, unknown> | null;
 
     if (!appointment || appointment.nurseId !== nurse.id) {
       return NextResponse.json({ error: "Appointment not found or not assigned to you" }, { status: 404 });
     }
 
+    const patient = appointment.patient as Record<string, unknown> | null | undefined;
     return NextResponse.json({
       id: appointment.id,
       date: appointment.date,
@@ -54,8 +50,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       location: appointment.location,
       specialty: appointment.specialty,
       status: appointment.status,
-      patientName: appointment.patient?.name ?? "Unknown",
-      patientId: appointment.patient?.id,
+      patientName: (patient?.name as string) ?? "Unknown",
+      patientId: patient?.id,
     });
   });
 }
