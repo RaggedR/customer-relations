@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
-import { withErrorHandler } from "@/lib/api-helpers";
+import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { getSessionUser } from "@/lib/session";
 
@@ -219,7 +219,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       entity: "patient",
       entityId: String(numId),
       details: `format=${format}`,
-      ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined,
+      ip: getClientIp(request),
       userAgent: request.headers.get("user-agent") ?? undefined,
     });
 

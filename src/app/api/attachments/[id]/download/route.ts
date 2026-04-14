@@ -11,7 +11,9 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 import { findById } from "@/lib/repository";
+import { getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { getSessionUser } from "@/lib/session";
 
 const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       entity: "attachment",
       entityId: String(numId),
       details: `Downloaded ${record.category} attachment`,
-      ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined,
+      ip: getClientIp(request),
       userAgent: request.headers.get("user-agent") ?? undefined,
     });
 
@@ -81,7 +83,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         { status: 404 }
       );
     }
-    console.error("Download error:", error);
+    logger.error({ err: error }, "Download error");
     return NextResponse.json(
       { error: "Failed to download file" },
       { status: 500 }

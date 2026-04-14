@@ -20,7 +20,7 @@ import fs from "fs/promises";
 import path from "path";
 import { create } from "@/lib/repository";
 import { getSchema } from "@/lib/schema";
-import { withErrorHandler } from "@/lib/api-helpers";
+import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { getSessionUser } from "@/lib/session";
 
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
       entity: "attachment",
       entityId: String(record.id),
       details: `Uploaded ${category} attachment for patient ${patientId}`,
-      ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined,
+      ip: getClientIp(request),
       userAgent: request.headers.get("user-agent") ?? undefined,
     });
 

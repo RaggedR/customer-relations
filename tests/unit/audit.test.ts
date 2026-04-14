@@ -9,8 +9,18 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
+// Mock logger so we can verify error logging without console output
+vi.mock("@/lib/logger", () => ({
+  logger: {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+  },
+}));
+
 import { logAuditEvent } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 
 const mockCreate = prisma.auditLog.create as ReturnType<typeof vi.fn>;
 
@@ -42,7 +52,6 @@ describe("Audit — logAuditEvent", () => {
 
   it("does NOT throw when Prisma throws", async () => {
     mockCreate.mockRejectedValue(new Error("DB connection lost"));
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     // Should not throw
     await expect(
@@ -54,8 +63,7 @@ describe("Audit — logAuditEvent", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(consoleSpy).toHaveBeenCalled();
-    consoleSpy.mockRestore();
+    expect(logger.error).toHaveBeenCalled();
   });
 
   it("includes optional ip and userAgent when provided", async () => {

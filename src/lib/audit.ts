@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 
 export interface AuditEvent {
   /** Numeric user ID, or null if auth is not yet wired */
@@ -30,6 +31,6 @@ export async function logAuditEvent(event: AuditEvent): Promise<void> {
       },
     });
   } catch (err) {
-    console.error("Audit log write failed:", err);
+    logger.error({ err }, "Audit log write failed");
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyToken, hasRole, requiresRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 // getSecret is a pure env-var accessor with no mutable state, so it's safe to
 // share across the proxy boundary despite the Next.js 16 proxy docs warning
 // about shared modules. COOKIE_NAME is kept duplicated here as a precaution.
@@ -79,7 +80,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   prisma.session
     .update({ where: { id: dbSession.id }, data: { last_active: new Date() } })
     .catch((err) => {
-      console.error("[proxy] Failed to update session last_active:", err);
+      logger.error({ err }, "Failed to update session last_active");
     });
 
   // Authorized — build response with security headers

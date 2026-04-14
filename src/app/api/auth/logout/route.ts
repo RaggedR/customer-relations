@@ -8,6 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, COOKIE_NAME, COOKIE_OPTIONS } from "@/lib/session";
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
 
   // Audit: log logout (fire-and-forget)
   if (session) {
-    const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined;
+    const ip = getClientIp(request);
     const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
       userId: session.userId,

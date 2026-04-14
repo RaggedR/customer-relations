@@ -16,6 +16,7 @@ import { createHmac } from "crypto";
 import { findAll, findById } from "@/lib/repository";
 import { generateCalendarFeed } from "@/lib/ical";
 import { withErrorHandler } from "@/lib/api-helpers";
+import { logger } from "@/lib/logger";
 import { getSecret } from "@/lib/session";
 import type { Row } from "@/lib/parsers";
 
@@ -30,7 +31,7 @@ function validateFeedToken(nurseId: string, token: string): boolean {
   } catch (err) {
     // SESSION_SECRET is missing — this is a fatal config error, not a bad token.
     // Log it so operators can see the misconfiguration rather than a silent 401 flood.
-    console.error("[feed.ics] SESSION_SECRET not set — cannot validate token:", err);
+    logger.error({ err }, "SESSION_SECRET not set — cannot validate feed token");
     return false;
   }
   const expected = createHmac("sha256", secret)

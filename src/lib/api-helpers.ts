@@ -5,6 +5,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 
 /**
  * Entities containing sensitive fields (tokens, passwords, credentials) that
@@ -59,7 +60,7 @@ export async function withErrorHandler(
     ) {
       return NextResponse.json({ error: message }, { status: 404 });
     }
-    console.error(`${label} error:`, error);
+    logger.error({ err: error, label }, "Request handler error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

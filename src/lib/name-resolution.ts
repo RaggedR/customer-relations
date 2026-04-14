@@ -12,6 +12,7 @@
  */
 
 import { findAll } from "./repository";
+import { logger } from "@/lib/logger";
 
 // ── Types ────────────────────────────────────────────────
 
@@ -195,7 +196,7 @@ export async function resolveNames(question: string): Promise<NameResolution> {
       }
     }
   } catch (err) {
-    console.warn("Name resolution failed:", err);
+    logger.warn({ err }, "Name resolution failed");
   }
   const emptyMap = new Map<string, string>();
   return { question, pseudonymMap: emptyMap, inversePseudonymMap: emptyMap };
