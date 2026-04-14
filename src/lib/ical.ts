@@ -28,7 +28,6 @@ export function generateVEvent(record: Row, entityName = "appointment"): string 
   const startTime = record.start_time as string;
   const endTime = record.end_time as string;
   const location = record.location as string || "";
-  const notes = record.notes as string || "";
 
   // Build summary from template
   let summary = ical?.summary_template ?? "{specialty}";
@@ -57,9 +56,8 @@ export function generateVEvent(record: Row, entityName = "appointment"): string 
   if (location) {
     lines.push(`LOCATION:${escapeICalText(location)}`);
   }
-  if (notes) {
-    lines.push(`DESCRIPTION:${escapeICalText(notes)}`);
-  }
+  // NOTE: DESCRIPTION intentionally omitted — appointment notes may contain
+  // clinical context that should not flow to external calendars (Google, Apple, etc.)
 
   // Add status mapping
   const status = record.status as string;

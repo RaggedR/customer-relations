@@ -58,10 +58,10 @@ const MAX_NAME_LENGTH = 100;
  * Strips control characters and structural chars that could be used
  * for prompt injection.
  */
-export function sanitiseName(name: string): string {
+function sanitiseName(name: string): string {
   return name
     .replace(/[\x00-\x1f\x7f\u0080-\u009f\u200b-\u200f\u2028\u2029\ufeff]/g, "")
-    .replace(/[[\]{}"]/g, "")
+    .replace(/[\[\]{}"]/g, "")
     .trim()
     .slice(0, MAX_NAME_LENGTH);
 }
@@ -72,7 +72,7 @@ export function sanitiseName(name: string): string {
  * Levenshtein distance — number of single-character edits
  * (insertions, deletions, substitutions) to transform a into b.
  */
-export function levenshtein(a: string, b: string): number {
+function levenshtein(a: string, b: string): number {
   const m = a.length;
   const n = b.length;
   const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
@@ -200,3 +200,6 @@ export async function resolveNames(question: string): Promise<NameResolution> {
   const emptyMap = new Map<string, string>();
   return { question, pseudonymMap: emptyMap, inversePseudonymMap: emptyMap };
 }
+
+/** @internal Exposed only for unit tests — not part of the public API */
+export const _testing = { levenshtein, sanitiseName };

@@ -109,13 +109,13 @@ describe("Name resolution — pseudonym maps", () => {
     // Type check: the interface includes the map fields
     // We can't call resolveNames without a DB, but we can verify the type exists
     expect(mod).toHaveProperty("resolveNames");
-    expect(mod).toHaveProperty("sanitiseName");
+    expect(mod).toHaveProperty("_testing");
   });
 
   it("sanitiseName strips structural characters", async () => {
-    const { sanitiseName } = await import("@/lib/name-resolution");
-    expect(sanitiseName('Susan O\'Brien')).toBe("Susan O'Brien");
-    expect(sanitiseName('Test [injection]')).toBe("Test injection");
-    expect(sanitiseName('{"type":"admin"}')).toBe("type:admin");
+    const { _testing } = await import("@/lib/name-resolution");
+    expect(_testing.sanitiseName('Susan O\'Brien')).toBe("Susan O'Brien");
+    expect(_testing.sanitiseName('Test [injection]')).toBe("Test injection");
+    expect(_testing.sanitiseName('{"type":"admin"}')).toBe("type:admin");
   });
 });
