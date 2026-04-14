@@ -6,7 +6,7 @@ import { signSession, type Role } from "@/lib/auth";
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     session: {
-      findFirst: vi.fn().mockResolvedValue({
+      findUnique: vi.fn().mockResolvedValue({
         id: 1,
         token: "mocked",
         last_active: new Date(),

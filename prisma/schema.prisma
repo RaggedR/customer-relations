@@ -192,9 +192,9 @@ model Session {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  token String
+  token       String   @unique
   last_active DateTime
-  expires_at DateTime
+  expires_at  DateTime
   ip String?
   user_agent String?
   userId Int?

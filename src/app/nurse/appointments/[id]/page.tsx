@@ -50,15 +50,23 @@ export default function NurseAppointmentDetailPage() {
   const [noteType, setNoteType] = useState("progress_note");
   const [submitting, setSubmitting] = useState(false);
 
-  // Load appointment and notes
+  // Cancel form state (replaces window.prompt)
+  const [showCancelForm, setShowCancelForm] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+
+  // Load appointment details and notes
   useEffect(() => {
     Promise.all([
-      fetch("/api/nurse/appointments").then((r) => r.json()),
+      fetch(`/api/nurse/appointments?from=1970-01-01&to=2099-12-31`)
+        .then((r) => r.json())
+        .then((appointments: Appointment[]) =>
+          appointments.find((a) => a.id === Number(id)) ?? null
+        ),
       fetch(`/api/nurse/appointments/${id}/notes`).then((r) => r.json()),
     ])
-      .then(([appointments, notes]) => {
-        const appt = appointments.find((a: Appointment) => a.id === Number(id));
-        setAppointment(appt ?? null);
+      .then(([appt, notes]) => {
+        setAppointment(appt);
         setNotesData(notes);
       })
       .catch((err) => setError(err.message))
@@ -94,18 +102,27 @@ export default function NurseAppointmentDetailPage() {
     }
   }
 
-  async function handleCancel() {
-    const reason = prompt("Cancellation reason:");
-    if (reason === null) return;
+  async function handleCancel(e: React.FormEvent) {
+    e.preventDefault();
+    setCancelling(true);
 
-    const res = await fetch(`/api/nurse/appointments/${id}/cancel`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason }),
-    });
+    try {
+      const res = await fetch(`/api/nurse/appointments/${id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: cancelReason }),
+      });
 
-    if (res.ok) {
-      router.push("/nurse");
+      if (res.ok) {
+        router.push("/nurse");
+      } else {
+        const data = await res.json();
+        setError(data.error ?? "Failed to cancel appointment");
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -129,13 +146,41 @@ export default function NurseAppointmentDetailPage() {
           <p className="text-sm text-muted-foreground">
             {appointment.location} &middot; {appointment.specialty}
           </p>
-          {appointment.status !== "cancelled" && (
+          {appointment.status !== "cancelled" && !showCancelForm && (
             <button
-              onClick={handleCancel}
+              onClick={() => setShowCancelForm(true)}
               className="text-xs text-red-400 hover:text-red-300 mt-2"
             >
               Cancel appointment
             </button>
+          )}
+          {showCancelForm && (
+            <form onSubmit={handleCancel} className="mt-3 space-y-2">
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Cancellation reason..."
+                rows={2}
+                className="w-full rounded border border-input bg-transparent px-2 py-1.5 text-sm resize-y"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={cancelling}
+                  className="text-xs font-medium bg-red-600 text-white px-3 py-1 rounded disabled:opacity-50"
+                >
+                  {cancelling ? "Cancelling..." : "Confirm cancellation"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowCancelForm(false); setCancelReason(""); }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Keep appointment
+                </button>
+              </div>
+            </form>
           )}
         </div>
       )}

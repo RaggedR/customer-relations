@@ -15,23 +15,16 @@ import { getSessionUser } from "@/lib/session";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { renderWatermarkedImage } from "@/lib/image-renderer";
+import { resolveNurse, resolveNurseName, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-/** Resolve nurse name from the session userId */
-async function resolveNurseName(userId: number): Promise<string | null> {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user?.email) return user?.name ?? null;
-  const nurse = await prisma.nurse.findFirst({ where: { email: user.email } });
-  return nurse?.name ?? user.name ?? null;
-}
-
 export async function GET(request: NextRequest, { params }: RouteParams) {
   return withErrorHandler("GET /api/nurse/appointments/[id]/notes", async () => {
     const session = await getSessionUser(request);
-    if (!session) {
+    if (!session || session.role !== "nurse") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -41,13 +34,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }
 
-    // Load appointment to get patientId
-    const appointment = await prisma.appointment.findUnique({
-      where: { id: appointmentId },
-      select: { patientId: true },
-    });
+    // Verify nurse identity and appointment ownership
+    const nurse = await resolveNurse(session.userId);
+    if (!nurse) {
+      return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
+    }
+
+    const appointment = await verifyAppointmentOwnership(appointmentId, nurse.id);
     if (!appointment?.patientId) {
-      return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
+      return NextResponse.json({ error: "Appointment not found or not assigned to you" }, { status: 404 });
     }
 
     const patientId = appointment.patientId;
@@ -113,7 +108,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   return withErrorHandler("POST /api/nurse/appointments/[id]/notes", async () => {
     const session = await getSessionUser(request);
-    if (!session) {
+    if (!session || session.role !== "nurse") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -138,17 +133,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Load appointment to get patientId
-    const appointment = await prisma.appointment.findUnique({
-      where: { id: appointmentId },
-      select: { patientId: true },
-    });
+    // Verify nurse identity and appointment ownership
+    const nurse = await resolveNurse(session.userId);
+    if (!nurse) {
+      return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
+    }
+
+    const appointment = await verifyAppointmentOwnership(appointmentId, nurse.id);
     if (!appointment?.patientId) {
-      return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
+      return NextResponse.json({ error: "Appointment not found or not assigned to you" }, { status: 404 });
     }
 
     const patientId = appointment.patientId;
-    const nurseName = await resolveNurseName(session.userId) ?? "Unknown Nurse";
+    const nurseName = (await resolveNurseName(session.userId)) ?? "Unknown Nurse";
     const now = new Date();
 
     let created;

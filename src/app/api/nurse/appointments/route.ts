@@ -14,21 +14,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { withErrorHandler } from "@/lib/api-helpers";
-
-/**
- * Resolve the logged-in user's nurse record by matching email.
- * Returns null if the user is not linked to a nurse entity.
- */
-async function resolveNurse(userId: number) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user?.email) return null;
-  return prisma.nurse.findFirst({ where: { email: user.email } });
-}
+import { resolveNurse } from "@/lib/nurse-helpers";
 
 export async function GET(request: NextRequest) {
   return withErrorHandler("GET /api/nurse/appointments", async () => {
     const session = await getSessionUser(request);
-    if (!session) {
+    if (!session || session.role !== "nurse") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

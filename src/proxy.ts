@@ -54,7 +54,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   // Session DB check: verify the session record exists and is not idle-timed-out.
   // This makes sessions revocable (delete the DB row → immediate logout).
-  const dbSession = await prisma.session.findFirst({ where: { token } });
+  const dbSession = await prisma.session.findUnique({ where: { token } });
   if (!dbSession) {
     // JWT is valid but session was revoked or never created
     return NextResponse.redirect(new URL("/login", request.url));

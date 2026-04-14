@@ -361,12 +361,29 @@ export async function POST(request: NextRequest) {
       resolved.inversePseudonymMap,
     );
 
+    // Depseudonymise chart labels so Clare sees real names, not "Patient #42"
+    let chart = answerResult.chart;
+    if (chart?.data && Array.isArray(chart.data)) {
+      chart = {
+        ...chart,
+        data: chart.data.map((d: Record<string, unknown>) => {
+          const out: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(d)) {
+            out[k] = typeof v === "string"
+              ? depseudonymiseAnswer(v, resolved.inversePseudonymMap)
+              : v;
+          }
+          return out;
+        }),
+      };
+    }
+
     return NextResponse.json({
       question,
       sql,
       explanation: sqlResult.explanation,
       answer,
-      chart: answerResult.chart,
+      chart,
       rows: serializedRows,
       rowCount: serializedRows.length,
     });
