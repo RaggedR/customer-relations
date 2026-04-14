@@ -10,6 +10,7 @@
 
 import { DAVClient } from "tsdav";
 import { generateVCard } from "./vcard";
+import { decryptToken } from "./token-crypto";
 import type { Row } from "./parsers";
 
 interface ContactConnection {
@@ -125,8 +126,23 @@ export async function deleteContact(
 
 // ── Internal ──────────────────────────────────────────────
 
+/**
+ * Decrypt a stored token, falling back to plaintext for legacy
+ * rows that were stored before encryption was enabled.
+ */
+function tryDecrypt(token: string | null): string | undefined {
+  if (!token) return undefined;
+  try {
+    return decryptToken(token);
+  } catch {
+    return token;
+  }
+}
+
 async function getClient(conn: ContactConnection): Promise<DAVClient> {
   const isGoogle = conn.provider === "google";
+  const accessToken = tryDecrypt(conn.access_token);
+  const refreshToken = tryDecrypt(conn.refresh_token);
 
   const client = new DAVClient({
     serverUrl: isGoogle
@@ -135,12 +151,12 @@ async function getClient(conn: ContactConnection): Promise<DAVClient> {
     credentials: isGoogle
       ? {
           tokenUrl: "https://oauth2.googleapis.com/token",
-          refreshToken: conn.refresh_token ?? undefined,
-          accessToken: conn.access_token ?? undefined,
+          refreshToken,
+          accessToken,
         }
       : {
           username: "",
-          password: conn.access_token ?? "",
+          password: accessToken ?? "",
         },
     authMethod: isGoogle ? "Oauth" : "Basic",
     defaultAccountType: "carddav",

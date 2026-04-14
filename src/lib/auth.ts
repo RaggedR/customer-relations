@@ -66,6 +66,7 @@ export function requiresRole(pathname: string): Role | null {
   // Public routes — no auth needed
   if (
     pathname === "/login" ||
+    pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico" ||
     pathname.startsWith("/.well-known/")

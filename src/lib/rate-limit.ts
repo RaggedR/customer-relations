@@ -25,6 +25,8 @@ export interface RateLimitResult {
  * @param limit   Maximum requests per window
  * @param windowMs Window duration in milliseconds
  */
+const MAX_ENTRIES = 10_000;
+
 export function createRateLimiter(
   limit: number,
   windowMs: number,
@@ -36,6 +38,12 @@ export function createRateLimiter(
     const entry = windows.get(key);
 
     if (!entry || now - entry.start >= windowMs) {
+      // Evict expired entries when the map grows large
+      if (windows.size > MAX_ENTRIES) {
+        for (const [k, v] of windows) {
+          if (now - v.start >= windowMs) windows.delete(k);
+        }
+      }
       // New window
       windows.set(key, { start: now, count: 1 });
       return { allowed: true, remaining: limit - 1, resetMs: now + windowMs };

@@ -118,6 +118,11 @@ describe("Auth — requiresRole (default-deny)", () => {
     expect(requiresRole("/login")).toBeNull();
   });
 
+  it("auth API routes require no role (login/logout must be accessible pre-auth)", () => {
+    expect(requiresRole("/api/auth/login")).toBeNull();
+    expect(requiresRole("/api/auth/logout")).toBeNull();
+  });
+
   it("static assets require no role", () => {
     expect(requiresRole("/_next/static/chunk.js")).toBeNull();
     expect(requiresRole("/_next/data/build-id/page.json")).toBeNull();

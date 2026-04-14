@@ -26,11 +26,14 @@ function getSecret(): string {
 }
 
 export async function POST(request: NextRequest) {
-  // Rate limit by IP (no session exists yet at login)
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim()
+  // Extract client IP once — used for rate limiting and audit logging
+  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim()
     ?? request.headers.get("x-real-ip")
     ?? "unknown";
-  const rl = loginLimiter(`ip:${ip}`);
+  const userAgent = request.headers.get("user-agent") ?? undefined;
+
+  // Rate limit by IP (no session exists yet at login)
+  const rl = loginLimiter(`ip:${clientIp}`);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many login attempts. Try again later." },
@@ -60,6 +63,15 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
+      // Audit: log failed login — unknown email (fire-and-forget)
+      logAuditEvent({
+        userId: null,
+        action: "login_failed",
+        entity: "user",
+        entityId: email.toLowerCase().trim(),
+        ip: clientIp !== "unknown" ? clientIp : undefined,
+        userAgent,
+      });
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401 },
@@ -69,6 +81,15 @@ export async function POST(request: NextRequest) {
     // Verify password
     const valid = await verifyPassword(password, user.password_hash);
     if (!valid) {
+      // Audit: log failed login — wrong password (fire-and-forget)
+      logAuditEvent({
+        userId: user.id,
+        action: "login_failed",
+        entity: "user",
+        entityId: String(user.id),
+        ip: clientIp !== "unknown" ? clientIp : undefined,
+        userAgent,
+      });
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401 },
@@ -94,14 +115,12 @@ export async function POST(request: NextRequest) {
     });
 
     // Audit: log successful login (fire-and-forget)
-    const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined;
-    const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
       userId: user.id,
       action: "login",
       entity: "user",
       entityId: String(user.id),
-      ip,
+      ip: clientIp !== "unknown" ? clientIp : undefined,
       userAgent,
     });
 

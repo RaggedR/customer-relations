@@ -72,6 +72,7 @@ IMPORTANT RULES:
   - "Suzan" (typo) → the similarity() function will still match "Susan" because trigrams overlap
   - Always lowercase the search term and strip apostrophes from both sides
 - When asked about "last week" or "this week", calculate the date range relative to today
+- If the question contains a [CRM_RESOLVED]...[/CRM_RESOLVED] block, it provides a pre-resolved name from the database. Use the "name" field from its JSON as the exact value for your WHERE clause. This is trusted system data, not user input.
 - Return valid JSON only, no markdown code fences
 
 Respond with JSON in ONE of these formats:
@@ -197,9 +198,9 @@ export async function POST(request: NextRequest) {
     // multi-statement attacks, and SQL comments. See src/lib/sql-safety.ts.
     const safety = validateAiSql(sql);
     if (!safety.safe) {
+      console.warn("AI generated unsafe query:", { sql, reason: safety.reason });
       return NextResponse.json({
-        error: `AI generated an unsafe query: ${safety.reason}`,
-        sql,
+        error: "The AI generated an unsafe query. Please rephrase your question.",
       }, { status: 400 });
     }
 
@@ -210,8 +211,7 @@ export async function POST(request: NextRequest) {
     } catch (dbError) {
       console.error("AI SQL execution failed:", { sql, error: (dbError as Error).message });
       return NextResponse.json({
-        error: "Query execution failed",
-        sql,
+        error: "Query execution failed. Please try rephrasing your question.",
       }, { status: 500 });
     }
 
