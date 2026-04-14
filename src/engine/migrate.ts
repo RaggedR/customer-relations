@@ -31,8 +31,10 @@ export function runMigration(): void {
     } else {
       // Safety check: refuse to auto-apply destructive or data-sensitive migrations
       const destructivePatterns = /\bDROP\s+(TABLE|COLUMN)\b/i;
-      const uniqueIndexPattern = /\bCREATE\s+UNIQUE\s+INDEX\b/i;
-      if (destructivePatterns.test(diff) || uniqueIndexPattern.test(diff)) {
+      // Prisma emits UNIQUE constraints as either CREATE UNIQUE INDEX or
+      // ALTER TABLE ... ADD CONSTRAINT ... UNIQUE — catch both forms
+      const uniqueConstraintPattern = /\bCREATE\s+UNIQUE\s+INDEX\b|\bADD\s+CONSTRAINT\b[^;]*\bUNIQUE\b/i;
+      if (destructivePatterns.test(diff) || uniqueConstraintPattern.test(diff)) {
         const reason = destructivePatterns.test(diff)
           ? "DROP tables or columns"
           : "add UNIQUE constraints (verify no duplicate data exists before applying)";

@@ -101,11 +101,21 @@ function generateModel(
     }
   }
 
-  // Auto-index all FK columns from relations
+  // Auto-index FK columns from relations (skip if already the leftmost column
+  // of a compound index — the compound index satisfies leftmost-prefix queries)
   if (entity.relations) {
+    const compoundLeadCols = new Set(
+      (entity.indexes ?? []).map(cols => {
+        const c = cols[0];
+        const isRelFk = c.endsWith("Id") && !!entity.relations?.[c.replace(/Id$/, "")];
+        return isRelFk ? c : toSnakeCase(c);
+      })
+    );
     for (const [relName] of Object.entries(entity.relations)) {
       const fkName = foreignKeyName(toSnakeCase(relName));
-      lines.push(`  @@index([${fkName}])`);
+      if (!compoundLeadCols.has(fkName)) {
+        lines.push(`  @@index([${fkName}])`);
+      }
     }
   }
 
