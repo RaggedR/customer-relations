@@ -107,6 +107,8 @@ export function makeGetUpdateDeleteHandlers(entityName: string) {
     return { GET: blocked, PUT: blocked, DELETE: blocked };
   }
 
+  const isImmutable = getSchema().entities[entityName]?.immutable === true;
+
   async function GET(request: NextRequest, { params }: IdRouteParams) {
     const result = await parseIdParam(params);
     if (result instanceof NextResponse) return result;
@@ -122,6 +124,13 @@ export function makeGetUpdateDeleteHandlers(entityName: string) {
   }
 
   async function PUT(request: NextRequest, { params }: IdRouteParams) {
+    if (isImmutable) {
+      return NextResponse.json(
+        { error: `${entityName} records are immutable and cannot be modified` },
+        { status: 405 },
+      );
+    }
+
     const result = await parseIdParam(params);
     if (result instanceof NextResponse) return result;
     const numId = result;
@@ -139,6 +148,13 @@ export function makeGetUpdateDeleteHandlers(entityName: string) {
   }
 
   async function DELETE(request: NextRequest, { params }: IdRouteParams) {
+    if (isImmutable) {
+      return NextResponse.json(
+        { error: `${entityName} records are immutable and cannot be deleted` },
+        { status: 405 },
+      );
+    }
+
     const result = await parseIdParam(params);
     if (result instanceof NextResponse) return result;
     const numId = result;

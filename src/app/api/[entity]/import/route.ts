@@ -39,6 +39,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
+  if (schema.entities[entityName]?.immutable) {
+    return NextResponse.json(
+      { error: `Import of ${entityName} is not allowed — records are immutable` },
+      { status: 405 }
+    );
+  }
+
   // Parse multipart form data
   let formData: FormData;
   try {

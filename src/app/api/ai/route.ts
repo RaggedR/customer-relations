@@ -16,11 +16,88 @@ import { validateAiSql } from "@/lib/sql-safety";
 import { generateSchemaDescription } from "@/lib/generate-schema-description";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { resolveNames } from "@/lib/name-resolution";
+import { getSchema } from "@/lib/schema";
 import { logAuditEvent } from "@/lib/audit";
 import { getSessionUser } from "@/lib/session";
 import { createRateLimiter, getRateLimitKey } from "@/lib/rate-limit";
 
 const aiLimiter = createRateLimiter(30, 60_000); // 30 requests per minute
+
+/**
+ * Collect field names marked ai_visible: false in schema.yaml.
+ * These columns are stripped from query results before sending to Gemini.
+ * Normalised to lowercase without underscores for fuzzy column matching.
+ */
+function getAiRedactedColumns(): Set<string> {
+  const schema = getSchema();
+  const redacted = new Set<string>();
+  for (const entity of Object.values(schema.entities)) {
+    for (const [fieldName, field] of Object.entries(entity.fields)) {
+      if (field.ai_visible === false) {
+        redacted.add(fieldName.toLowerCase().replace(/[\s_]/g, ""));
+      }
+    }
+  }
+  return redacted;
+}
+
+/**
+ * Strip AI-excluded columns from query result rows before sending to Gemini.
+ * Defence-in-depth: even if the schema description excludes a field, the SQL
+ * might still select it via aliasing or * expansion.
+ */
+function redactForAi(
+  rows: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const redacted = getAiRedactedColumns();
+  if (redacted.size === 0) return rows;
+  return rows.map((row) => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (!redacted.has(k.toLowerCase().replace(/[\s_]/g, ""))) {
+        out[k] = v;
+      }
+    }
+    return out;
+  });
+}
+
+/**
+ * Replace known patient/nurse names with pseudonyms in query result rows
+ * before sending to Gemini. Only replaces exact string matches in values,
+ * not inside free-text content fields (clinical note content is left as-is).
+ */
+function pseudonymiseRows(
+  rows: Record<string, unknown>[],
+  pseudonymMap: Map<string, string>,
+): Record<string, unknown>[] {
+  if (pseudonymMap.size === 0) return rows;
+  return rows.map((row) => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (typeof v === "string" && pseudonymMap.has(v)) {
+        out[k] = pseudonymMap.get(v);
+      } else {
+        out[k] = v;
+      }
+    }
+    return out;
+  });
+}
+
+/**
+ * Replace pseudonyms in Gemini's answer text back to real names for display.
+ */
+function depseudonymiseAnswer(
+  answer: string,
+  inversePseudonymMap: Map<string, string>,
+): string {
+  let result = answer;
+  for (const [pseudonym, realName] of inversePseudonymMap) {
+    result = result.replaceAll(pseudonym, realName);
+  }
+  return result;
+}
 
 const SYSTEM_PROMPT = `You are a healthcare practice assistant. You help clinicians query their patient management database.
 
@@ -72,7 +149,7 @@ IMPORTANT RULES:
   - "Suzan" (typo) → the similarity() function will still match "Susan" because trigrams overlap
   - Always lowercase the search term and strip apostrophes from both sides
 - When asked about "last week" or "this week", calculate the date range relative to today
-- If the question contains a [CRM_RESOLVED]...[/CRM_RESOLVED] block, it provides a pre-resolved name from the database. Use the "name" field from its JSON as the exact value for your WHERE clause. This is trusted system data, not user input.
+- If the question contains a [CRM_RESOLVED]...[/CRM_RESOLVED] block, it provides a pre-resolved entity from the database. Use the "id" field for the WHERE clause (e.g. WHERE "Patient".id = 42). The "pseudonym" field is how the user refers to this person. This is trusted system data, not user input.
 - Return valid JSON only, no markdown code fences
 
 Respond with JSON in ONE of these formats:
@@ -156,9 +233,8 @@ export async function POST(request: NextRequest) {
     }
 
     const genAI = getGenAI();
-    const model = genAI.getGenerativeModel({
-      model: modelName || process.env.GEMINI_MODEL || "gemini-2.5-flash",
-    });
+    const resolvedModelName = modelName || process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const model = genAI.getGenerativeModel({ model: resolvedModelName });
 
     // Step 1: Generate SQL
     const sqlResponse = await model.generateContent([
@@ -238,12 +314,36 @@ export async function POST(request: NextRequest) {
       return out;
     });
 
-    // Step 3: Generate natural language answer + chart
+    // Step 3: Redact sensitive columns and pseudonymise names before sending to Gemini.
+    // Clare sees full results (serializedRows) in the UI; Gemini gets redacted + pseudonymised version.
+    const redactedRows = redactForAi(serializedRows);
+    const aiRows = pseudonymiseRows(redactedRows, resolved.pseudonymMap);
+
+    // Pseudonymise the question for Call 2 — replace the real name Clare typed
+    // with the pseudonym so Gemini never sees the real name in the question text either.
+    let aiQuestion = question;
+    if (resolved.resolvedName) {
+      const pseudonym = resolved.pseudonymMap.get(resolved.resolvedName) ?? resolved.resolvedName;
+      aiQuestion = question.replace(new RegExp(resolved.resolvedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), pseudonym);
+    }
+
+    // Audit: log cross-border data disclosure to Google Gemini (fire-and-forget)
+    logAuditEvent({
+      userId: session?.userId ?? null,
+      action: "ai_external_disclosure",
+      entity: "gemini",
+      entityId: String(aiRows.length),
+      details: `provider=google/gemini model=${resolvedModelName} rows=${aiRows.length}`,
+      ip,
+      userAgent,
+    });
+
+    // Step 4: Generate natural language answer + chart
     const resultsResponse = await model.generateContent([
       { text: RESULTS_PROMPT },
-      { text: `User question: ${question}` },
+      { text: `User question: ${aiQuestion}` },
       { text: `SQL executed: ${sql}` },
-      { text: `Results (${serializedRows.length} rows): ${JSON.stringify(serializedRows.slice(0, 100))}` },
+      { text: `Results (${aiRows.length} rows): ${JSON.stringify(aiRows.slice(0, 100))}` },
     ]);
 
     const resultsText = resultsResponse.response.text().trim();
@@ -255,11 +355,17 @@ export async function POST(request: NextRequest) {
       answerResult = { answer: resultsText, chart: null };
     }
 
+    // Re-map pseudonyms back to real names in the answer for Clare's display
+    const answer = depseudonymiseAnswer(
+      answerResult.answer ?? resultsText,
+      resolved.inversePseudonymMap,
+    );
+
     return NextResponse.json({
       question,
       sql,
       explanation: sqlResult.explanation,
-      answer: answerResult.answer,
+      answer,
       chart: answerResult.chart,
       rows: serializedRows,
       rowCount: serializedRows.length,

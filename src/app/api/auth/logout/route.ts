@@ -9,11 +9,18 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { logAuditEvent } from "@/lib/audit";
+import { prisma } from "@/lib/prisma";
 import { getSessionUser, COOKIE_NAME, COOKIE_OPTIONS } from "@/lib/session";
 
 export async function POST(request: NextRequest) {
   // Best-effort: read session for audit before clearing
   const session = await getSessionUser(request).catch(() => null);
+
+  // Clean up DB session record (makes logout immediate, even if JWT is still valid)
+  const token = request.cookies.get(COOKIE_NAME)?.value;
+  if (token) {
+    await prisma.session.deleteMany({ where: { token } }).catch(() => {});
+  }
 
   // Clear cookie
   const response = NextResponse.json({ success: true });

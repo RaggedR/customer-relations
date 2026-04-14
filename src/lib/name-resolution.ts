@@ -18,6 +18,13 @@ import { findAll } from "./repository";
 export interface NameResolution {
   question: string;
   clarify?: string; // if set, ask the user this instead of querying
+  resolvedId?: number;
+  resolvedType?: "patient" | "nurse";
+  resolvedName?: string;
+  /** Maps real DB names to pseudonyms (e.g. "Susan O'Brien" → "Patient #42") */
+  pseudonymMap: Map<string, string>;
+  /** Inverse map for re-mapping Gemini's answer back to real names */
+  inversePseudonymMap: Map<string, string>;
 }
 
 // ── Constants ────────────────────────────────────────────
@@ -101,25 +108,38 @@ export async function resolveNames(question: string): Promise<NameResolution> {
       findAll("nurse") as Promise<Row[]>,
     ]);
 
-    const allNames: { name: string; type: string; parts: string[] }[] = [];
+    const allNames: { name: string; type: string; id: number; parts: string[] }[] = [];
+    const pseudonymMap = new Map<string, string>();
+    const inversePseudonymMap = new Map<string, string>();
+
     for (const p of patients) {
       const name = String(p.name ?? "");
+      const id = Number(p.id);
       if (name) {
         allNames.push({
           name,
           type: "patient",
+          id,
           parts: name.toLowerCase().replace(/'/g, "").split(/\s+/),
         });
+        const pseudonym = `Patient #${id}`;
+        pseudonymMap.set(name, pseudonym);
+        inversePseudonymMap.set(pseudonym, name);
       }
     }
     for (const n of nurses) {
       const name = String(n.name ?? "");
+      const id = Number(n.id);
       if (name) {
         allNames.push({
           name,
           type: "nurse",
+          id,
           parts: name.toLowerCase().replace(/'/g, "").split(/\s+/),
         });
+        const pseudonym = `Nurse #${id}`;
+        pseudonymMap.set(name, pseudonym);
+        inversePseudonymMap.set(pseudonym, name);
       }
     }
 
@@ -130,7 +150,7 @@ export async function resolveNames(question: string): Promise<NameResolution> {
       .split(/\s+/)
       .filter((w) => w.length >= 3 && !SKIP_WORDS.has(w));
 
-    let bestMatch: { name: string; type: string; distance: number } | null = null;
+    let bestMatch: { name: string; type: string; id: number; distance: number } | null = null;
 
     for (const word of words) {
       for (const entry of allNames) {
@@ -138,14 +158,14 @@ export async function resolveNames(question: string): Promise<NameResolution> {
         for (const part of entry.parts) {
           const dist = levenshtein(word, part);
           if (dist <= MAX_DISTANCE && (!bestMatch || dist < bestMatch.distance)) {
-            bestMatch = { name: entry.name, type: entry.type, distance: dist };
+            bestMatch = { name: entry.name, type: entry.type, id: entry.id, distance: dist };
           }
         }
         // Also check against the full name (stripped of apostrophes)
         const fullName = entry.parts.join("");
         const distFull = levenshtein(word, fullName);
         if (distFull <= MAX_DISTANCE && (!bestMatch || distFull < bestMatch.distance)) {
-          bestMatch = { name: entry.name, type: entry.type, distance: distFull };
+          bestMatch = { name: entry.name, type: entry.type, id: entry.id, distance: distFull };
         }
       }
     }
@@ -153,21 +173,30 @@ export async function resolveNames(question: string): Promise<NameResolution> {
     if (bestMatch) {
       const safeName = sanitiseName(bestMatch.name);
       if (bestMatch.distance <= CONFIDENT_DISTANCE) {
-        // Confident — auto-resolve (JSON-encoded to prevent prompt injection)
-        const resolved = JSON.stringify({ type: bestMatch.type, name: safeName });
+        // Confident — auto-resolve with ID-based pseudonym (no real name sent to LLM)
+        const pseudonym = pseudonymMap.get(bestMatch.name) ?? `${bestMatch.type === "patient" ? "Patient" : "Nurse"} #${bestMatch.id}`;
+        const resolved = JSON.stringify({ type: bestMatch.type, id: bestMatch.id, pseudonym });
         return {
           question: question + `\n\n[CRM_RESOLVED]${resolved}[/CRM_RESOLVED]`,
+          resolvedId: bestMatch.id,
+          resolvedType: bestMatch.type as "patient" | "nurse",
+          resolvedName: safeName,
+          pseudonymMap,
+          inversePseudonymMap,
         };
       } else {
         // Uncertain — ask the user to confirm
         return {
           question,
           clarify: `Did you mean ${safeName}?`,
+          pseudonymMap,
+          inversePseudonymMap,
         };
       }
     }
   } catch (err) {
     console.warn("Name resolution failed:", err);
   }
-  return { question };
+  const emptyMap = new Map<string, string>();
+  return { question, pseudonymMap: emptyMap, inversePseudonymMap: emptyMap };
 }

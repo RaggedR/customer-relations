@@ -48,8 +48,11 @@ export function generateSchemaDescription(
         )
       : [];
 
-    for (let i = 0; i < fieldEntries.length; i++) {
-      const [fieldName, field] = fieldEntries[i];
+    // Filter out fields marked ai_visible: false (e.g. medicare_number)
+    const visibleFields = fieldEntries.filter(([, f]) => f.ai_visible !== false);
+
+    for (let i = 0; i < visibleFields.length; i++) {
+      const [fieldName, field] = visibleFields[i];
       const ft = fieldTypes[field.type];
       const sqlType = PRISMA_TO_SQL[ft.prismaType] || "TEXT";
       const notNull = field.required ? " NOT NULL" : "";
@@ -59,7 +62,7 @@ export function generateSchemaDescription(
         comment = ` -- values: ${field.values.map((v) => `'${v}'`).join(", ")}`;
       }
 
-      const isLast = i === fieldEntries.length - 1 && relationEntries.length === 0;
+      const isLast = i === visibleFields.length - 1 && relationEntries.length === 0;
       const comma = isLast ? "" : ",";
       lines.push(`  ${fieldName} ${sqlType}${notNull}${comma}${comment}`);
     }

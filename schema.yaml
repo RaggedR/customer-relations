@@ -9,10 +9,10 @@ entities:
     fields:
       name: { type: string, required: true }
       date_of_birth: { type: date }
-      medicare_number: { type: string }
-      phone: { type: phone }
-      email: { type: email }
-      address: { type: text }
+      medicare_number: { type: string, ai_visible: false }
+      phone: { type: phone, ai_visible: false }
+      email: { type: email, ai_visible: false }
+      address: { type: text, ai_visible: false }
       status: { type: enum, values: [active, inactive, discharged] }
       maintenance_plan_expiry: { type: date }
       notes: { type: text }
@@ -54,6 +54,7 @@ entities:
   clinical_note:
     label: "Clinical Notes"
     label_singular: "Clinical Note"
+    immutable: true
     display:
       title: date
       badge: note_type
@@ -71,6 +72,7 @@ entities:
   personal_note:
     label: "Personal Notes"
     label_singular: "Personal Note"
+    immutable: true
     display:
       title: date
       summary: content
@@ -186,9 +188,9 @@ entities:
     upsert_keys: [name]
     fields:
       name: { type: string, required: true }
-      phone: { type: phone }
-      email: { type: email }
-      registration_number: { type: string }
+      phone: { type: phone, ai_visible: false }
+      email: { type: email, ai_visible: false }
+      registration_number: { type: string, ai_visible: false }
       caldav_url: { type: string }
       google_calendar_id: { type: string }
       notes: { type: text }

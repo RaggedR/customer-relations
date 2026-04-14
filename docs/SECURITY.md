@@ -24,6 +24,7 @@ This is NOT a HIPAA-compliant system. HIPAA is US federal law and does not apply
 | Nurses | Password login to nurse portal; OAuth to Google Calendar | Assigned appointments (with patient name), clinical/personal notes (patient number only) |
 | Patients | Password login to patient portal | Own appointments, booking |
 | Google Calendar | OAuth2 tokens stored in DB | Appointment scheduling metadata only (name, specialty, location, time) |
+| Google Gemini API | API key | Query-dependent patient data (names, clinical notes, contact details); never Medicare numbers. See "AI Query Endpoint" section. |
 
 ### Trust boundaries
 1. **CRM database** — highest trust, all data, encrypted at rest
@@ -125,6 +126,8 @@ Every access to patient health information:
 | Nurse added personal note | nurse_id, patient_id, timestamp, action="create", note_type |
 | Admin exported patient data | admin_id, patient_id (or "all"), timestamp, action="export", format |
 | Admin viewed Medicare numbers | admin_id, patient_id, timestamp, action="view_sensitive" |
+| AI query executed | admin_id, sql, row_count, timestamp, action="ai_query" |
+| AI external disclosure | admin_id, provider, model, row_count, timestamp, action="ai_external_disclosure" |
 
 ### What is NOT logged
 
@@ -204,6 +207,66 @@ They do NOT contain:
 - Any other health information
 
 This data is encrypted in transit (HTTPS, required by Google API) but stored in plaintext on Google's servers. Clare should be aware of this. Google Workspace offers data processing agreements and Australian data residency options if needed.
+
+---
+
+## AI Query Endpoint — Data Disclosure to Google Gemini
+
+The AI query endpoint (`POST /api/ai`) is admin-only (Clare) and sends data to the Google Gemini API. This is a **cross-border disclosure** under APP 8 of the Australian Privacy Act 1988.
+
+### Legal basis
+
+Google's Gemini API Terms of Service state that API input data is not used to train models and is deleted within 30 days. This contractual commitment is the "reasonable steps" basis under APP 8.3(b) for the cross-border transfer. Clare should be informed of this disclosure when she uses the AI endpoint.
+
+### Data minimisation
+
+Fields marked `ai_visible: false` in `schema.yaml` are excluded from:
+1. The database schema description sent to Gemini (so it cannot generate queries selecting those fields)
+2. Query result rows sent to Gemini for summarisation (defence-in-depth redaction)
+
+Currently excluded: `medicare_number`. To exclude additional fields in future, add `ai_visible: false` to the field definition in `schema.yaml`.
+
+### What reaches Gemini
+
+**Call 1 — SQL generation**
+
+| Data | Sent? | Notes |
+|------|-------|-------|
+| Database schema (DDL) | Yes | Structural metadata only — table names, column names, types. No patient records. Fields marked `ai_visible: false` are excluded. |
+| Patient/nurse names | Conditionally | When Clare's question contains a name, name-resolution appends the matched name from the DB |
+| Question text | Yes | Clare's natural language question |
+| Medicare numbers | **No** | Excluded from schema description via `ai_visible: false` |
+
+**Call 2 — Result interpretation**
+
+| Data | Sent? | Notes |
+|------|-------|-------|
+| SQL query text | Yes | Read-only SELECT only (validated by `sql-safety.ts`) |
+| Query results (up to 100 rows) | Redacted | Fields marked `ai_visible: false` are stripped before sending |
+| Patient names | Yes (when in results) | Required for natural language summaries |
+| Clinical note content | Yes (when in results) | Required for "what did we discuss" queries — see known risk below |
+| Addresses, phone, email | Yes (when in results) | Contact details may appear if the query SELECTs them |
+
+### Known risk: clinical note content
+
+Clinical note content (diagnosis, treatment details) may reach Gemini when Clare asks about recent sessions or patient summaries. This is a deliberate trade-off: blocking clinical notes would break the primary use case of the AI endpoint. Mitigations:
+
+- The endpoint is admin-only (not accessible to nurses or patients)
+- Google's API ToS prohibit training on API data
+- Each disclosure is audit-logged with action `ai_external_disclosure`
+- Rate limiting (30 requests/minute) bounds exposure volume
+
+### What does NOT reach Gemini
+
+- Medicare numbers (schema-excluded and result-redacted)
+- Audit logs, session data, user credentials, OAuth tokens (entity-excluded)
+- Any data beyond what the AI-generated SELECT retrieves
+
+### Audit trail
+
+Each AI query produces two audit log entries:
+1. `ai_query` — records the SQL executed and row count
+2. `ai_external_disclosure` — records the provider (`google/gemini`), model name, and row count sent externally
 
 ---
 
