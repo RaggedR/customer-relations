@@ -39,6 +39,10 @@ export async function GET(request: NextRequest) {
     toDate.setDate(toDate.getDate() + 7);
     const toStr = searchParams.get("to") ?? toDate.toISOString().split("T")[0];
 
+    // findAll supports single-field sort only. The original query used a compound
+    // sort [date asc, start_time asc] for stable same-day ordering.
+    // Compound sort support is tracked in issue #13 — until then, appointments
+    // on the same calendar day may arrive in Postgres heap order.
     const appointments = await findAll("appointment", {
       filterBy: { nurseId: nurse.id },
       dateRange: { field: "date", from: fromStr, to: toStr + "T23:59:59" },

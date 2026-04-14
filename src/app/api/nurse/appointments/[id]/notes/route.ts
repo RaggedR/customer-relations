@@ -121,6 +121,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }
 
+    // Auth-before-body: resolve nurse identity and appointment ownership before
+    // parsing the body, so unauthenticated callers cannot probe content validators.
+    const nurse = await resolveNurse(session.userId);
+    if (!nurse) {
+      return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
+    }
+
+    const appointment = await verifyAppointmentOwnership(appointmentId, nurse.id);
+    if (!appointment?.patientId) {
+      return NextResponse.json({ error: "Appointment not found or not assigned to you" }, { status: 404 });
+    }
+
     const body = await request.json();
     const { content, noteType } = body;
 
@@ -141,17 +153,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { error: `noteType must be one of: ${validTypes.join(", ")}` },
         { status: 400 },
       );
-    }
-
-    // Verify nurse identity and appointment ownership
-    const nurse = await resolveNurse(session.userId);
-    if (!nurse) {
-      return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
-    }
-
-    const appointment = await verifyAppointmentOwnership(appointmentId, nurse.id);
-    if (!appointment?.patientId) {
-      return NextResponse.json({ error: "Appointment not found or not assigned to you" }, { status: 404 });
     }
 
     const patientId = appointment.patientId;
