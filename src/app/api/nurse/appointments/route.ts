@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     // findAll supports single-field sort only. The original query used a compound
     // sort [date asc, start_time asc] for stable same-day ordering.
-    // Compound sort support is tracked in issue #13 — until then, appointments
+    // Compound sort support is tracked in issue #17 — until then, appointments
     // on the same calendar day may arrive in Postgres heap order.
     const appointments = await findAll("appointment", {
       filterBy: { nurseId: nurse.id },
