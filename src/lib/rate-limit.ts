@@ -6,6 +6,7 @@
  * within a sliding time window.
  */
 
+import { createHash } from "crypto";
 import type { NextRequest } from "next/server";
 
 interface Window {
@@ -66,7 +67,7 @@ export function createRateLimiter(
  */
 export function getRateLimitKey(request: NextRequest): string {
   const session = request.cookies.get("session")?.value;
-  if (session) return `session:${session}`;
+  if (session) return `session:${createHash("sha256").update(session).digest("hex").slice(0, 16)}`;
 
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) return `ip:${forwarded.split(",")[0].trim()}`;

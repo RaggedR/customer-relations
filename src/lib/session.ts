@@ -28,7 +28,7 @@ export interface SessionUser {
   role: Role;
 }
 
-function getSecret(): string {
+export function getSecret(): string {
   const secret = process.env.SESSION_SECRET;
   if (!secret) throw new Error("SESSION_SECRET env var is not set");
   return secret;

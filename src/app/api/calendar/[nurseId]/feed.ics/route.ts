@@ -1,21 +1,45 @@
 /**
  * iCal Feed — Read-only calendar subscription per nurse
  *
- * GET /api/calendar/{nurseId}/feed.ics
+ * GET /api/calendar/{nurseId}/feed.ics?token=HMAC
  *
- * Any calendar app can subscribe to this URL to see a nurse's
- * appointments. Simpler than full CalDAV — just a GET that
- * returns all events as a VCALENDAR.
+ * Calendar apps subscribe to this URL to see a nurse's appointments.
+ * Requires a `token` query parameter: an HMAC-SHA256 of the nurseId
+ * signed with SESSION_SECRET. This allows calendar apps (which cannot
+ * send cookies) to authenticate without storing credentials.
+ *
+ * The admin generates feed URLs containing the token.
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac } from "crypto";
 import { findAll, findById } from "@/lib/repository";
 import { generateCalendarFeed } from "@/lib/ical";
 import { withErrorHandler } from "@/lib/api-helpers";
+import { getSecret } from "@/lib/session";
 import type { Row } from "@/lib/parsers";
 
 interface RouteParams {
   params: Promise<{ nurseId: string }>;
+}
+
+function validateFeedToken(nurseId: string, token: string): boolean {
+  let secret: string;
+  try {
+    secret = getSecret();
+  } catch {
+    return false;
+  }
+  const expected = createHmac("sha256", secret)
+    .update(nurseId)
+    .digest("hex");
+  // Constant-time comparison to prevent timing attacks
+  if (expected.length !== token.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < expected.length; i++) {
+    mismatch |= expected.charCodeAt(i) ^ token.charCodeAt(i);
+  }
+  return mismatch === 0;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -24,6 +48,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   if (isNaN(nurseId)) {
     return new NextResponse("Invalid nurse ID", { status: 400 });
+  }
+
+  // Validate HMAC token from query string (calendar apps can't send cookies)
+  const token = request.nextUrl.searchParams.get("token");
+  if (!token) {
+    return new NextResponse("Missing token parameter", { status: 401 });
+  }
+  if (!validateFeedToken(nurseIdStr, token)) {
+    return new NextResponse("Invalid token", { status: 401 });
   }
 
   return withErrorHandler(`GET /api/calendar/${nurseId}/feed.ics`, async () => {
