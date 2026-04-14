@@ -72,11 +72,12 @@ async function getClient(conn: CalendarConnection): Promise<DAVClient> {
  * Failures are logged per-connection but never propagated.
  */
 async function withCalendarConnections(
-  nurseId: number,
+  nurseId: number | undefined,
   action: string,
   appointmentId: number | string,
   fn: (client: DAVClient, calendar: DAVCalendar, uid: string) => Promise<void>,
 ): Promise<void> {
+  if (!nurseId) return;
   const connections = await getConnectionsForNurse(nurseId);
   if (connections.length === 0) return;
 
@@ -105,12 +106,8 @@ async function withCalendarConnections(
 export async function pushAppointment(
   appointment: Row
 ): Promise<void> {
-  const nurseId = appointment.nurseId as number | undefined;
-  if (!nurseId) return;
-
-  const ical = generateVEvent(appointment);
-
-  await withCalendarConnections(nurseId, "push", appointment.id as number, async (client, calendar, uid) => {
+  await withCalendarConnections(appointment.nurseId as number | undefined, "push", appointment.id as number, async (client, calendar, uid) => {
+    const ical = generateVEvent(appointment);
     await client.createCalendarObject({
       calendar,
       filename: `${uid}.ics`,
@@ -125,12 +122,8 @@ export async function pushAppointment(
 export async function updateAppointment(
   appointment: Row
 ): Promise<void> {
-  const nurseId = appointment.nurseId as number | undefined;
-  if (!nurseId) return;
-
-  const ical = generateVEvent(appointment);
-
-  await withCalendarConnections(nurseId, "update", appointment.id as number, async (client, calendar, uid) => {
+  await withCalendarConnections(appointment.nurseId as number | undefined, "update", appointment.id as number, async (client, calendar, uid) => {
+    const ical = generateVEvent(appointment);
     const objects = await client.fetchCalendarObjects({ calendar });
     const existing = objects.find(
       (o) => o.data?.includes(uid) || o.url.includes(uid)

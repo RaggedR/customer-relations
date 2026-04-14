@@ -28,6 +28,17 @@ function evictIfOverLimit() {
   for (const [key, entry] of store) {
     if (entry.expiresAt < now) store.delete(key);
   }
+  // If still over limit after expiry-based eviction (e.g. DoS of fresh keys),
+  // evict oldest entries by insertion order (Map iterates in insertion order).
+  if (store.size > MAX_ENTRIES) {
+    const toEvict = store.size - MAX_ENTRIES;
+    let evicted = 0;
+    for (const key of store.keys()) {
+      if (evicted >= toEvict) break;
+      store.delete(key);
+      evicted++;
+    }
+  }
 }
 
 /**
@@ -51,9 +62,10 @@ export function getIdempotentResponse(key: string): NextResponse | null {
 /**
  * Cache a response for an idempotency key.
  *
- * The caller (route-factory.ts) fires this without await, which is fine —
- * the key fix is that store.set happens synchronously after the await,
- * not in a detached .then() microtask that could lose the race.
+ * NOTE: This module is not yet wired into route-factory.ts — it is
+ * infrastructure prepared for POST deduplication. When integrated,
+ * the caller can fire-and-forget (no await needed) because store.set
+ * runs synchronously after the internal await.
  */
 export async function cacheIdempotentResponse(
   key: string,

@@ -137,6 +137,9 @@ export function parseVEvent(icalText: string, entityName = "appointment"): Row {
         result.location = value;
         break;
       case "DESCRIPTION":
+        // NOTE: We parse inbound DESCRIPTION for interop with external calendars,
+        // but we do NOT emit DESCRIPTION outbound (see generateVEvent) to avoid
+        // leaking clinical context. Inbound data stays local.
         result.notes = value;
         break;
       case "STATUS":

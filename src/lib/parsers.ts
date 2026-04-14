@@ -128,11 +128,20 @@ function parseCsvLine(line: string): string[] {
 
 /** Maximum rows allowed in an xlsx import — guards against zip bombs */
 const MAX_XLSX_ROWS = 100_000;
+/** Maximum compressed XLSX buffer size (5 MB) — blocks zip bombs before decompression */
+const MAX_XLSX_BUFFER = 5 * 1024 * 1024;
 
 /**
  * Parse an xlsx buffer into row objects.
  */
 async function parseXlsx(buffer: Buffer): Promise<Row[]> {
+  // Guard against zip bombs: check compressed size before ExcelJS decompresses
+  if (buffer.length > MAX_XLSX_BUFFER) {
+    throw new Error(
+      `XLSX file too large: ${(buffer.length / 1024 / 1024).toFixed(1)} MB compressed (max 5 MB)`
+    );
+  }
+
   const workbook = new ExcelJS.Workbook();
   try {
     await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
