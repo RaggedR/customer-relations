@@ -14,7 +14,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prismaReadonly } from "@/lib/prisma-readonly";
 import { validateAiSql } from "@/lib/sql-safety";
 import { generateSchemaDescription } from "@/lib/generate-schema-description";
-import { withErrorHandler } from "@/lib/api-helpers";
+import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
 import { resolveNames } from "@/lib/name-resolution";
 import { getSchema } from "@/lib/schema";
 import { logAuditEvent } from "@/lib/audit";
@@ -97,6 +97,11 @@ function depseudonymiseAnswer(
     result = result.replaceAll(pseudonym, realName);
   }
   return result;
+}
+
+/** Strip markdown code fences that LLMs sometimes wrap around JSON responses. */
+function stripCodeFences(text: string): string {
+  return text.replace(/^```(?:\w+)?\n?/g, "").replace(/\n?```$/g, "");
 }
 
 const SYSTEM_PROMPT = `You are a healthcare practice assistant. You help clinicians query their patient management database.
@@ -246,7 +251,7 @@ export async function POST(request: NextRequest) {
     let sqlResult;
     try {
       // Strip markdown code fences if present
-      const cleaned = sqlText.replace(/^```(?:json)?\n?/g, "").replace(/\n?```$/g, "");
+      const cleaned = stripCodeFences(sqlText);
       const parsed = JSON.parse(cleaned);
 
       // Handle refused questions
@@ -280,10 +285,13 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Step 2: Execute SQL
+    // Step 2: Execute SQL inside a transaction so SET LOCAL applies to the query
     let rows: Record<string, unknown>[];
     try {
-      rows = await prismaReadonly.$queryRawUnsafe(sql) as Record<string, unknown>[];
+      rows = await prismaReadonly.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe("SET LOCAL statement_timeout = '5s'");
+        return await tx.$queryRawUnsafe(sql) as Record<string, unknown>[];
+      });
     } catch (dbError) {
       console.error("AI SQL execution failed:", { sql, error: (dbError as Error).message });
       return NextResponse.json({
@@ -293,7 +301,7 @@ export async function POST(request: NextRequest) {
 
     // Audit: log AI query execution (fire-and-forget)
     const session = await getSessionUser(request);
-    const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined;
+    const ip = getClientIp(request);
     const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
       userId: session?.userId ?? null,
@@ -349,7 +357,7 @@ export async function POST(request: NextRequest) {
     const resultsText = resultsResponse.response.text().trim();
     let answerResult;
     try {
-      const cleaned = resultsText.replace(/^```(?:json)?\n?/g, "").replace(/\n?```$/g, "");
+      const cleaned = stripCodeFences(resultsText);
       answerResult = JSON.parse(cleaned);
     } catch {
       answerResult = { answer: resultsText, chart: null };

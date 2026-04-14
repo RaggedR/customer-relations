@@ -20,6 +20,15 @@ export const SENSITIVE_ENTITIES = [
 ] as const;
 
 /**
+ * Extract the client IP address from standard proxy headers.
+ */
+export function getClientIp(request: Request): string | undefined {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? request.headers.get("x-real-ip")
+    ?? undefined;
+}
+
+/**
  * Wrap a route handler with standardised error handling.
  * Catches unhandled errors and returns a 500 JSON response.
  *

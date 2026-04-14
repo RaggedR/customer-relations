@@ -10,6 +10,7 @@
  */
 
 import { getSchema, fieldTypes, toPascalCase } from "@/lib/schema";
+import { SENSITIVE_ENTITIES } from "@/lib/api-helpers";
 
 /** Map Prisma types to SQL types for the DDL */
 const PRISMA_TO_SQL: Record<string, string> = {
@@ -21,10 +22,8 @@ const PRISMA_TO_SQL: Record<string, string> = {
   Json: "JSONB",
 };
 
-const DEFAULT_EXCLUDED = ["user", "session", "audit_log", "calendar_connection"];
-
 export function generateSchemaDescription(
-  exclude: string[] = DEFAULT_EXCLUDED
+  exclude: readonly string[] = SENSITIVE_ENTITIES
 ): string {
   const schema = getSchema();
   const lines: string[] = [

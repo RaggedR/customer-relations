@@ -30,6 +30,25 @@ const BLOCKED_KEYWORDS = [
   "COPY",
   "EXECUTE",
   "CALL",
+  "LOAD",
+  "SET",
+];
+
+/**
+ * Dangerous PostgreSQL built-in functions that must not appear in AI queries.
+ * Matched with a trailing open-paren to avoid false-positives on column names
+ * that happen to contain these substrings.
+ */
+const BLOCKED_FUNCTIONS = [
+  "pg_sleep",
+  "pg_read_file",
+  "pg_read_binary_file",
+  "lo_import",
+  "lo_export",
+  "set_config",
+  "dblink",
+  "pg_terminate_backend",
+  "pg_cancel_backend",
 ];
 
 /** System catalog patterns — block reads of PostgreSQL internals. */
@@ -108,7 +127,16 @@ export function validateAiSql(sql: string): SqlValidationResult {
     }
   }
 
-  // 5. Block system catalog access
+  // 5. Block dangerous built-in functions (match with trailing paren to avoid
+  //    false-positives on column names containing these substrings)
+  const strippedUpper = stripped.toUpperCase();
+  for (const fn of BLOCKED_FUNCTIONS) {
+    if (strippedUpper.includes(fn.toUpperCase() + "(")) {
+      return { safe: false, reason: `Query contains blocked function: ${fn}` };
+    }
+  }
+
+  // 6. Block system catalog access
   for (const pattern of SYSTEM_CATALOG_PATTERNS) {
     if (pattern.test(stripped)) {
       return { safe: false, reason: "Query accesses system catalog tables" };

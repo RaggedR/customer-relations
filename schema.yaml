@@ -173,7 +173,7 @@ entities:
           end_time: DTEND_TIME
           location: LOCATION
           notes: DESCRIPTION
-        summary_template: "{patient.name} — {specialty}"
+        summary_template: "{specialty} — Appt #{id}"
       csv:
         headers:
           date: "Date"
