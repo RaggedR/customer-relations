@@ -53,7 +53,7 @@ export const fieldTypes: Record<string, FieldTypeDefinition> = {
   },
   number: {
     prismaType: "Float",
-    validate: (v) => typeof v === "number" && !isNaN(v as number),
+    validate: (v) => typeof v === "number" && Number.isFinite(v as number),
     htmlInputType: "number",
     normalize: (v) => (v !== null && v !== undefined ? Number(v) : null),
   },

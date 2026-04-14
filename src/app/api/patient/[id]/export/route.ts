@@ -16,6 +16,7 @@ import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
+import { getSessionUser } from "@/lib/session";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -211,13 +212,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Audit: log patient data export (fire-and-forget)
-    // TODO: extract userId from session once auth is wired
+    const session = await getSessionUser(request);
     logAuditEvent({
-      userId: null,
+      userId: session?.userId ?? null,
       action: "export",
       entity: "patient",
       entityId: String(numId),
       details: `format=${format}`,
+      ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined,
+      userAgent: request.headers.get("user-agent") ?? undefined,
     });
 
     const safeName = patient.name.replace(/\s+/g, "-").toLowerCase();

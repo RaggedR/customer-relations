@@ -199,8 +199,12 @@ export async function findAll(
         : { AND: whereConditions };
   }
 
-  // Sorting
+  // Sorting — validate sortBy against known schema fields
   if (options?.sortBy) {
+    const validSortFields = new Set([...Object.keys(entity.fields), "createdAt", "updatedAt"]);
+    if (!validSortFields.has(options.sortBy)) {
+      throw new Error(`Invalid sort field: ${options.sortBy}`);
+    }
     args.orderBy = { [toSnakeCase(options.sortBy)]: options.sortOrder || "asc" };
   } else {
     args.orderBy = { createdAt: "desc" };

@@ -91,10 +91,14 @@ This is not bulletproof (dev tools bypass), but raises the bar. Combined with th
 
 ### 4. Session management
 
-- 10-minute idle timeout
+- **Authentication**: `POST /api/auth/login` validates credentials (scrypt password hash), signs an HS256 JWT, sets a session cookie
+- **Cookie attributes**: `HttpOnly`, `Secure` (production), `SameSite=Strict`, `Path=/`, 8-hour max age
+- **Default-deny routing**: All paths require admin role unless explicitly listed as public (login page, static assets, well-known). The proxy (`src/proxy.ts`) enforces this on every request
+- **Session extraction**: Route handlers call `getSessionUser(request)` to re-verify the JWT and get the numeric userId for audit logging
+- **Logout**: `POST /api/auth/logout` clears the cookie and sends `Clear-Site-Data` header to purge browser cache/storage
+- **Idle timeout**: Planned for future batch (currently 8-hour fixed JWT expiry)
 - No `localStorage` or `IndexedDB` for clinical data
 - No service worker (prevents offline caching)
-- Session cookie with `HttpOnly`, `Secure`, `SameSite=Strict`
 
 ### 5. Acceptable use policy
 
@@ -232,6 +236,53 @@ Cancellation policy: patients may cancel, but cancellations within 24 hours of t
 
 ---
 
+## Defence-in-Depth (Batch 4)
+
+The following hardening layers were added by the security audit. Most are automatic, but three require one-time deployment actions.
+
+### Automatic (no action needed)
+- **Rate limiting**: AI endpoint (30/min per session), login (5/min per IP) — `src/lib/rate-limit.ts`
+- **Name sanitisation**: Patient names are sanitised and JSON-encoded before LLM prompt interpolation — prevents stored prompt injection
+- **Import file size limit**: Files > 10 MB rejected before parsing — prevents OOM
+- **Security headers**: CSP (`script-src 'self'`), HSTS, X-Frame-Options, Permissions-Policy — `next.config.ts`
+
+### Deployment actions required
+
+#### 1. Create read-only database role (before first production deploy)
+
+Run the setup script against the production database:
+
+```bash
+psql -U postgres -d customer_relations -f scripts/create-readonly-role.sql
+```
+
+Edit the script first to replace `<STRONG_RANDOM_PASSWORD>` with a generated password:
+```bash
+openssl rand -base64 32
+```
+
+Then set the env var so the AI endpoint uses the read-only connection:
+```bash
+DATABASE_URL_READONLY="postgresql://crm_ai_user:<password>@localhost:5432/customer_relations?schema=public"
+```
+
+Without this, the AI endpoint falls back to `DATABASE_URL` (read-write) — functional but without the DB-level write protection.
+
+#### 2. Set TOKEN_ENCRYPTION_KEY (before first production deploy)
+
+Generate and set the encryption key for OAuth tokens at rest:
+```bash
+TOKEN_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+```
+
+Existing plaintext tokens in `calendar_connection` will continue to work (graceful fallback). New tokens will be encrypted. To encrypt existing tokens, run a one-time migration after setting the key.
+
+#### 3. Verify CSP with production build
+
+After deploying, check the browser console for CSP violations. If Next.js hydration scripts are blocked, the CSP may need `'nonce-...'` support or a specific hash — see `next.config.ts`.
+
+---
+
 ## Checklist for Maintainers
 
 When modifying the system, verify:
@@ -241,6 +292,6 @@ When modifying the system, verify:
 - [ ] Clinical content on the nurse portal is rendered as watermarked images, not HTML text
 - [ ] Patient portal routes enforce per-patient record isolation (patient A cannot see patient B)
 - [ ] New database fields containing health information are included in the backup
-- [ ] Backup files are encrypted before storage
+- [x] Backup files are encrypted before storage
 - [ ] Clinical notes remain append-only — no edit or delete operations
 - [ ] Medicare numbers and other sensitive fields are visible only to the admin role

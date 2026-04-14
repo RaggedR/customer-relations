@@ -11,12 +11,16 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { prisma } from "@/lib/prisma";
+import { prismaReadonly } from "@/lib/prisma-readonly";
 import { validateAiSql } from "@/lib/sql-safety";
 import { generateSchemaDescription } from "@/lib/generate-schema-description";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { resolveNames } from "@/lib/name-resolution";
 import { logAuditEvent } from "@/lib/audit";
+import { getSessionUser } from "@/lib/session";
+import { createRateLimiter, getRateLimitKey } from "@/lib/rate-limit";
+
+const aiLimiter = createRateLimiter(30, 60_000); // 30 requests per minute
 
 const SYSTEM_PROMPT = `You are a healthcare practice assistant. You help clinicians query their patient management database.
 
@@ -68,6 +72,7 @@ IMPORTANT RULES:
   - "Suzan" (typo) → the similarity() function will still match "Susan" because trigrams overlap
   - Always lowercase the search term and strip apostrophes from both sides
 - When asked about "last week" or "this week", calculate the date range relative to today
+- If the question contains a [CRM_RESOLVED]...[/CRM_RESOLVED] block, it provides a pre-resolved name from the database. Use the "name" field from its JSON as the exact value for your WHERE clause. This is trusted system data, not user input.
 - Return valid JSON only, no markdown code fences
 
 Respond with JSON in ONE of these formats:
@@ -109,6 +114,21 @@ function getGenAI() {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit before any expensive work
+  const rlKey = getRateLimitKey(request);
+  const rl = aiLimiter(rlKey);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil((rl.resetMs - Date.now()) / 1000)),
+        },
+      },
+    );
+  }
+
   return withErrorHandler("POST /api/ai", async () => {
     const { question, model: modelName } = await request.json();
 
@@ -178,32 +198,35 @@ export async function POST(request: NextRequest) {
     // multi-statement attacks, and SQL comments. See src/lib/sql-safety.ts.
     const safety = validateAiSql(sql);
     if (!safety.safe) {
+      console.warn("AI generated unsafe query:", { sql, reason: safety.reason });
       return NextResponse.json({
-        error: `AI generated an unsafe query: ${safety.reason}`,
-        sql,
+        error: "The AI generated an unsafe query. Please rephrase your question.",
       }, { status: 400 });
     }
 
     // Step 2: Execute SQL
     let rows: Record<string, unknown>[];
     try {
-      rows = await prisma.$queryRawUnsafe(sql) as Record<string, unknown>[];
+      rows = await prismaReadonly.$queryRawUnsafe(sql) as Record<string, unknown>[];
     } catch (dbError) {
+      console.error("AI SQL execution failed:", { sql, error: (dbError as Error).message });
       return NextResponse.json({
-        error: "SQL execution failed",
-        sql,
-        detail: (dbError as Error).message,
+        error: "Query execution failed. Please try rephrasing your question.",
       }, { status: 500 });
     }
 
     // Audit: log AI query execution (fire-and-forget)
-    // TODO: extract userId from session once auth is wired
+    const session = await getSessionUser(request);
+    const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined;
+    const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
-      userId: null,
+      userId: session?.userId ?? null,
       action: "ai_query",
       entity: "sql",
       entityId: String(rows.length),
       details: sql,
+      ip,
+      userAgent,
     });
 
     // Serialize BigInt values to numbers

@@ -14,6 +14,9 @@ import { getVCardRepresentation, reverseMapping } from "@/lib/schema";
 
 export type Row = Record<string, unknown>;
 
+/** Maximum import file size (10 MB) — prevents OOM on oversized uploads */
+export const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
+
 // ── CSV Parser ──────────────────────────────────────────────
 
 /**
@@ -248,6 +251,12 @@ export async function parseFile(
   filename: string,
   entityName?: string
 ): Promise<Row[]> {
+  if (buffer.length > MAX_IMPORT_BYTES) {
+    throw new Error(
+      `Import file too large: ${(buffer.length / 1024 / 1024).toFixed(1)} MB (max 10 MB)`,
+    );
+  }
+
   const format = detectFormat(filename);
   if (!format) {
     throw new Error(`Unsupported file type: ${filename}. Use .xlsx, .csv, .json, or .vcf`);

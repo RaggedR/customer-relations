@@ -12,6 +12,7 @@
 import { NextRequest } from "next/server";
 import { makeGetUpdateDeleteHandlers } from "@/lib/route-factory";
 import { logAuditEvent } from "@/lib/audit";
+import { getSessionUser } from "@/lib/session";
 
 const handlers = makeGetUpdateDeleteHandlers("patient");
 
@@ -19,12 +20,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const { id } = await context.params;
 
   // Audit: log access to patient record (fire-and-forget)
-  // TODO: extract userId from session once auth is wired
+  const session = await getSessionUser(request);
   logAuditEvent({
-    userId: null,
+    userId: session?.userId ?? null,
     action: "view",
     entity: "patient",
     entityId: id,
+    ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined,
+    userAgent: request.headers.get("user-agent") ?? undefined,
   });
 
   return handlers.GET(request, context);

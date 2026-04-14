@@ -23,6 +23,22 @@ import { getSchema } from "@/lib/schema";
 import { withErrorHandler } from "@/lib/api-helpers";
 
 const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+
+const ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "text/csv",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/json",
+  "text/vcard",
+  "text/plain",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
 
 export async function POST(request: NextRequest) {
   const schema = getSchema();
@@ -55,6 +71,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "patientId is required" },
       { status: 400 }
+    );
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    return NextResponse.json(
+      { error: "File too large (max 50MB)" },
+      { status: 413 }
+    );
+  }
+
+  if (!ALLOWED_MIME_TYPES.has(file.type)) {
+    return NextResponse.json(
+      { error: `File type not allowed: ${file.type}` },
+      { status: 415 }
     );
   }
 
