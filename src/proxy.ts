@@ -59,7 +59,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Idle timeout: nurses 10 min, admins 30 min
+  // Idle timeout: nurses 10 min, admins 30 min.
+  // Patient sessions have no idle timeout (null) — patients access read-only
+  // appointment summaries from personal devices and may have long gaps between views.
   const idleTimeoutMs =
     payload.role === "nurse" ? NURSE_IDLE_TIMEOUT_MS :
     payload.role === "admin" ? ADMIN_IDLE_TIMEOUT_MS :

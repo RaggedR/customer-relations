@@ -27,7 +27,10 @@ function validateFeedToken(nurseId: string, token: string): boolean {
   let secret: string;
   try {
     secret = getSecret();
-  } catch {
+  } catch (err) {
+    // SESSION_SECRET is missing — this is a fatal config error, not a bad token.
+    // Log it so operators can see the misconfiguration rather than a silent 401 flood.
+    console.error("[feed.ics] SESSION_SECRET not set — cannot validate token:", err);
     return false;
   }
   const expected = createHmac("sha256", secret)
