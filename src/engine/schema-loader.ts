@@ -16,6 +16,7 @@ export interface FieldConfig {
   type: string;
   required?: boolean;
   values?: string[]; // For enum type
+  ai_visible?: boolean; // false = excluded from AI schema description and result redaction
 }
 
 export interface RelationConfig {
@@ -74,6 +75,7 @@ export interface EntityConfig {
   display?: DisplayConfig;
   sidebar_addable?: boolean;
   exportable?: boolean;
+  immutable?: boolean;
 }
 
 export interface SchemaConfig {

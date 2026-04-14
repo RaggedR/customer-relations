@@ -29,7 +29,18 @@ export function AiChatPanel({ onChartGenerated }: AiChatPanelProps) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [showSql, setShowSql] = useState<number | null>(null);
+  const [disclosureAcked, setDisclosureAcked] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Check localStorage for AI disclosure acknowledgment (30-day TTL)
+  useEffect(() => {
+    const ack = localStorage.getItem("ai_disclosure_ack");
+    if (ack) {
+      const expiry = parseInt(ack, 10);
+      if (Date.now() < expiry) return; // still valid
+    }
+    setDisclosureAcked(false);
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -37,7 +48,7 @@ export function AiChatPanel({ onChartGenerated }: AiChatPanelProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || !disclosureAcked) return;
 
     const question = input.trim();
     setInput("");
@@ -99,6 +110,27 @@ export function AiChatPanel({ onChartGenerated }: AiChatPanelProps) {
             <span className="text-[10px] mt-1 block opacity-70">
               e.g. &quot;Are any maintenance plans expiring soon?&quot;
             </span>
+          </div>
+        )}
+
+        {!disclosureAcked && (
+          <div className="mx-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 text-xs text-muted-foreground space-y-2">
+            <p className="font-medium text-amber-400/90">AI Privacy Notice</p>
+            <p>
+              Queries are processed by Google Gemini. Patient names are
+              pseudonymised and contact details are excluded, but clinical
+              note content may be disclosed. Medicare numbers are never sent.
+            </p>
+            <button
+              onClick={() => {
+                const thirtyDays = Date.now() + 30 * 24 * 60 * 60 * 1000;
+                localStorage.setItem("ai_disclosure_ack", String(thirtyDays));
+                setDisclosureAcked(true);
+              }}
+              className="text-[10px] font-medium text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              I understand
+            </button>
           </div>
         )}
 

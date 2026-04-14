@@ -103,6 +103,18 @@ export async function POST(request: NextRequest) {
       `${SESSION_MAX_AGE}s`,
     );
 
+    // Create DB session record (activates idle timeout + session revocation)
+    await prisma.session.create({
+      data: {
+        token,
+        userId: user.id,
+        last_active: new Date(),
+        expires_at: new Date(Date.now() + SESSION_MAX_AGE * 1000),
+        ip: clientIp !== "unknown" ? clientIp : null,
+        user_agent: userAgent ?? null,
+      },
+    });
+
     // Build response with session cookie
     const response = NextResponse.json({
       success: true,

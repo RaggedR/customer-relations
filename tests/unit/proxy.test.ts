@@ -1,7 +1,25 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { proxy } from "@/proxy";
 import { signSession, type Role } from "@/lib/auth";
+
+// Mock Prisma session table — return a valid session record for any token lookup
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    session: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: 1,
+        token: "mocked",
+        last_active: new Date(),
+        expires_at: new Date(Date.now() + 8 * 60 * 60 * 1000),
+      }),
+      update: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue({}),
+    },
+  },
+}));
+
+// Import proxy AFTER mock is registered
+const { proxy } = await import("@/proxy");
 
 const SECRET = "test-secret-must-be-at-least-32-bytes-long!!";
 
