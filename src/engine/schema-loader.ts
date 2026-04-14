@@ -10,77 +10,20 @@ import path from "path";
 import YAML from "yaml";
 import { fieldTypes } from "./field-types";
 
-// --- Types ---
+// --- Types (canonical definitions in schema-types.ts) ---
 
-export interface FieldConfig {
-  type: string;
-  required?: boolean;
-  values?: string[]; // For enum type
-  ai_visible?: boolean; // false = excluded from AI schema description and result redaction
-}
+// Re-export all types so existing imports from schema-loader continue to work
+export type {
+  FieldConfig, RelationConfig, EntityConfig, SchemaConfig,
+  RepresentationsConfig, VCardRepresentation, ICalRepresentation,
+  CsvRepresentation, JsonRepresentation, DisplayConfig, DisplayAction,
+} from "./schema-types";
 
-export interface RelationConfig {
-  type: "belongs_to";
-  entity: string;
-}
-
-// --- Representation types (external format mappings) ---
-
-export interface VCardRepresentation {
-  mapping: Record<string, string>; // our field → vCard property (FN, TEL, EMAIL, etc.)
-}
-
-export interface ICalRepresentation {
-  mapping: Record<string, string>; // our field → iCal property (DTSTART_DATE, DTEND_TIME, etc.)
-  summary_template?: string; // e.g. "{patient.name} — {specialty}"
-}
-
-export interface CsvRepresentation {
-  headers?: Record<string, string>; // our field → column header (defaults to field name)
-}
-
-export interface JsonRepresentation {
-  include_relations?: string[]; // which relations to include in export
-  groups?: Record<string, string[]>; // group fields into sub-objects
-}
-
-export interface RepresentationsConfig {
-  vcard?: VCardRepresentation;
-  ical?: ICalRepresentation;
-  csv?: CsvRepresentation;
-  json?: JsonRepresentation;
-}
-
-export interface DisplayAction {
-  label: string;                   // button text (e.g. "Download")
-  href: string;                    // URL template with {field} interpolation
-}
-
-export interface DisplayConfig {
-  title?: string;                  // field name or "{field} — {field}" template
-  subtitle?: string | string[];   // field name(s) to show below title
-  badge?: string;                 // enum field name → rendered as colored pill
-  summary?: string;               // text field for truncated preview
-  summary_max?: number;           // truncation length (default 80)
-  actions?: DisplayAction[];       // URL-based actions with template interpolation
-}
-
-export interface EntityConfig {
-  label?: string;
-  label_singular?: string;
-  fields: Record<string, FieldConfig>;
-  relations?: Record<string, RelationConfig>;
-  representations?: RepresentationsConfig;
-  upsert_keys?: string[];
-  display?: DisplayConfig;
-  sidebar_addable?: boolean;
-  exportable?: boolean;
-  immutable?: boolean;
-}
-
-export interface SchemaConfig {
-  entities: Record<string, EntityConfig>;
-}
+// Import for local use in this file
+import {
+  type FieldConfig, type EntityConfig, type SchemaConfig,
+  setSchemaCache,
+} from "./schema-types";
 
 // --- Loader ---
 
@@ -96,6 +39,7 @@ export function loadSchema(schemaPath?: string): SchemaConfig {
   validateSchema(parsed);
 
   cachedSchema = parsed;
+  setSchemaCache(parsed); // Populate the client-safe cache in schema-types.ts
   return parsed;
 }
 
@@ -136,6 +80,39 @@ function validateSchema(schema: SchemaConfig): void {
           `Field "${entityName}.${fieldName}" is type "enum" but missing "values" array`
         );
       }
+
+      // Validate new field properties
+      if (field.unique !== undefined && typeof field.unique !== "boolean") {
+        throw new Error(
+          `Field "${entityName}.${fieldName}" property "unique" must be boolean`
+        );
+      }
+      if (field.indexed !== undefined && typeof field.indexed !== "boolean") {
+        throw new Error(
+          `Field "${entityName}.${fieldName}" property "indexed" must be boolean`
+        );
+      }
+      if (field.default !== undefined) {
+        const validTypes = ["string", "number", "boolean"];
+        if (!validTypes.includes(typeof field.default)) {
+          throw new Error(
+            `Field "${entityName}.${fieldName}" default must be a string, number, or boolean, got ${typeof field.default}`
+          );
+        }
+        // Reject Prisma function calls (now(), uuid(), etc.) — these are handled
+        // by the generator's hardcoded fields (createdAt, updatedAt), not schema.yaml
+        if (typeof field.default === "string" && /\(.*\)/.test(field.default)) {
+          throw new Error(
+            `Field "${entityName}.${fieldName}" default "${field.default}" looks like a function call. ` +
+            `Only literal values are supported in schema.yaml defaults.`
+          );
+        }
+      }
+      if (field.unique && field.indexed) {
+        throw new Error(
+          `Field "${entityName}.${fieldName}" has both unique and indexed — @unique already creates an index, indexed is redundant`
+        );
+      }
     }
 
     // Validate relations
@@ -151,6 +128,30 @@ function validateSchema(schema: SchemaConfig): void {
           throw new Error(
             `Relation "${entityName}.${relName}" references unknown entity "${rel.entity}"`
           );
+        }
+      }
+    }
+
+    // Validate compound indexes
+    if (entity.indexes) {
+      if (!Array.isArray(entity.indexes)) {
+        throw new Error(`Entity "${entityName}" indexes must be an array of arrays`);
+      }
+      for (const cols of entity.indexes) {
+        if (!Array.isArray(cols) || cols.length < 2) {
+          throw new Error(
+            `Entity "${entityName}" each index must be an array of at least 2 column names`
+          );
+        }
+        for (const col of cols) {
+          // Column can be a field name or a relation FK name (e.g. "nurseId")
+          const isField = !!entity.fields[col];
+          const isRelFk = col.endsWith("Id") && !!entity.relations?.[col.replace(/Id$/, "")];
+          if (!isField && !isRelFk) {
+            throw new Error(
+              `Entity "${entityName}" index references unknown column "${col}"`
+            );
+          }
         }
       }
     }

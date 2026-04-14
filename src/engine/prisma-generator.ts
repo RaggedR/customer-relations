@@ -57,7 +57,16 @@ function generateModel(
     const prismaType = ft.prismaType;
     const optional = field.required ? "" : "?";
     const colName = toSnakeCase(fieldName);
-    lines.push(`  ${colName} ${prismaType}${optional}`);
+    const decorators: string[] = [];
+    if (field.unique) decorators.push("@unique");
+    if (field.default !== undefined) {
+      const val = typeof field.default === "boolean" || typeof field.default === "number"
+        ? String(field.default)
+        : `"${field.default}"`;
+      decorators.push(`@default(${val})`);
+    }
+    const decStr = decorators.length ? " " + decorators.join(" ") : "";
+    lines.push(`  ${colName} ${prismaType}${optional}${decStr}`);
   }
 
   // Relations (belongs_to)
@@ -82,6 +91,43 @@ function generateModel(
         const otherModelName = toPascalCase(otherName);
         lines.push(`  ${reverseFieldName} ${otherModelName}[]`);
       }
+    }
+  }
+
+  // Single-column indexes (from field.indexed)
+  for (const [fieldName, field] of Object.entries(entity.fields)) {
+    if (field.indexed) {
+      lines.push(`  @@index([${toSnakeCase(fieldName)}])`);
+    }
+  }
+
+  // Auto-index FK columns from relations (skip if already the leftmost column
+  // of a compound index — the compound index satisfies leftmost-prefix queries)
+  if (entity.relations) {
+    const compoundLeadCols = new Set(
+      (entity.indexes ?? []).map(cols => {
+        const c = cols[0];
+        const isRelFk = c.endsWith("Id") && !!entity.relations?.[c.replace(/Id$/, "")];
+        return isRelFk ? c : toSnakeCase(c);
+      })
+    );
+    for (const [relName] of Object.entries(entity.relations)) {
+      const fkName = foreignKeyName(toSnakeCase(relName));
+      if (!compoundLeadCols.has(fkName)) {
+        lines.push(`  @@index([${fkName}])`);
+      }
+    }
+  }
+
+  // Compound indexes (from entity.indexes)
+  if (entity.indexes) {
+    for (const cols of entity.indexes) {
+      const colNames = cols.map(c => {
+        // FK column names (e.g. "nurseId") are already in Prisma form — don't snake_case them
+        const isRelFk = c.endsWith("Id") && !!entity.relations?.[c.replace(/Id$/, "")];
+        return isRelFk ? c : toSnakeCase(c);
+      });
+      lines.push(`  @@index([${colNames.join(", ")}])`);
     }
   }
 
