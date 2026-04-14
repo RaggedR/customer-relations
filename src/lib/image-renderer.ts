@@ -9,7 +9,7 @@
  * served as flat raster images, never as selectable HTML text.
  */
 
-import { createCanvas } from "canvas";
+import { createCanvas, type CanvasRenderingContext2D } from "canvas";
 
 // ── Constants ────────────────────────────────────────────
 
