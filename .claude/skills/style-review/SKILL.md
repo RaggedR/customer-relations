@@ -1,7 +1,7 @@
 ---
-name: code-review
+name: style-review
 description: >
-  Detailed code review focused on clarity, obviousness, module depth, repetition,
+  Detailed style review focused on clarity, obviousness, module depth, repetition,
   information leaks, and coding style. Reviews changed files or entire modules.
   Use when: after writing code, before PRs, or to assess code quality of a specific area.
   Reports red flags with file:line references and concrete fix suggestions.
