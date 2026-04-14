@@ -60,4 +60,40 @@ describe("Prisma Generator", () => {
       expect(model).toContain("updatedAt DateTime @updatedAt");
     }
   });
+
+  it("generates @unique on fields with unique: true", () => {
+    const output = generatePrismaSchema(schema);
+    // session.token has unique: true in schema.yaml
+    expect(output).toContain("token String @unique");
+  });
+
+  it("generates @default on fields with default values", () => {
+    const output = generatePrismaSchema(schema);
+    // user.active has default: true in schema.yaml
+    expect(output).toContain("active Boolean? @default(true)");
+  });
+
+  it("generates @@index for fields with indexed: true", () => {
+    const output = generatePrismaSchema(schema);
+    // appointment.date has indexed: true
+    expect(output).toContain("@@index([date])");
+    // audit_log.timestamp has indexed: true
+    expect(output).toContain("@@index([timestamp])");
+  });
+
+  it("auto-indexes FK columns from relations", () => {
+    const output = generatePrismaSchema(schema);
+    // Every belongs_to relation should have @@index on its FK
+    expect(output).toContain("@@index([patientId])");
+    expect(output).toContain("@@index([nurseId])");
+    expect(output).toContain("@@index([userId])");
+  });
+
+  it("generates compound @@index from entity indexes", () => {
+    const output = generatePrismaSchema(schema);
+    // appointment has indexes: [[nurseId, date]]
+    expect(output).toContain("@@index([nurseId, date])");
+    // audit_log has indexes: [[entity, entity_id]]
+    expect(output).toContain("@@index([entity, entity_id])");
+  });
 });

@@ -9,7 +9,7 @@ entities:
     fields:
       name: { type: string, required: true }
       date_of_birth: { type: date }
-      medicare_number: { type: string, ai_visible: false }
+      medicare_number: { type: string, ai_visible: false, unique: true }
       phone: { type: phone, ai_visible: false }
       email: { type: email, ai_visible: false }
       address: { type: text, ai_visible: false }
@@ -155,7 +155,7 @@ entities:
       badge: status
     upsert_keys: [date, start_time, patient_name]
     fields:
-      date: { type: date, required: true }
+      date: { type: date, required: true, indexed: true }
       start_time: { type: time, required: true }
       end_time: { type: time, required: true }
       location: { type: string, required: true }
@@ -185,13 +185,15 @@ entities:
           specialty: "Specialty"
           status: "Status"
           notes: "Notes"
+    indexes:
+      - [nurseId, date]
 
   nurse:
     upsert_keys: [name]
     fields:
       name: { type: string, required: true }
       phone: { type: phone, ai_visible: false }
-      email: { type: email, ai_visible: false }
+      email: { type: email, ai_visible: false, unique: true }
       registration_number: { type: string, ai_visible: false }
       caldav_url: { type: string }
       google_calendar_id: { type: string }
@@ -255,15 +257,15 @@ entities:
 
   user:
     fields:
-      email: { type: email, required: true }
+      email: { type: email, required: true, unique: true }
       name: { type: string, required: true }
       password_hash: { type: string, required: true }
       role: { type: enum, values: [admin, nurse, patient], required: true }
-      active: { type: boolean }
+      active: { type: boolean, default: true }
 
   session:
     fields:
-      token: { type: string, required: true }
+      token: { type: string, required: true, unique: true }
       last_active: { type: datetime, required: true }
       expires_at: { type: datetime, required: true }
       ip: { type: string }
@@ -275,7 +277,7 @@ entities:
     label: "Audit Logs"
     label_singular: "Audit Log"
     fields:
-      timestamp: { type: datetime, required: true }
+      timestamp: { type: datetime, required: true, indexed: true }
       action: { type: string, required: true }
       entity: { type: string, required: true }
       entity_id: { type: string, required: true }
@@ -284,3 +286,5 @@ entities:
       user_agent: { type: string }
     relations:
       user: { type: belongs_to, entity: user }
+    indexes:
+      - [entity, entity_id]
