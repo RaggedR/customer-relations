@@ -33,24 +33,34 @@ function isRedirectToLogin(response: Response): boolean {
   return location.includes("/login");
 }
 
-describe("Proxy — admin routes", () => {
-  it("admin cookie on admin route → passes through", async () => {
-    const res = await proxy(makeRequest("/(admin)/patients", adminToken));
+describe("Proxy — admin routes (default-deny)", () => {
+  it("admin cookie on root → passes through", async () => {
+    const res = await proxy(makeRequest("/", adminToken));
     expect(isRedirectToLogin(res)).toBe(false);
   });
 
-  it("no cookie on admin route → redirects to /login", async () => {
-    const res = await proxy(makeRequest("/(admin)/patients"));
+  it("no cookie on root → redirects to /login", async () => {
+    const res = await proxy(makeRequest("/"));
+    expect(isRedirectToLogin(res)).toBe(true);
+  });
+
+  it("admin cookie on /patients → passes through", async () => {
+    const res = await proxy(makeRequest("/patients", adminToken));
+    expect(isRedirectToLogin(res)).toBe(false);
+  });
+
+  it("no cookie on /patients → redirects to /login", async () => {
+    const res = await proxy(makeRequest("/patients"));
     expect(isRedirectToLogin(res)).toBe(true);
   });
 
   it("nurse cookie on admin route → redirects to /login", async () => {
-    const res = await proxy(makeRequest("/(admin)/patients", nurseToken));
+    const res = await proxy(makeRequest("/patients", nurseToken));
     expect(isRedirectToLogin(res)).toBe(true);
   });
 
   it("patient cookie on admin route → redirects to /login", async () => {
-    const res = await proxy(makeRequest("/(admin)/patients", patientToken));
+    const res = await proxy(makeRequest("/patients", patientToken));
     expect(isRedirectToLogin(res)).toBe(true);
   });
 });
@@ -104,6 +114,16 @@ describe("Proxy — public routes", () => {
     const res = await proxy(makeRequest("/_next/static/chunk.js"));
     expect(isRedirectToLogin(res)).toBe(false);
   });
+
+  it("/.well-known/carddav passes through without cookie", async () => {
+    const res = await proxy(makeRequest("/.well-known/carddav"));
+    expect(isRedirectToLogin(res)).toBe(false);
+  });
+
+  it("/favicon.ico passes through without cookie", async () => {
+    const res = await proxy(makeRequest("/favicon.ico"));
+    expect(isRedirectToLogin(res)).toBe(false);
+  });
 });
 
 describe("Proxy — anti-caching headers", () => {
@@ -116,7 +136,7 @@ describe("Proxy — anti-caching headers", () => {
   });
 
   it("admin route response does NOT include anti-caching headers", async () => {
-    const res = await proxy(makeRequest("/(admin)/patients", adminToken));
+    const res = await proxy(makeRequest("/patients", adminToken));
     const cc = res.headers.get("cache-control") ?? "";
     expect(cc).not.toContain("no-store");
   });

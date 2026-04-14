@@ -55,15 +55,25 @@ export function hasRole(payload: SessionPayload, required: Role): boolean {
 /**
  * Map URL pathname to the minimum role required for access.
  *
- * SECURITY: This is the auth boundary. Any new route prefix
- * (e.g. "/receptionist/") MUST be added here. Routes not
- * matched fall through to null (no auth required — public).
+ * SECURITY: Default-deny. Every route requires admin unless explicitly
+ * listed as public or assigned to a lower role. Adding a new public
+ * route requires an explicit entry here — fail-closed by design.
  */
 export function requiresRole(pathname: string): Role | null {
-  // Public routes — no auth needed
-  if (pathname === "/login" || pathname.startsWith("/_next/")) return null;
+  // Normalise to lowercase — prevents auth bypass via /Nurse/ on case-insensitive filesystems
+  pathname = pathname.toLowerCase();
 
-  // Nurse routes (check before admin to handle /api/nurse/*)
+  // Public routes — no auth needed
+  if (
+    pathname === "/login" ||
+    pathname.startsWith("/_next/") ||
+    pathname === "/favicon.ico" ||
+    pathname.startsWith("/.well-known/")
+  ) {
+    return null;
+  }
+
+  // Nurse routes (check before default to handle /api/nurse/*)
   if (pathname.startsWith("/nurse/") || pathname.startsWith("/api/nurse/"))
     return "nurse";
 
@@ -71,9 +81,6 @@ export function requiresRole(pathname: string): Role | null {
   if (pathname.startsWith("/portal/") || pathname.startsWith("/api/portal/"))
     return "patient";
 
-  // Admin routes (explicit group or default for API)
-  if (pathname.startsWith("/(admin)/") || pathname.startsWith("/api/"))
-    return "admin";
-
-  return null;
+  // Everything else requires admin (default-deny)
+  return "admin";
 }

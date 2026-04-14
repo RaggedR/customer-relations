@@ -78,10 +78,21 @@ describe("Auth — role predicates", () => {
   });
 });
 
-describe("Auth — requiresRole", () => {
-  it("admin routes require admin", () => {
-    expect(requiresRole("/(admin)/patients")).toBe("admin");
-    expect(requiresRole("/(admin)/calendar")).toBe("admin");
+describe("Auth — requiresRole (default-deny)", () => {
+  // Default-deny: everything not explicitly public requires admin
+  it("root path requires admin (default-deny)", () => {
+    expect(requiresRole("/")).toBe("admin");
+  });
+
+  it("top-level pages require admin (default-deny)", () => {
+    expect(requiresRole("/patients")).toBe("admin");
+    expect(requiresRole("/calendar")).toBe("admin");
+    expect(requiresRole("/settings")).toBe("admin");
+  });
+
+  it("API routes require admin (default-deny)", () => {
+    expect(requiresRole("/api/patients")).toBe("admin");
+    expect(requiresRole("/api/backup")).toBe("admin");
   });
 
   it("nurse routes require nurse", () => {
@@ -89,11 +100,20 @@ describe("Auth — requiresRole", () => {
     expect(requiresRole("/nurse/schedule")).toBe("nurse");
   });
 
+  it("nurse API routes require nurse", () => {
+    expect(requiresRole("/api/nurse/appointments")).toBe("nurse");
+  });
+
   it("portal routes require patient", () => {
     expect(requiresRole("/portal/bookings")).toBe("patient");
     expect(requiresRole("/portal/profile")).toBe("patient");
   });
 
+  it("portal API routes require patient", () => {
+    expect(requiresRole("/api/portal/profile")).toBe("patient");
+  });
+
+  // Explicit public routes
   it("login page requires no role", () => {
     expect(requiresRole("/login")).toBeNull();
   });
@@ -103,15 +123,17 @@ describe("Auth — requiresRole", () => {
     expect(requiresRole("/_next/data/build-id/page.json")).toBeNull();
   });
 
-  it("API routes require admin by default", () => {
-    expect(requiresRole("/api/patients")).toBe("admin");
+  it("favicon requires no role", () => {
+    expect(requiresRole("/favicon.ico")).toBeNull();
   });
 
-  it("nurse API routes require nurse", () => {
-    expect(requiresRole("/api/nurse/appointments")).toBe("nurse");
+  it(".well-known routes require no role", () => {
+    expect(requiresRole("/.well-known/carddav")).toBeNull();
   });
 
-  it("portal API routes require patient", () => {
-    expect(requiresRole("/api/portal/profile")).toBe("patient");
+  // Unknown paths default to admin (fail-closed)
+  it("unknown paths require admin (fail-closed)", () => {
+    expect(requiresRole("/unknown/page")).toBe("admin");
+    expect(requiresRole("/anything")).toBe("admin");
   });
 });

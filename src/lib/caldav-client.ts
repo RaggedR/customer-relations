@@ -11,6 +11,7 @@
 import { DAVClient } from "tsdav";
 import { generateVEvent, makeUid } from "./ical";
 import { findAll } from "./repository";
+import { decryptToken } from "./token-crypto";
 import type { Row } from "./parsers";
 
 interface CalendarConnection {
@@ -27,8 +28,24 @@ interface CalendarConnection {
  * Get the CalDAV client for a calendar connection.
  * Handles Google OAuth2 token refresh.
  */
+/**
+ * Decrypt a stored token, falling back to plaintext for legacy
+ * rows that were stored before encryption was enabled.
+ */
+function tryDecrypt(token: string | null): string | undefined {
+  if (!token) return undefined;
+  try {
+    return decryptToken(token);
+  } catch {
+    // Legacy plaintext token — return as-is for graceful migration
+    return token;
+  }
+}
+
 async function getClient(conn: CalendarConnection): Promise<DAVClient> {
   const isGoogle = conn.provider === "google";
+  const accessToken = tryDecrypt(conn.access_token);
+  const refreshToken = tryDecrypt(conn.refresh_token);
 
   const client = new DAVClient({
     serverUrl: isGoogle
@@ -37,12 +54,12 @@ async function getClient(conn: CalendarConnection): Promise<DAVClient> {
     credentials: isGoogle
       ? {
           tokenUrl: "https://oauth2.googleapis.com/token",
-          refreshToken: conn.refresh_token ?? undefined,
-          accessToken: conn.access_token ?? undefined,
+          refreshToken,
+          accessToken,
         }
       : {
           username: "",
-          password: conn.access_token ?? "",
+          password: accessToken ?? "",
         },
     authMethod: isGoogle ? "Oauth" : "Basic",
     defaultAccountType: "caldav",

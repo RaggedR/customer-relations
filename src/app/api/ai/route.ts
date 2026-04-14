@@ -11,12 +11,16 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { prisma } from "@/lib/prisma";
+import { prismaReadonly } from "@/lib/prisma-readonly";
 import { validateAiSql } from "@/lib/sql-safety";
 import { generateSchemaDescription } from "@/lib/generate-schema-description";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { resolveNames } from "@/lib/name-resolution";
 import { logAuditEvent } from "@/lib/audit";
+import { getSessionUser } from "@/lib/session";
+import { createRateLimiter, getRateLimitKey } from "@/lib/rate-limit";
+
+const aiLimiter = createRateLimiter(30, 60_000); // 30 requests per minute
 
 const SYSTEM_PROMPT = `You are a healthcare practice assistant. You help clinicians query their patient management database.
 
@@ -109,6 +113,21 @@ function getGenAI() {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit before any expensive work
+  const rlKey = getRateLimitKey(request);
+  const rl = aiLimiter(rlKey);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil((rl.resetMs - Date.now()) / 1000)),
+        },
+      },
+    );
+  }
+
   return withErrorHandler("POST /api/ai", async () => {
     const { question, model: modelName } = await request.json();
 
@@ -187,23 +206,27 @@ export async function POST(request: NextRequest) {
     // Step 2: Execute SQL
     let rows: Record<string, unknown>[];
     try {
-      rows = await prisma.$queryRawUnsafe(sql) as Record<string, unknown>[];
+      rows = await prismaReadonly.$queryRawUnsafe(sql) as Record<string, unknown>[];
     } catch (dbError) {
+      console.error("AI SQL execution failed:", { sql, error: (dbError as Error).message });
       return NextResponse.json({
-        error: "SQL execution failed",
+        error: "Query execution failed",
         sql,
-        detail: (dbError as Error).message,
       }, { status: 500 });
     }
 
     // Audit: log AI query execution (fire-and-forget)
-    // TODO: extract userId from session once auth is wired
+    const session = await getSessionUser(request);
+    const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined;
+    const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
-      userId: null,
+      userId: session?.userId ?? null,
       action: "ai_query",
       entity: "sql",
       entityId: String(rows.length),
       details: sql,
+      ip,
+      userAgent,
     });
 
     // Serialize BigInt values to numbers

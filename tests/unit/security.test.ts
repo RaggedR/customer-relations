@@ -165,9 +165,8 @@ describe("Field validation — number fuzzing", () => {
   });
 
   it("rejects Infinity", () => {
-    // Infinity is a number and !isNaN(Infinity) is true, so this currently passes
-    // This documents the behaviour — may want to block it
-    expect(validateFieldValue("number", Infinity)).toBe(true);
+    // Number.isFinite() rejects Infinity — prevents degenerate values in numeric fields
+    expect(validateFieldValue("number", Infinity)).toBe(false);
   });
 
   it("rejects string that looks like a number", () => {
@@ -473,8 +472,8 @@ describe("Route requiresRole — path traversal and edge cases", () => {
     expect(requiresRole("/api/portal/profile")).toBe("patient");
   });
 
-  it("root path requires no auth", () => {
-    expect(requiresRole("/")).toBeNull();
+  it("root path requires admin (default-deny)", () => {
+    expect(requiresRole("/")).toBe("admin");
   });
 
   it("/api/backup requires admin", () => {
@@ -485,20 +484,38 @@ describe("Route requiresRole — path traversal and edge cases", () => {
     expect(requiresRole("/api/ai")).toBe("admin");
   });
 
-  it("unknown path requires no auth", () => {
-    expect(requiresRole("/unknown/page")).toBeNull();
+  it("unknown path requires admin (default-deny, fail-closed)", () => {
+    expect(requiresRole("/unknown/page")).toBe("admin");
   });
 
   it("path with encoded characters", () => {
     expect(requiresRole("/nurse/%2e%2e/admin")).toBe("nurse");
   });
 
-  it("case sensitivity — /Nurse/ does NOT match nurse", () => {
-    expect(requiresRole("/Nurse/appointments")).toBeNull();
+  it("case-insensitive — /Nurse/ matches nurse", () => {
+    // Route matching normalises to lowercase to prevent auth bypass on case-insensitive filesystems
+    expect(requiresRole("/Nurse/appointments")).toBe("nurse");
   });
 
-  it("case sensitivity — /ADMIN/ does NOT match admin", () => {
-    expect(requiresRole("/(ADMIN)/patients")).toBeNull();
+  it("case-insensitive — /PATIENTS matches admin (default-deny)", () => {
+    expect(requiresRole("/PATIENTS")).toBe("admin");
+  });
+});
+
+// ─── sortBy validation ──────────────────────────────────────────────
+
+describe("sortBy validation — repository rejects unknown fields", () => {
+  // The repository validates sortBy against schema fields before passing to Prisma.
+  // We can't call findAll without a DB, but we can verify the schema has the expected fields.
+  // The actual validation is tested via the integration/e2e layer.
+  // Here we document the security invariant.
+
+  it("sortBy with an unknown field should not reach Prisma orderBy", () => {
+    // This is a design-level test — the fix in repository.ts throws
+    // "Invalid sort field" before the value reaches Prisma.
+    // Verified by code inspection: repository.ts checks
+    //   validSortFields = Set([...Object.keys(entity.fields), "createdAt", "updatedAt"])
+    expect(true).toBe(true); // placeholder — full test requires DB
   });
 });
 

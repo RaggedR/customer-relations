@@ -12,10 +12,12 @@
  * nurse → patient → children → appointment → attachment
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSchema, foreignKeyName } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
 import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
+import { logAuditEvent } from "@/lib/audit";
+import { getSessionUser } from "@/lib/session";
 import type { Row } from "@/lib/parsers";
 
 /**
@@ -46,7 +48,7 @@ function getImportOrder(schema: ReturnType<typeof getSchema>): string[] {
   return ordered;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   return withErrorHandler("GET /api/backup", async () => {
     const schema = getSchema();
     const importOrder = getImportOrder(schema);
@@ -99,6 +101,18 @@ export async function GET() {
       ),
       entities,
     };
+
+    // Audit: log backup export (fire-and-forget)
+    const session = await getSessionUser(request);
+    logAuditEvent({
+      userId: session?.userId ?? null,
+      action: "export",
+      entity: "backup",
+      entityId: "full",
+      details: `entities=${Object.keys(entities).length}`,
+      ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined,
+      userAgent: request.headers.get("user-agent") ?? undefined,
+    });
 
     const dateStr = new Date().toISOString().split("T")[0];
 

@@ -57,6 +57,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         "Content-Type": mimeType,
         "Content-Disposition": `attachment; filename="${safeFilename}"`,
         "Content-Length": String(buffer.length),
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
       },
     });
   } catch (error) {

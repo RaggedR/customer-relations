@@ -42,6 +42,23 @@ const SKIP_WORDS = new Set([
   "morning", "afternoon", "evening", "which", "nurse", "most", "least",
 ]);
 
+// ── Name Sanitisation ────────────────────────────────────
+
+const MAX_NAME_LENGTH = 100;
+
+/**
+ * Sanitise a database name before interpolating it into an LLM prompt.
+ * Strips control characters and structural chars that could be used
+ * for prompt injection.
+ */
+export function sanitiseName(name: string): string {
+  return name
+    .replace(/[\x00-\x1f\x7f\u0080-\u009f\u200b-\u200f\u2028\u2029\ufeff]/g, "")
+    .replace(/[[\]{}"]/g, "")
+    .trim()
+    .slice(0, MAX_NAME_LENGTH);
+}
+
 // ── Levenshtein ──────────────────────────────────────────
 
 /**
@@ -134,16 +151,18 @@ export async function resolveNames(question: string): Promise<NameResolution> {
     }
 
     if (bestMatch) {
+      const safeName = sanitiseName(bestMatch.name);
       if (bestMatch.distance <= CONFIDENT_DISTANCE) {
-        // Confident — auto-resolve
+        // Confident — auto-resolve (JSON-encoded to prevent prompt injection)
+        const resolved = JSON.stringify({ type: bestMatch.type, name: safeName });
         return {
-          question: question + `\n\n[Name resolved: the ${bestMatch.type} is "${bestMatch.name}"]`,
+          question: question + `\n\n[CRM_RESOLVED]${resolved}[/CRM_RESOLVED]`,
         };
       } else {
         // Uncertain — ask the user to confirm
         return {
           question,
-          clarify: `Did you mean ${bestMatch.name}?`,
+          clarify: `Did you mean ${safeName}?`,
         };
       }
     }
