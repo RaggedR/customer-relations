@@ -142,6 +142,9 @@ export async function findAll(
     sortOrder?: "asc" | "desc";
     filterBy?: Record<string, unknown>;
     dateRange?: { field: string; from: string; to: string };
+    page?: number;      // 1-based page number — when set, returns { items, totalCount, page, pageSize }
+    pageSize?: number;  // default 50
+    shallow?: boolean;  // skip relation includes (for list views that only need top-level fields)
   }
 ) {
   const schema = getSchema();
@@ -149,11 +152,15 @@ export async function findAll(
   if (!entity) throw new Error(`Unknown entity: ${entityName}`);
 
   const model = getModelDelegate(entityName);
-  const includes = buildIncludes(entityName, entity);
 
   const args: Record<string, unknown> = {};
-  if (Object.keys(includes).length > 0) {
-    args.include = includes;
+
+  // Include relations unless shallow mode is requested (list views don't need nested data)
+  if (!options?.shallow) {
+    const includes = buildIncludes(entityName, entity);
+    if (Object.keys(includes).length > 0) {
+      args.include = includes;
+    }
   }
 
   const whereConditions: Record<string, unknown>[] = [];
@@ -208,6 +215,22 @@ export async function findAll(
     args.orderBy = { [toSnakeCase(options.sortBy)]: options.sortOrder || "asc" };
   } else {
     args.orderBy = { createdAt: "desc" };
+  }
+
+  // Pagination — when page is provided, return { items, totalCount, page, pageSize }
+  if (options?.page) {
+    const MAX_PAGE_SIZE = 200;
+    const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, options.pageSize ?? 50));
+    const page = Math.max(1, options.page);
+    args.take = pageSize;
+    args.skip = (page - 1) * pageSize;
+
+    const [items, totalCount] = await Promise.all([
+      model.findMany(args),
+      model.count(args.where ? { where: args.where } : {}),
+    ]);
+
+    return { items, totalCount, page, pageSize };
   }
 
   return model.findMany(args);
