@@ -17,6 +17,13 @@ import { PrismaPg } from "@prisma/adapter-pg";
 const connectionString =
   process.env.DATABASE_URL_READONLY || process.env.DATABASE_URL || "";
 
+if (!process.env.DATABASE_URL_READONLY) {
+  console.warn(
+    "prisma-readonly: DATABASE_URL_READONLY not set — AI queries using read-write DATABASE_URL. " +
+    "Set DATABASE_URL_READONLY to the crm_ai_user connection string for write protection.",
+  );
+}
+
 const globalForReadonly = globalThis as unknown as {
   prismaReadonly: PrismaClient | undefined;
 };

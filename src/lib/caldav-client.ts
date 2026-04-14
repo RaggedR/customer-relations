@@ -25,10 +25,6 @@ interface CalendarConnection {
 }
 
 /**
- * Get the CalDAV client for a calendar connection.
- * Handles Google OAuth2 token refresh.
- */
-/**
  * Decrypt a stored token, falling back to plaintext for legacy
  * rows that were stored before encryption was enabled.
  */

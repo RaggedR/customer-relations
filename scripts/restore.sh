@@ -58,6 +58,7 @@ restore_sql() {
 
 restore_json() {
   local src="$1"
+  local IMPORT_ORDER ENTITY SLUG COUNT TEMP_FILE RESULT CREATED UPDATED ERRORS
   echo "This will import entities from the JSON backup via the API."
   echo "Existing records matching upsert keys will be updated."
   echo ""
