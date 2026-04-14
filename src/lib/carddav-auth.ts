@@ -16,11 +16,14 @@ export function checkAuth(request: Request): boolean {
   if (!auth?.startsWith("Basic ")) return false;
 
   const decoded = Buffer.from(auth.slice(6), "base64").toString();
-  const [, password] = decoded.split(":");
+  // RFC 7617 §2: only the FIRST colon separates username from password;
+  // passwords may themselves contain colons.
+  const colonIdx = decoded.indexOf(":");
+  const password = colonIdx >= 0 ? decoded.slice(colonIdx + 1) : "";
   try {
     return timingSafeEqual(Buffer.from(password), Buffer.from(CARDDAV_PASSWORD));
   } catch {
-    return false; // Lengths differ
+    return false; // Lengths differ — timingSafeEqual requires equal-length buffers
   }
 }
 
