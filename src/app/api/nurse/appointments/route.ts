@@ -11,10 +11,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { resolveNurse } from "@/lib/nurse-helpers";
+import { findAll } from "@/lib/repository";
 
 export async function GET(request: NextRequest) {
   return withErrorHandler("GET /api/nurse/appointments", async () => {
@@ -39,32 +39,32 @@ export async function GET(request: NextRequest) {
     toDate.setDate(toDate.getDate() + 7);
     const toStr = searchParams.get("to") ?? toDate.toISOString().split("T")[0];
 
-    const appointments = await prisma.appointment.findMany({
-      where: {
-        nurseId: nurse.id,
-        date: {
-          gte: new Date(fromStr),
-          lte: new Date(toStr + "T23:59:59"),
-        },
-      },
-      include: {
-        patient: { select: { id: true, name: true } },
-      },
-      orderBy: [{ date: "asc" }, { start_time: "asc" }],
-    });
+    // findAll supports single-field sort only. The original query used a compound
+    // sort [date asc, start_time asc] for stable same-day ordering.
+    // Compound sort support is tracked in issue #17 — until then, appointments
+    // on the same calendar day may arrive in Postgres heap order.
+    const appointments = await findAll("appointment", {
+      filterBy: { nurseId: nurse.id },
+      dateRange: { field: "date", from: fromStr, to: toStr + "T23:59:59" },
+      sortBy: "date",
+      sortOrder: "asc",
+    }) as Record<string, unknown>[];
 
     // Return scheduling data only — no clinical content
-    const result = appointments.map((appt) => ({
-      id: appt.id,
-      date: appt.date,
-      startTime: appt.start_time,
-      endTime: appt.end_time,
-      location: appt.location,
-      specialty: appt.specialty,
-      status: appt.status,
-      patientName: appt.patient?.name ?? "Unknown",
-      patientId: appt.patient?.id,
-    }));
+    const result = appointments.map((appt) => {
+      const patient = appt.patient as Record<string, unknown> | null | undefined;
+      return {
+        id: appt.id,
+        date: appt.date,
+        startTime: appt.start_time,
+        endTime: appt.end_time,
+        location: appt.location,
+        specialty: appt.specialty,
+        status: appt.status,
+        patientName: (patient?.name as string) ?? "Unknown",
+        patientId: patient?.id,
+      };
+    });
 
     return NextResponse.json(result);
   });
