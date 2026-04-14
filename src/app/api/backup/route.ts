@@ -54,7 +54,7 @@ export async function GET() {
     const entities: Record<string, Row[]> = {};
 
     for (const entityName of importOrder) {
-      if (SENSITIVE_ENTITIES.includes(entityName)) continue;
+      if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) continue;
 
       const records = (await findAll(entityName)) as Row[];
       // Strip nested relation objects — just keep flat fields + FK IDs

@@ -118,7 +118,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  if (SENSITIVE_ENTITIES.includes(entityName)) {
+  if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) {
     return NextResponse.json(
       { error: `Export of ${entityName} is not allowed` },
       { status: 403 }

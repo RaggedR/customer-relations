@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  if (SENSITIVE_ENTITIES.includes(entityName)) {
+  if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) {
     return NextResponse.json(
       { error: `Import of ${entityName} is not allowed` },
       { status: 403 }
