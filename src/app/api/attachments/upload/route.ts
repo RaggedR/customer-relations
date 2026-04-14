@@ -21,6 +21,8 @@ import path from "path";
 import { create } from "@/lib/repository";
 import { getSchema } from "@/lib/schema";
 import { withErrorHandler } from "@/lib/api-helpers";
+import { logAuditEvent } from "@/lib/audit";
+import { getSessionUser } from "@/lib/session";
 
 const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -133,6 +135,17 @@ export async function POST(request: NextRequest) {
       category,
       description,
       patient: Number(patientId),
+    });
+
+    const session = await getSessionUser(request);
+    logAuditEvent({
+      userId: session?.userId ?? null,
+      action: "create",
+      entity: "attachment",
+      entityId: String(record.id),
+      details: `Uploaded ${category} attachment for patient ${patientId}`,
+      ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined,
+      userAgent: request.headers.get("user-agent") ?? undefined,
     });
 
     return NextResponse.json(record, { status: 201 });

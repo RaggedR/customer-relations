@@ -14,6 +14,8 @@ import ExcelJS from "exceljs";
 import { getSchema, getCsvRepresentation } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
 import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
+import { logAuditEvent } from "@/lib/audit";
+import { getSessionUser } from "@/lib/session";
 import type { Row } from "@/lib/parsers";
 
 interface RouteParams {
@@ -141,6 +143,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const items = (await findAll(entityName)) as Row[];
     const columns = buildColumns(entityName);
     const rows = items.map((item) => flattenRow(item, entityName, columns));
+
+    const session = await getSessionUser(request);
+    logAuditEvent({
+      userId: session?.userId ?? null,
+      action: "export",
+      entity: entityName,
+      entityId: "*",
+      details: `Exported ${items.length} ${entityName} records as ${format}`,
+      ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? undefined,
+      userAgent: request.headers.get("user-agent") ?? undefined,
+    });
 
     // ── JSON ──────────────────────────────────────────────
     if (format === "json") {
