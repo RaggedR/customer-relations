@@ -66,7 +66,7 @@ export function levenshtein(a: string, b: string): number {
 
 // ── Name Resolution ────────────────────────────────────���─
 
-type Row = Record<string, unknown>;
+import type { Row } from "@/lib/parsers";
 
 /**
  * Resolve fuzzy names before sending to the LLM.
@@ -147,8 +147,8 @@ export async function resolveNames(question: string): Promise<NameResolution> {
         };
       }
     }
-  } catch {
-    // If name resolution fails, continue with the original question
+  } catch (err) {
+    console.warn("Name resolution failed:", err);
   }
   return { question };
 }

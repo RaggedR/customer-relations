@@ -19,6 +19,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const { id } = await context.params;
 
   // Audit: log access to patient record (fire-and-forget)
+  // TODO: extract userId from session once auth is wired
   logAuditEvent({
     userId: "admin",
     action: "view",

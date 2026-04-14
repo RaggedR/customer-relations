@@ -11,12 +11,11 @@ import { findById, update } from "@/lib/repository";
 import { generateVCard, parseVCard } from "@/lib/vcard";
 import { checkAuth, addressBookToEntity } from "@/lib/carddav-auth";
 import { withErrorHandler } from "@/lib/api-helpers";
+import type { Row } from "@/lib/parsers";
 
 interface RouteParams {
   params: Promise<{ addressbook: string; id: string }>;
 }
-
-type Row = Record<string, unknown>;
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   if (!checkAuth(request)) {

@@ -11,16 +11,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import { getSchema } from "@/lib/schema";
-import { getCsvRepresentation } from "@/lib/schema";
+import { getSchema, getCsvRepresentation } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
-import { withErrorHandler } from "@/lib/api-helpers";
+import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
+import type { Row } from "@/lib/parsers";
 
 interface RouteParams {
   params: Promise<{ entity: string }>;
 }
-
-type Row = Record<string, unknown>;
 
 /**
  * Build column definitions from the schema and CSV representation.
@@ -120,8 +118,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  // Block export of entities that contain sensitive fields (tokens, credentials)
-  const SENSITIVE_ENTITIES = ["calendar_connection"];
   if (SENSITIVE_ENTITIES.includes(entityName)) {
     return NextResponse.json(
       { error: `Export of ${entityName} is not allowed` },

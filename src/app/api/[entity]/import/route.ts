@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSchema } from "@/lib/schema";
 import { parseFile } from "@/lib/parsers";
 import { importEntities } from "@/lib/import";
-import { withErrorHandler } from "@/lib/api-helpers";
+import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
 
 interface RouteParams {
   params: Promise<{ entity: string }>;
@@ -32,8 +32,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  // Block import of entities that contain sensitive fields (tokens, credentials)
-  const SENSITIVE_ENTITIES = ["calendar_connection"];
   if (SENSITIVE_ENTITIES.includes(entityName)) {
     return NextResponse.json(
       { error: `Import of ${entityName} is not allowed` },

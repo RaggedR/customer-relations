@@ -6,8 +6,7 @@
  */
 
 import { getICalRepresentation } from "@/lib/schema";
-
-type Row = Record<string, unknown>;
+import type { Row } from "@/lib/parsers";
 
 /** Build a UID string for an entity record (exported for CalDAV client reuse) */
 export function makeUid(entityName: string, id: unknown): string {

@@ -8,7 +8,7 @@
 const CARDDAV_PASSWORD = process.env.CARDDAV_PASSWORD || "";
 
 export function checkAuth(request: Request): boolean {
-  if (!CARDDAV_PASSWORD) return true; // No password = no auth required
+  if (!CARDDAV_PASSWORD) return true; // Dev-only: production must set CARDDAV_PASSWORD
 
   const auth = request.headers.get("authorization");
   if (!auth?.startsWith("Basic ")) return false;

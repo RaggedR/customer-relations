@@ -19,6 +19,7 @@ export interface WindowManager {
 
 export function useWindowManager(): WindowManager {
   const [openWindows, setOpenWindows] = useState<WindowState[]>([]);
+  // Start above typical z-index values
   const [nextZ, setNextZ] = useState(9000);
 
   const addWindow = useCallback(

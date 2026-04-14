@@ -11,8 +11,7 @@
 import { DAVClient } from "tsdav";
 import { generateVEvent, makeUid } from "./ical";
 import { findAll } from "./repository";
-
-type Row = Record<string, unknown>;
+import type { Row } from "./parsers";
 
 interface CalendarConnection {
   id: number;

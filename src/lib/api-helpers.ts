@@ -7,6 +7,12 @@
 import { NextResponse } from "next/server";
 
 /**
+ * Entities containing sensitive fields (tokens, credentials) that must not
+ * be exported, imported, or included in backups.
+ */
+export const SENSITIVE_ENTITIES = ["calendar_connection"] as const;
+
+/**
  * Wrap a route handler with standardised error handling.
  * Catches unhandled errors and returns a 500 JSON response.
  *

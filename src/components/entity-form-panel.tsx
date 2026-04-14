@@ -269,7 +269,7 @@ function RelationSelect({
           );
         }
       })
-      .catch(() => {});
+      .catch((err) => console.warn(`Failed to load ${relatedEntity} options:`, err));
   }, [relatedEntity]);
 
   const label = name.replace(/_/g, " ");

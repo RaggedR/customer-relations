@@ -15,9 +15,8 @@
 import { NextResponse } from "next/server";
 import { getSchema, foreignKeyName } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
-import { withErrorHandler } from "@/lib/api-helpers";
-
-type Row = Record<string, unknown>;
+import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
+import type { Row } from "@/lib/parsers";
 
 /**
  * Determine the correct import order based on FK dependencies.
@@ -53,9 +52,6 @@ export async function GET() {
     const importOrder = getImportOrder(schema);
 
     const entities: Record<string, Row[]> = {};
-
-    // Entities with credentials — skip entirely (tokens must be re-authorized after restore)
-    const SENSITIVE_ENTITIES = ["calendar_connection"];
 
     for (const entityName of importOrder) {
       if (SENSITIVE_ENTITIES.includes(entityName)) continue;

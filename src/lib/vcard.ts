@@ -6,8 +6,7 @@
  */
 
 import { getVCardRepresentation, reverseMapping } from "@/lib/schema";
-
-type Row = Record<string, unknown>;
+import type { Row } from "@/lib/parsers";
 
 /**
  * Generate a vCard 3.0 string for a record.

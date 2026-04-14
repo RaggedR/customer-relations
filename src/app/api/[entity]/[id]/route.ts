@@ -15,6 +15,7 @@ interface RouteParams {
   params: Promise<{ entity: string; id: string }>;
 }
 
+// Re-wrap id for route factory's Promise-based params signature
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const { entity, id } = await params;
   return makeGetUpdateDeleteHandlers(entity).GET(request, { params: Promise.resolve({ id }) });

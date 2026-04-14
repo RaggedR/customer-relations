@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import type { SchemaConfig } from "@/lib/schema";
 import { entityLabel, findReverseRelationKey, toSnakeCase } from "@/lib/schema";
-import { renderFieldValue, renderEntitySummary, recordDisplayName } from "@/lib/renderers";
+import { renderFieldValue, recordDisplayName } from "@/lib/renderers";
 
 interface EntityDetailPanelProps {
   entityName: string;
@@ -108,17 +108,17 @@ export function EntityDetailPanel({
             const relObj = record[relName] as Record<string, unknown> | undefined;
             if (!relObj || typeof relObj !== "object") return null;
             const relId = relObj.id as number;
-            const relName_ = recordDisplayName(relObj, schema.entities[rel.entity]);
+            const relDisplayName = recordDisplayName(relObj, schema.entities[rel.entity]);
             return (
               <div key={relName} className="flex gap-2 text-xs">
                 <span className="text-muted-foreground shrink-0 w-28 text-right">
                   {relName.replace(/_/g, " ")}
                 </span>
                 <button
-                  onClick={() => onNavigateToRelated(rel.entity, relId, relName_)}
+                  onClick={() => onNavigateToRelated(rel.entity, relId, relDisplayName)}
                   className="text-blue-400 hover:text-blue-300 hover:underline transition-colors"
                 >
-                  {relName_}
+                  {relDisplayName}
                 </button>
               </div>
             );
@@ -288,69 +288,6 @@ export function EntityDetailPanel({
             onClick={() => window.open(`/api/${entityName}/export?format=xlsx`, "_blank")}>
             Excel
           </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// --- Inline property summaries ---
-
-function PropertySummary({
-  entityName,
-  items,
-  schema,
-}: {
-  entityName: string;
-  items: Record<string, unknown>[];
-  schema: SchemaConfig;
-  parentEntityName: string;
-  parentId: number;
-}) {
-  const propConfig = schema.entities[entityName];
-  if (!propConfig) return null;
-
-  return (
-    <div>
-      <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-        {entityLabel(entityName, schema)} ({items.length})
-      </h4>
-      <div className="space-y-1.5">
-        {items.slice(0, 5).map((item, idx) => {
-          const summary = renderEntitySummary(entityName, item, propConfig, "detail");
-          return (
-            <div
-              key={idx}
-              className="text-xs bg-floating-muted rounded-md p-2 space-y-0.5"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="font-medium">{summary.title}</span>
-                  {summary.subtitle && (
-                    <span className="text-muted-foreground ml-1.5">{summary.subtitle}</span>
-                  )}
-                </div>
-                {summary.badge && <span>{summary.badge}</span>}
-              </div>
-              {summary.summary && (
-                <div className="text-muted-foreground truncate">{summary.summary}</div>
-              )}
-              {summary.actions?.map((action, i) => (
-                <a
-                  key={i}
-                  href={action.href}
-                  className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 hover:bg-blue-500/25"
-                >
-                  {action.label}
-                </a>
-              ))}
-            </div>
-          );
-        })}
-        {items.length > 5 && (
-          <div className="text-[10px] text-muted-foreground px-2">
-            + {items.length - 5} more
-          </div>
         )}
       </div>
     </div>
