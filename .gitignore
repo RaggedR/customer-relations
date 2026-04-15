@@ -47,3 +47,7 @@ next-env.d.ts
 # uploaded files (keep the directory structure)
 /uploads/*
 !/uploads/.gitkeep
+
+# Planning docs (not part of the codebase)
+AUDIOLOGY_CRM_DESIGN.md
+CLAUDE_PROJECT_PROMPT.md
