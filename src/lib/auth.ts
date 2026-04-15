@@ -50,6 +50,23 @@ export function hasRole(payload: SessionPayload, required: Role): boolean {
   return ROLE_HIERARCHY[payload.role] >= ROLE_HIERARCHY[required];
 }
 
+// --- Idle timeout configuration ---
+
+/**
+ * Per-role idle timeout in milliseconds.
+ * Nurses: 10 min (clinical workstations often shared).
+ * Admins: 30 min (longer operational tasks).
+ * Patients: null (personal devices; no idle cutoff).
+ */
+const IDLE_TIMEOUTS_MS: Partial<Record<Role, number>> = {
+  nurse: 10 * 60 * 1000,
+  admin: 30 * 60 * 1000,
+};
+
+export function getIdleTimeout(role: Role): number | null {
+  return IDLE_TIMEOUTS_MS[role] ?? null;
+}
+
 // --- Route → role mapping ---
 
 /**

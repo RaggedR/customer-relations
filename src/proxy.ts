@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { verifyToken, hasRole, requiresRole } from "@/lib/auth";
+import { verifyToken, hasRole, requiresRole, getIdleTimeout } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 // getSecret is a pure env-var accessor with no mutable state, so it's safe to
@@ -9,8 +9,6 @@ import { logger } from "@/lib/logger";
 import { getSecret } from "@/lib/session";
 
 const COOKIE_NAME = "session";
-const NURSE_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 function parseCookie(request: NextRequest): string | undefined {
   return request.cookies.get(COOKIE_NAME)?.value;
@@ -66,13 +64,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(new URL(redirect, request.url));
   }
 
-  // Idle timeout: nurses 10 min, admins 30 min.
-  // Patient sessions have no idle timeout (null) — patients access read-only
-  // appointment summaries from personal devices and may have long gaps between views.
-  const idleTimeoutMs =
-    payload.role === "nurse" ? NURSE_IDLE_TIMEOUT_MS :
-    payload.role === "admin" ? ADMIN_IDLE_TIMEOUT_MS :
-    null;
+  // Idle timeout: nurses 10 min, admins 30 min, patients none.
+  // Defined centrally in auth.ts — getIdleTimeout() is the single source of truth.
+  const idleTimeoutMs = getIdleTimeout(payload.role);
 
   if (idleTimeoutMs !== null) {
     const idleMs = Date.now() - dbSession.last_active.getTime();

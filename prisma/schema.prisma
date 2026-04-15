@@ -139,6 +139,7 @@ model Nurse {
   registration_number String?
   caldav_url String?
   google_calendar_id String?
+  feed_token String?
   notes String?
   appointments Appointment[]
   nurse_specialtys NurseSpecialty[]
