@@ -20,6 +20,7 @@ import { withErrorHandler } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { getClientIp } from "@/lib/api-helpers";
+import { randomUUID } from "crypto";
 import type { Row } from "@/lib/parsers";
 
 interface RouteParams {
@@ -64,8 +65,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       entity: "nurse",
       entityId: String(nurseId),
       details: `iCal feed served (${appointments.length} appointments)`,
-      ip: getClientIp(request),
-      userAgent: request.headers.get("user-agent") ?? undefined,
+      context: {
+        userId: null,
+        ip: getClientIp(request),
+        userAgent: request.headers.get("user-agent") ?? undefined,
+        correlationId: randomUUID(),
+      },
     });
 
     const calName = `${nurse.name} — Customer Relations`;
