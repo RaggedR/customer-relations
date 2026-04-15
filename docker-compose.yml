@@ -26,6 +26,11 @@ services:
     environment:
       DATABASE_URL: postgresql://crm:${POSTGRES_PASSWORD:-crm_dev_password}@db:5432/customer_relations
       SESSION_SECRET: ${SESSION_SECRET}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      CARDDAV_PASSWORD: ${CARDDAV_PASSWORD}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE}
+      DATABASE_URL_READONLY: ${DATABASE_URL_READONLY}
     depends_on:
       db:
         condition: service_healthy
