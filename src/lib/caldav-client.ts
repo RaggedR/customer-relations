@@ -10,7 +10,7 @@
 
 import { DAVClient, type DAVCalendar } from "tsdav";
 import { generateVEvent, makeUid } from "./ical";
-import { findAll } from "./repository";
+import { findAll, update } from "./repository";
 import { tryDecrypt } from "./token-crypto";
 import { withRetry } from "./retry";
 import { logger } from "@/lib/logger";
@@ -89,27 +89,42 @@ async function withCalendarConnections(
 
 /**
  * Push a new appointment to all connected calendars for the assigned nurse.
+ * Captures the ETag from the response and stores it on the appointment record
+ * for optimistic concurrency on subsequent update/delete operations.
  */
 export async function pushAppointment(
   appointment: Row
 ): Promise<void> {
-  await withCalendarConnections(appointment.nurseId as number | undefined, "push", appointment.id as number, async (client, calendar, uid) => {
+  const appointmentId = appointment.id as number;
+  await withCalendarConnections(appointment.nurseId as number | undefined, "push", appointmentId, async (client, calendar, uid) => {
     const ical = generateVEvent(appointment);
-    await client.createCalendarObject({
+    const response = await client.createCalendarObject({
       calendar,
       filename: `${uid}.ics`,
       iCalString: ical,
     });
+    // Capture ETag from the response for future If-Match headers.
+    // tsdav's createCalendarObject returns a native Response object.
+    const etag = extractEtag(response);
+    if (etag) {
+      await storeEtag(appointmentId, etag);
+    }
   });
 }
 
 /**
  * Update an existing appointment on all connected calendars.
+ * Uses the stored ETag (if available) for optimistic concurrency via If-Match.
+ * If the server returns 412 Precondition Failed, the event was modified
+ * externally — we log a warning but don't throw (fire-and-forget).
  */
 export async function updateAppointment(
   appointment: Row
 ): Promise<void> {
-  await withCalendarConnections(appointment.nurseId as number | undefined, "update", appointment.id as number, async (client, calendar, uid) => {
+  const appointmentId = appointment.id as number;
+  const storedEtag = (appointment as Record<string, unknown>).caldav_etag as string | undefined;
+
+  await withCalendarConnections(appointment.nurseId as number | undefined, "update", appointmentId, async (client, calendar, uid) => {
     const ical = generateVEvent(appointment);
     const objects = await client.fetchCalendarObjects({ calendar });
     const existing = objects.find(
@@ -117,22 +132,49 @@ export async function updateAppointment(
     );
 
     if (existing) {
-      await client.updateCalendarObject({
-        calendarObject: { ...existing, data: ical },
-      });
+      // Prefer stored ETag over fetched one for true optimistic concurrency.
+      // The fetched object's etag reflects the current server state, while
+      // our stored etag reflects the state when we last wrote — if they differ,
+      // someone else modified the event and If-Match will correctly 412.
+      const calendarObject = storedEtag
+        ? { ...existing, data: ical, etag: storedEtag }
+        : { ...existing, data: ical };
+
+      const response = await client.updateCalendarObject({ calendarObject });
+
+      if (is412(response)) {
+        logger.warn(
+          { appointmentId, uid },
+          "CalDAV update got 412 Precondition Failed — event was modified externally"
+        );
+        return;
+      }
+
+      // Store new ETag for future operations
+      const newEtag = extractEtag(response);
+      if (newEtag) {
+        await storeEtag(appointmentId, newEtag);
+      }
     } else {
       // Event doesn't exist yet — create it
-      await client.createCalendarObject({
+      const response = await client.createCalendarObject({
         calendar,
         filename: `${uid}.ics`,
         iCalString: ical,
       });
+      const etag = extractEtag(response);
+      if (etag) {
+        await storeEtag(appointmentId, etag);
+      }
     }
   });
 }
 
 /**
  * Delete an appointment from all connected calendars.
+ * The fetched calendarObject already includes the server's current ETag,
+ * which tsdav passes as If-Match automatically. If the server returns 412
+ * (event modified externally), we log a warning but don't throw.
  */
 export async function deleteAppointment(
   appointmentId: number,
@@ -145,9 +187,16 @@ export async function deleteAppointment(
     );
 
     if (existing) {
-      await client.deleteCalendarObject({
+      const response = await client.deleteCalendarObject({
         calendarObject: existing,
       });
+
+      if (is412(response)) {
+        logger.warn(
+          { appointmentId, uid },
+          "CalDAV delete got 412 Precondition Failed — event was modified externally"
+        );
+      }
     }
   });
 }
@@ -198,6 +247,37 @@ export async function fetchBusySlots(
   }
 
   return slots;
+}
+
+/**
+ * Extract ETag from a CalDAV response.
+ * tsdav's create/update/delete return a native Response object.
+ * The ETag header may be quoted (e.g., `"abc123"`) — we preserve it as-is
+ * since CalDAV servers expect the same value back in If-Match.
+ */
+function extractEtag(response: Response): string | undefined {
+  const etag = response?.headers?.get("etag");
+  return etag ?? undefined;
+}
+
+/**
+ * Check if the response is a 412 Precondition Failed.
+ * This means the event was modified externally between our fetch and update.
+ */
+function is412(response: Response): boolean {
+  return response?.status === 412;
+}
+
+/**
+ * Persist the CalDAV ETag on the appointment record.
+ * Silently catches errors — ETag storage is best-effort.
+ */
+async function storeEtag(appointmentId: number, etag: string): Promise<void> {
+  try {
+    await update("appointment", appointmentId, { caldav_etag: etag });
+  } catch (err) {
+    logger.warn({ err, appointmentId }, "Failed to store CalDAV ETag on appointment");
+  }
 }
 
 function parseICalDate(value: string): Date {
