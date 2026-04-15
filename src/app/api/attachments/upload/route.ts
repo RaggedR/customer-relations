@@ -17,8 +17,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { create } from "@/lib/repository";
 import { getSchema } from "@/lib/schema";
-import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
+import { withErrorHandler } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
+import { extractRequestContext } from "@/lib/request-context";
 import { getSessionUser } from "@/lib/session";
 import { storeFile } from "@/lib/attachment-store";
 
@@ -133,14 +134,13 @@ export async function POST(request: NextRequest) {
     }
 
     const session = await getSessionUser(request);
+    const ctx = extractRequestContext(request, session);
     logAuditEvent({
-      userId: session?.userId ?? null,
       action: "create",
       entity: "attachment",
       entityId: String(record.id),
       details: `Uploaded ${category} attachment for patient ${patientId}`,
-      ip: getClientIp(request),
-      userAgent: request.headers.get("user-agent") ?? undefined,
+      context: ctx,
     });
 
     return NextResponse.json(record, { status: 201 });

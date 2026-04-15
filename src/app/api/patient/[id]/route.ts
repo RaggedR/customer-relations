@@ -10,7 +10,7 @@
  */
 
 import { NextRequest } from "next/server";
-import { getClientIp } from "@/lib/api-helpers";
+import { extractRequestContext } from "@/lib/request-context";
 import { makeGetUpdateDeleteHandlers } from "@/lib/route-factory";
 import { logAuditEvent } from "@/lib/audit";
 import { getSessionUser } from "@/lib/session";
@@ -22,13 +22,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
   // Audit: log access to patient record (fire-and-forget)
   const session = await getSessionUser(request);
+  const ctx = extractRequestContext(request, session);
   logAuditEvent({
-    userId: session?.userId ?? null,
     action: "view",
     entity: "patient",
     entityId: id,
-    ip: getClientIp(request),
-    userAgent: request.headers.get("user-agent") ?? undefined,
+    context: ctx,
   });
 
   return handlers.GET(request, context);

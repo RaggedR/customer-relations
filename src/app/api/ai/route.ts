@@ -14,10 +14,11 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prismaReadonly } from "@/lib/prisma-readonly";
 import { validateAiSql } from "@/lib/sql-safety";
 import { generateSchemaDescription } from "@/lib/generate-schema-description";
-import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
+import { withErrorHandler } from "@/lib/api-helpers";
 import { resolveNames } from "@/lib/name-resolution";
 import { getSchema } from "@/lib/schema";
 import { logAuditEvent } from "@/lib/audit";
+import { extractRequestContext } from "@/lib/request-context";
 import { logger } from "@/lib/logger";
 import { getSessionUser } from "@/lib/session";
 import { createRateLimiter, getRateLimitKey } from "@/lib/rate-limit";
@@ -359,6 +360,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const ctx = extractRequestContext(request, session);
     const { question, model: modelName } = await request.json();
 
     if (!question || typeof question !== "string") {
@@ -428,34 +430,28 @@ export async function POST(request: NextRequest) {
     try {
       serializedRows = await executeQuery(sql);
     } catch (dbError) {
-      logger.error({ err: dbError, sql }, "AI SQL execution failed");
+      logger.error({ err: dbError, sql, correlationId: ctx.correlationId }, "AI SQL execution failed");
       return NextResponse.json({
         error: "Query execution failed. Please try rephrasing your question.",
       }, { status: 500 });
     }
 
     // Audit: log AI query execution (fire-and-forget)
-    const ip = getClientIp(request);
-    const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
-      userId: session.userId,
       action: "ai_query",
       entity: "sql",
       entityId: String(serializedRows.length),
       details: sql,
-      ip,
-      userAgent,
+      context: ctx,
     });
 
     // Audit: log cross-border data disclosure to Google Gemini (fire-and-forget)
     logAuditEvent({
-      userId: session.userId,
       action: "ai_external_disclosure",
       entity: "gemini",
       entityId: String(serializedRows.length),
       details: `provider=google/gemini model=${resolvedModelName} rows=${serializedRows.length}`,
-      ip,
-      userAgent,
+      context: ctx,
     });
 
     // Step 3: Generate natural language answer + chart

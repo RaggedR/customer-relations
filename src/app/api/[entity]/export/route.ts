@@ -13,8 +13,9 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getSchema, getCsvRepresentation, isSensitive } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
-import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
+import { withErrorHandler } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
+import { extractRequestContext } from "@/lib/request-context";
 import { getSessionUser } from "@/lib/session";
 import type { Row } from "@/lib/parsers";
 
@@ -145,14 +146,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const rows = items.map((item) => flattenRow(item, entityName, columns));
 
     const session = await getSessionUser(request);
+    const ctx = extractRequestContext(request, session);
     logAuditEvent({
-      userId: session?.userId ?? null,
       action: "export",
       entity: entityName,
       entityId: "*",
       details: `Exported ${items.length} ${entityName} records as ${format}`,
-      ip: getClientIp(request),
-      userAgent: request.headers.get("user-agent") ?? undefined,
+      context: ctx,
     });
 
     // ── JSON ──────────────────────────────────────────────

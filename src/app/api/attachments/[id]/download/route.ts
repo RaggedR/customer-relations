@@ -11,9 +11,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createReadStream, promises as fsp } from "fs";
 import { Readable } from "stream";
 import { findById } from "@/lib/repository";
-import { getClientIp } from "@/lib/api-helpers";
 import { parseIdParam } from "@/lib/route-factory";
 import { logAuditEvent } from "@/lib/audit";
+import { extractRequestContext } from "@/lib/request-context";
 import { logger } from "@/lib/logger";
 import { getSessionUser } from "@/lib/session";
 import { getFilePath } from "@/lib/attachment-store";
@@ -56,14 +56,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { fullPath, safeMimeType } = fileResult;
 
     const session = await getSessionUser(request);
+    const ctx = extractRequestContext(request, session);
     logAuditEvent({
-      userId: session?.userId ?? null,
       action: "download",
       entity: "attachment",
       entityId: String(numId),
       details: `Downloaded ${record.category} attachment`,
-      ip: getClientIp(request),
-      userAgent: request.headers.get("user-agent") ?? undefined,
+      context: ctx,
     });
 
     const rawFilename = String(record.filename);

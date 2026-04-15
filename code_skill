@@ -1,0 +1,188 @@
+Also a "code review" skill using "philosophy of software design" by Ousterhout, John as a guide. You can find this book at location:
+  ~/git/.claude/commands/philsophy_design.pdf . Identify complexity. A simple change requires modification in many different locations. Reduce
+  "cognitive load" How much surrounding code do you need to read to understand a small piece. The code should be "obious". Clean separation
+  of concerns. Look for "red flags" [Pasted text #1 +3 lines]
+
+Refactor as necessary. Try to imagine a few ways in
+  which the system might need to be changed in the future and make sure that
+  will be easy with your design. Minimize dependencies between modules. Clear distinction between interface and implementation of sub-systems,
+  deep modules (large implementation, small interface). red flag, shallow module, interface complicated compared to functionality. sensible
+  interface defaults, most common featues If you have any questions (confidence low) then stop and ask me. simple interface, considerable
+  functionality. abstraction, encapsulation, information hiding, If a piece of information is hidden, there are no
+  dependencies on that information outside the module containing the
+  information, think carefully about what information can be hidden in that module. Red flag: information leakage (might actually require
+  merging two modules). same knowledge encoded in multiple places. The most common mistake made by students was to divide their code into a
+  large number of shallow classes, which led to information leakage between
+  the classes. Classes which share information should be merged into one. information hiding can often be improved by making a class slightly
+  larger . bring together all of the code related
+  to a particular capability (such as parsing an HTTP request) rather than having separate methods for each of three steps of
+  a computation, have a single method that performs the entire computation. Give examples of all of the above. don’t get carried away and build something so
+general-purpose that it is difficult to use for your current needs. See if you can replace several
+special-purpose methods with a single general-purpose method. General-purpose interfaces tend to be simpler, with fewer methods that are deeper. In a well-designed system, each layer
+provides a different abstraction from the layers above and below it; if you
+follow a single operation as it moves up and down through layers by
+invoking methods, the abstractions change with each method call. Red flag: pass-through method is one
+that does little except invoke another method, whose signature is similar or
+identical to that of the calling method. Pass-through methods also
+create dependencies between classes. A dispatcher is a method that uses its
+  arguments to select one of several other methods to invoke (this is fine). When several methods provide different implementations of the
+same interface, it reduces cognitive load. (good). A decorator object takes an
+existing object and extends its functionality. The motivation for decorators is to separate special-purpose extensions
+of a class from a more generic core. However, decorator classes tend to be
+shallow: they introduce a large amount of boilerplate for a small amount of
+new functionality. Over-use of the decorator pattern can lead to an explosion of shallow classes. Could you add the new functionality directly to the underlying
+class, rather than creating a decorator class? A context stores all of the application’s global state
+(anything that would otherwise be a pass-through variable or global
+variable). The context object unifies the handling of all system-global information
+and eliminates the need for pass-through variables. Simplifying the interface sometimes makes the implementation more complicated. But it is worth it. Configuration parameters have become very popular in systems today;
+some systems have hundreds of them.configuration parameters can
+easily become out of date. (and can often be calculated in the code) you should avoid configuration parameters as much as possible. Some complexity comes just from the number of components: the
+more components, the harder to keep track of them all. if there are dependencies between the components,
+then separation is bad. Subdivision can result in duplication: code that was present in a
+single instance before subdivision may need to be present in each
+of the subdivided components. Bringing pieces of code together is most beneficial if they are closely
+related. If the pieces are unrelated, they are probably better off apart. They share information. They are used together. (bidirectional). They overlap conceptually, in that there is a simple higher-level
+category that includes both of the pieces of code. It is hard to understand one of the pieces of code without looking at
+the other. When two or more modules are combined into a single module, it may be
+possible to define an interface for the new module that is simpler or easier
+to use than the original interfaces. If you find the same pattern of code repeated over and over, see if you can
+reorganize the code to eliminate the repetition. If the same piece of code (or code that is almost the same) appears over
+and over again, that’s a red flag that you haven’t found the right
+abstractions. When you encounter a class that includes both
+general-purpose and special-purpose features for the same abstraction, see
+if the class can be separated into two classes. separate general-purpose code from specialpurpose code. length by itself is rarely a good reason for splitting up a
+method. In general, developers tend to break up methods too much. Splitting up a method introduces additional interfaces, which add to
+complexity. You shouldn’t
+break up a method unless it makes the overall system simpler. If the blocks
+are relatively independent, then the method can be read and understood one
+block at a time; there’s not much benefit in moving each of the blocks into a
+separate method. If the blocks have complex interactions, it’s even more
+important to keep them together so readers can see all of the code at once; if
+each block is in a separate method, readers will have to flip back and forth
+between these spread-out methods in order to understand how they work
+together. Methods containing hundreds of lines of code are fine if they have
+a simple signature and are easy to read. When designing methods, the most important goal is to provide clean
+and simple abstractions. Each method should do one thing and do it
+completely.The method should have a clean and simple interface, so that
+users don’t need to have much information in their heads in order to use it
+correctly. The method should be deep: its interface should be much simpler
+than its implementation. Splitting up a method only makes sense if it results in cleaner
+abstractions, overall. There are also situations where a system can be made simpler by joining
+methods together. For example, joining methods might replace two shallow
+methods with one deeper method. joining methods might replace two shallow
+methods with one deeper method; it might eliminate duplication of code; it
+might eliminate dependencies between the original methods, or
+intermediate data structures; it might result in better encapsulation, so that
+knowledge that was previously present in multiple places is now isolated in
+a single place. It should be possible to understand each method independently. If you
+can’t understand the implementation of one method without also
+understanding the implementation of another, that’s a red flag. The decision to split or join modules should be based on complexity. Pick
+the structure that results in the best information hiding, the fewest
+dependencies, and the deepest interfaces.Exception handling is one of the worst sources of complexity in software
+systems. Please don't do this! especially if the input of one function is the output of another and we can safely assume that it is well-formatted. We can test the edge cases with tests. Do this in tests not in code.
+
+
+
+  Code that deals with special conditions is inherently harder to
+write than code that deals with normal cases. reduce the number of places where exceptions must be
+handled. Exception handling can
+account for a significant fraction of all the code in a system. An exception disrupts the normal flow of the code. Language support for exceptions tends to be verbose and clunky, which
+makes exception handling code hard to read. Just the basic try-catch boilerplate accounts for more lines of code than the
+code for normal-case operation. in the extreme case there could be a try for each line
+of code that can generate an exception. Exceptions
+don’t occur very often in running systems, so exception handling code
+rarely executes. Bugs can go undetected for a long time, and when the
+exception handling code is finally needed, there’s a good chance that it
+won’t work. classes with
+lots of exceptions have complex interfaces, and they are shallower than
+classes with fewer exceptions. An exception is a particularly complex
+element of an interface. It can propagate up through several stack levels
+before being caught, so it affects not just the method’s caller, but potentially
+also higher-level callers (and their interfaces). Throwing exceptions is easy; handling them is hard. Thus, the
+complexity of exceptions comes from the exception handling code. The best way to eliminate exception handling complexity is to define your
+APIs so that there are no exceptions to handle: Overall, the best way to reduce bugs is to make software simpler. Exception masking doesn’t work in all situations, but it is a powerful
+tool in the situations where it works. It results in deeper classes, since it
+reduces the class’s interface (fewer exceptions for users to be aware of) and
+adds functionality in the form of the code that masks the exception.
+Exception masking is an example of pulling complexity downward.If a system processes a series of requests, it’s useful to define an
+exception that aborts the current request, cleans up the system’s state, and
+continues with the next request. Exceptions of this type should be clearly distinguished from exceptions that
+are fatal to the entire system.Exception aggregation works best if an exception propagates several
+levels up the stack before it is handled; this allows more exceptions from
+more methods to be handled in the same place. This is the opposite of
+exception masking: masking usually works best if an exception is handled
+in a low-level method. One way of thinking about exception aggregation is that it replaces
+several special-purpose mechanisms, each tailored for a particular situation,
+with a single general-purpose mechanism that can handle multiple
+situations. The fourth technique for reducing complexity related to exception handling
+is to crash the application. In most applications there will be certain errors
+that it’s not worth trying to handle. The simplest thing to do in
+response to these errors is to print diagnostic information and then abort the
+application.Aborting with an error message is also appropriate if an
+application encounters an internal error such as an inconsistent data
+structure. Conditions like this probably indicate bugs in the program.Special
+cases can result in code that is riddled with if statements, which make the
+code hard to understand and lead to bugs. Defining away exceptions, or masking them inside a module, only makes
+sense if the exception information isn’t needed outside the module.In a module for network
+communication, a student team masked all network exceptions: if a network
+error occurred, the module caught it, discarded it, and continued as if there
+were no problem. This meant that applications using the module had no
+way to find out if messages were lost or a peer server failed.With exceptions, as with many other areas in software design, you must
+determine what is important and what is not important. Things that are not
+important should be hidden. Special cases of any form make code harder to understand and increase the
+likelihood of bugs. exceptions are one of
+the most significant sources of special-case code. Stop and ask me questions about architectural design. Choosing variable names (what are our conventions?) The coding agent should document "design decisions" as they go. architectural decisions. why? the primary causes of complexity are
+dependencies and obscurity. Good documentation can clarify dependencies,
+and it fills in gaps to eliminate obscurity.
+
+
+ 2) A testing skill (fuzz test, E2E, unit, integration, list of tests for the humans to complete (clicking through button))
+
+  3) Documentation?
+  Progressive disclosure? Means future Claude can just read a small part of the code-base without reading the whole thing. Also useful for
+  humans. On worktrees multiple claudes could work on different sections without stepping on each other's toes. Stop and ask me questions about architectural design. Choosing variable names (what are our conventions?) The informal aspects of an interface, such as
+a high-level description of what each method does. the rationale for a
+particular design decision. comments are fundamental to abstractions. If users must read the code of a
+method in order to use it, then there is no abstraction: Good comments make a
+huge difference in the maintainability of software. many of the most important comments are those related to
+abstractions, such as the top-level documentation for classes and method. Re-run the documentation tool after every major revision.The overall idea behind comments is to capture information
+that was in the mind of the designer but couldn’t be represented in the
+code. comments
+should describe things that aren’t obvious from the code. One of the most important reasons for comments is abstractions, which
+include a lot of information that isn’t obvious from the code. The idea of an
+abstraction is to provide a simple way of thinking about something, but
+code is so detailed that it can be hard to see the abstraction just from
+reading the code.good
+comments typically explain things at a different level of detail than the
+code. Choose a convention and stick to it. Interface: a comment block that immediately precedes the declaration of
+a module such as a class, data structure, function, or method. The
+comment describe’s the module’s interface. Cross-module comment: a comment describing dependencies that cross
+module boundaries.Don’t repeat the code. Red Flag: If the information in a comment is already obvious from the code next to
+the comment, then the comment isn’t helpful. Some comments provide
+information at a lower, more detailed, level than the code; these comments
+add precision by clarifying the exact meaning of the code [for example the units (time, distance, money)]. Properties that we assume an input has (more restrictive than just type, for example a positive integer rather than just an integer, a string that only contains vowels) and properties we expect the output variable to have, other examples of low level comments? The comments should not repeat the code. separate interface
+comments from implementation comments. Limitations of the class / methods (what it can't do). Examaple useage. side-effects. Red flag: interface documentation, such as that for a
+method, describes implementation details that aren’t needed in order to
+use the thing being documented. Skip implementation comments. I don't think we need them. Or maybe the coding agent should do these? If there are tricky aspects to the
+code that won’t be obvious from reading it, you should document them. (this is for the coding agent)
+
+What else do I need to do to make this:
+ - robust
+ - maintainable
+ - secure
+ - production ready
+
+SQL injection attack
+open APIs
+
+Uploading JSON (poorly format)
+SQL mal-formatted
+A million tests for malformed inputs to forms
+proper form parsing
+two appointments at same time
+two people with same name (birthdate)
+Nurses + patients each have a number
+string parsing for forms
+ - adding a date
+Patients not including all the information in their form
+First time a nurse signs up

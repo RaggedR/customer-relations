@@ -11,9 +11,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
-import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
+import { withErrorHandler } from "@/lib/api-helpers";
 import { parseIdParam } from "@/lib/route-factory";
 import { logAuditEvent } from "@/lib/audit";
+import { extractRequestContext } from "@/lib/request-context";
 import { getIdempotentResponse, cacheIdempotentResponse } from "@/lib/idempotency";
 import { renderWatermarkedImage } from "@/lib/image-renderer";
 import { resolveNurse, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const ctx = extractRequestContext(request, session);
     const idResult = await parseIdParam(params);
     if (idResult instanceof NextResponse) return idResult;
     const appointmentId = idResult;
@@ -92,16 +94,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     ].sort((a, b) => new Date(b.date as string).getTime() - new Date(a.date as string).getTime());
 
     // 3D: Audit log — nurse viewed patient notes
-    const ip = getClientIp(request);
-    const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
-      userId: session.userId,
       action: "view",
       entity: "clinical_note",
       entityId: String(patientId),
       details: `nurse viewed ${notes.length} notes for ${patientRef}`,
-      ip,
-      userAgent,
+      context: ctx,
     });
 
     return NextResponse.json({ patientRef, notes });
@@ -115,6 +113,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!session || session.role !== "nurse") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const ctx = extractRequestContext(request, session);
 
     // Idempotency: key scoped to user — prevents Nurse B from retrieving Nurse A's cached response.
     // Clinical notes are immutable, so duplicate creation is a medico-legal hazard.
@@ -186,16 +186,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // 3D: Audit log — nurse created note
     const entity = noteType === "personal" ? "personal_note" : "clinical_note";
-    const ip = getClientIp(request);
-    const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
-      userId: session.userId,
       action: "create",
       entity,
       entityId: String(patientId),
       details: `nurse created ${entity} for Patient #${patientId}`,
-      ip,
-      userAgent,
+      context: ctx,
     });
 
     // Return pseudonymised — no patient name

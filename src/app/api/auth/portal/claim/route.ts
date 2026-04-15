@@ -17,7 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { consumeClaim } from "@/lib/claim-token";
 import { signSession } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
-import { getClientIp } from "@/lib/api-helpers";
+import { extractRequestContext } from "@/lib/request-context";
 import { logAuditEvent } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { COOKIE_NAME, COOKIE_OPTIONS, SESSION_MAX_AGE, getSecret } from "@/lib/session";
@@ -26,8 +26,9 @@ import { createRateLimiter } from "@/lib/rate-limit";
 const claimLimiter = createRateLimiter(5, 60_000); // 5 attempts per minute per IP
 
 export async function POST(request: NextRequest) {
-  const clientIp = getClientIp(request) ?? "unknown";
-  const rl = claimLimiter(`ip:${clientIp}`);
+  const ctx = extractRequestContext(request);
+
+  const rl = claimLimiter(`ip:${ctx.ip ?? "unknown"}`);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Try again later." },
@@ -94,8 +95,8 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         last_active: new Date(),
         expires_at: new Date(Date.now() + SESSION_MAX_AGE * 1000),
-        ip: clientIp !== "unknown" ? clientIp : null,
-        user_agent: request.headers.get("user-agent") ?? null,
+        ip: ctx.ip ?? null,
+        user_agent: ctx.userAgent ?? null,
       },
     });
 
@@ -110,12 +111,10 @@ export async function POST(request: NextRequest) {
     });
 
     logAuditEvent({
-      userId: user.id,
       action: "account_claimed",
       entity: "patient",
       entityId: email,
-      ip: clientIp !== "unknown" ? clientIp : undefined,
-      userAgent: request.headers.get("user-agent") ?? undefined,
+      context: { ...ctx, userId: user.id },
     });
 
     return response;
@@ -127,7 +126,7 @@ export async function POST(request: NextRequest) {
     if (message === "ACCOUNT_EXISTS") {
       return NextResponse.json({ error: "Account already exists. Please log in." }, { status: 409 });
     }
-    logger.error({ err: error }, "Portal claim error");
+    logger.error({ err: error, correlationId: ctx.correlationId }, "Portal claim error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

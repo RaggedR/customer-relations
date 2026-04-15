@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getClientIp } from "@/lib/api-helpers";
+import { extractRequestContext } from "@/lib/request-context";
 import { logAuditEvent } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, COOKIE_NAME, COOKIE_OPTIONS } from "@/lib/session";
@@ -16,6 +16,7 @@ import { getSessionUser, COOKIE_NAME, COOKIE_OPTIONS } from "@/lib/session";
 export async function POST(request: NextRequest) {
   // Best-effort: read session for audit before clearing
   const session = await getSessionUser(request).catch(() => null);
+  const ctx = extractRequestContext(request, session);
 
   // Clean up DB session record (makes logout immediate, even if JWT is still valid)
   const token = request.cookies.get(COOKIE_NAME)?.value;
@@ -36,15 +37,11 @@ export async function POST(request: NextRequest) {
 
   // Audit: log logout (fire-and-forget)
   if (session) {
-    const ip = getClientIp(request);
-    const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
-      userId: session.userId,
       action: "logout",
       entity: "user",
       entityId: String(session.userId),
-      ip,
-      userAgent,
+      context: ctx,
     });
   }
 
