@@ -16,9 +16,10 @@
 import { execSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import { logger } from "@/lib/logger";
 
 export function runMigration(): void {
-  console.log("[schema-engine] Checking for schema changes...");
+  logger.info("[schema-engine] Checking for schema changes...");
   try {
     // Diff: what the DB currently is vs what the schema says it should be
     const diff = execSync(
@@ -27,7 +28,7 @@ export function runMigration(): void {
     ).trim();
 
     if (!diff || diff === "-- This is an empty migration.") {
-      console.log("[schema-engine] No schema changes detected.");
+      logger.info("[schema-engine] No schema changes detected.");
     } else {
       // Safety check: refuse to auto-apply destructive or data-sensitive migrations
       const destructivePatterns = /\bDROP\s+(TABLE|COLUMN)\b/i;
@@ -38,10 +39,9 @@ export function runMigration(): void {
         const reason = destructivePatterns.test(diff)
           ? "DROP tables or columns"
           : "add UNIQUE constraints (verify no duplicate data exists before applying)";
-        console.error("[schema-engine] MIGRATION REQUIRES REVIEW:");
-        console.error(diff);
-        console.error(
-          `\n[schema-engine] This migration would ${reason}. ` +
+        logger.error({ diff }, "[schema-engine] MIGRATION REQUIRES REVIEW:");
+        logger.error(
+          `[schema-engine] This migration would ${reason}. ` +
           "It has been written to disk for review but NOT applied.\n" +
           "To apply it, run: npx prisma migrate deploy"
         );
@@ -58,7 +58,7 @@ export function runMigration(): void {
         );
         fs.mkdirSync(migrationDir, { recursive: true });
         fs.writeFileSync(path.join(migrationDir, "migration.sql"), diff, "utf-8");
-        console.log(`[schema-engine] Migration saved for review: ${migrationName}`);
+        logger.info(`[schema-engine] Migration saved for review: ${migrationName}`);
         // Do NOT apply — return early
         return;
       }
@@ -76,7 +76,7 @@ export function runMigration(): void {
       );
       fs.mkdirSync(migrationDir, { recursive: true });
       fs.writeFileSync(path.join(migrationDir, "migration.sql"), diff, "utf-8");
-      console.log(`[schema-engine] Created migration: ${migrationName}`);
+      logger.info(`[schema-engine] Created migration: ${migrationName}`);
     }
 
     // Apply any pending migrations (only safe ones reach here)
@@ -84,23 +84,23 @@ export function runMigration(): void {
       stdio: "inherit",
       cwd: process.cwd(),
     });
-    console.log("[schema-engine] Migration complete.");
+    logger.info("[schema-engine] Migration complete.");
   } catch (error) {
-    console.error("[schema-engine] Migration failed:", error);
+    logger.error({ err: error }, "[schema-engine] Migration failed");
     throw error;
   }
 }
 
 export function generatePrismaClient(): void {
-  console.log("[schema-engine] Generating Prisma client...");
+  logger.info("[schema-engine] Generating Prisma client...");
   try {
     execSync("npx prisma generate", {
       stdio: "inherit",
       cwd: process.cwd(),
     });
-    console.log("[schema-engine] Prisma client generated.");
+    logger.info("[schema-engine] Prisma client generated.");
   } catch (error) {
-    console.error("[schema-engine] Client generation failed:", error);
+    logger.error({ err: error }, "[schema-engine] Client generation failed");
     throw error;
   }
 }
