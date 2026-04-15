@@ -12,8 +12,8 @@ import { createReadStream, promises as fsp } from "fs";
 import { Readable } from "stream";
 import path from "path";
 import { findById } from "@/lib/repository";
-import { getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
+import { extractRequestContext } from "@/lib/request-context";
 import { logger } from "@/lib/logger";
 import { getSessionUser } from "@/lib/session";
 
@@ -52,14 +52,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const session = await getSessionUser(request);
+    const ctx = extractRequestContext(request, session);
     logAuditEvent({
-      userId: session?.userId ?? null,
       action: "download",
       entity: "attachment",
       entityId: String(numId),
       details: `Downloaded ${record.category} attachment`,
-      ip: getClientIp(request),
-      userAgent: request.headers.get("user-agent") ?? undefined,
+      context: ctx,
     });
 
     const rawFilename = String(record.filename);

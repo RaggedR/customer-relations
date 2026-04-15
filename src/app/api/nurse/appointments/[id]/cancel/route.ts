@@ -9,8 +9,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
-import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
+import { withErrorHandler } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
+import { extractRequestContext } from "@/lib/request-context";
 import { resolveNurse, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
 import { prisma } from "@/lib/prisma";
 
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const ctx = extractRequestContext(request, session);
     const { id } = await params;
     const appointmentId = parseInt(id, 10);
     if (isNaN(appointmentId)) {
@@ -59,16 +61,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     // Audit log — nurse cancelled appointment
-    const ip = getClientIp(request);
-    const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
-      userId: session.userId,
       action: "cancel",
       entity: "appointment",
       entityId: String(appointmentId),
       details: `nurse ${nurse.name} cancelled appointment #${appointmentId}${reason ? ` reason: ${reason.slice(0, 200)}` : ""}`,
-      ip,
-      userAgent,
+      context: ctx,
     });
 
     return NextResponse.json({ success: true });

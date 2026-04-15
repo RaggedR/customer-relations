@@ -14,8 +14,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
-import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
+import { withErrorHandler } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
+import { extractRequestContext } from "@/lib/request-context";
 import { getSessionUser } from "@/lib/session";
 
 interface RouteParams {
@@ -213,14 +214,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // Audit: log patient data export (fire-and-forget)
     const session = await getSessionUser(request);
+    const ctx = extractRequestContext(request, session);
     logAuditEvent({
-      userId: session?.userId ?? null,
       action: "export",
       entity: "patient",
       entityId: String(numId),
       details: `format=${format}`,
-      ip: getClientIp(request),
-      userAgent: request.headers.get("user-agent") ?? undefined,
+      context: ctx,
     });
 
     const safeName = patient.name.replace(/\s+/g, "-").toLowerCase();

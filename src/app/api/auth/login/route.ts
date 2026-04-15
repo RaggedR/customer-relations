@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signSession, type Role } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
-import { getClientIp } from "@/lib/api-helpers";
+import { extractRequestContext } from "@/lib/request-context";
 import { logAuditEvent } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { COOKIE_NAME, COOKIE_OPTIONS, SESSION_MAX_AGE, getSecret } from "@/lib/session";
@@ -20,12 +20,11 @@ import { createRateLimiter } from "@/lib/rate-limit";
 const loginLimiter = createRateLimiter(5, 60_000); // 5 attempts per minute
 
 export async function POST(request: NextRequest) {
-  // Extract client IP once — used for rate limiting and audit logging
-  const clientIp = getClientIp(request) ?? "unknown";
-  const userAgent = request.headers.get("user-agent") ?? undefined;
+  // Extract request context — used for rate limiting, audit logging, and session creation
+  const ctx = extractRequestContext(request);
 
   // Rate limit by IP (no session exists yet at login)
-  const rl = loginLimiter(`ip:${clientIp}`);
+  const rl = loginLimiter(`ip:${ctx.ip ?? "unknown"}`);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many login attempts. Try again later." },
@@ -57,12 +56,10 @@ export async function POST(request: NextRequest) {
     if (!user) {
       // Audit: log failed login — unknown email (fire-and-forget)
       logAuditEvent({
-        userId: null,
         action: "login_failed",
         entity: "user",
         entityId: email.toLowerCase().trim(),
-        ip: clientIp !== "unknown" ? clientIp : undefined,
-        userAgent,
+        context: ctx,
       });
       return NextResponse.json(
         { error: "Invalid email or password" },
@@ -75,12 +72,10 @@ export async function POST(request: NextRequest) {
     if (!valid) {
       // Audit: log failed login — wrong password (fire-and-forget)
       logAuditEvent({
-        userId: user.id,
         action: "login_failed",
         entity: "user",
         entityId: String(user.id),
-        ip: clientIp !== "unknown" ? clientIp : undefined,
-        userAgent,
+        context: { ...ctx, userId: user.id },
       });
       return NextResponse.json(
         { error: "Invalid email or password" },
@@ -102,8 +97,8 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         last_active: new Date(),
         expires_at: new Date(Date.now() + SESSION_MAX_AGE * 1000),
-        ip: clientIp !== "unknown" ? clientIp : null,
-        user_agent: userAgent ?? null,
+        ip: ctx.ip ?? null,
+        user_agent: ctx.userAgent ?? null,
       },
     });
 
@@ -120,17 +115,15 @@ export async function POST(request: NextRequest) {
 
     // Audit: log successful login (fire-and-forget)
     logAuditEvent({
-      userId: user.id,
       action: "login",
       entity: "user",
       entityId: String(user.id),
-      ip: clientIp !== "unknown" ? clientIp : undefined,
-      userAgent,
+      context: { ...ctx, userId: user.id },
     });
 
     return response;
   } catch (error) {
-    logger.error({ err: error }, "Login error");
+    logger.error({ err: error, correlationId: ctx.correlationId }, "Login error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

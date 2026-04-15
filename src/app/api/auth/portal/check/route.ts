@@ -20,14 +20,15 @@ import { SignJWT } from "jose";
 import { getSecret } from "@/lib/session";
 import { sendClaimEmail } from "@/lib/email";
 import { createRateLimiter } from "@/lib/rate-limit";
-import { getClientIp } from "@/lib/api-helpers";
+import { extractRequestContext } from "@/lib/request-context";
 import { logger } from "@/lib/logger";
 
 const checkLimiter = createRateLimiter(10, 60_000); // 10 checks per minute per IP
 
 export async function POST(request: NextRequest) {
-  const clientIp = getClientIp(request) ?? "unknown";
-  const rl = checkLimiter(`ip:${clientIp}`);
+  const ctx = extractRequestContext(request);
+
+  const rl = checkLimiter(`ip:${ctx.ip ?? "unknown"}`);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Try again later." },
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
     // No records at all — new patient
     return NextResponse.json({ status: "register" });
   } catch (error) {
-    logger.error({ err: error }, "Portal check error");
+    logger.error({ err: error, correlationId: ctx.correlationId }, "Portal check error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

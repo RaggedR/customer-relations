@@ -11,7 +11,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
-import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
+import { withErrorHandler } from "@/lib/api-helpers";
+import { extractRequestContext } from "@/lib/request-context";
 import { resolvePatient } from "@/lib/patient-helpers";
 import { logAuditEvent } from "@/lib/audit";
 
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const ctx = extractRequestContext(request, session);
     const patient = await resolvePatient(session.userId);
     if (!patient) {
       return NextResponse.json(
@@ -39,13 +41,11 @@ export async function POST(request: NextRequest) {
     }
 
     logAuditEvent({
-      userId: session.userId,
       action: "correction_request",
       entity: "patient",
       entityId: String(patient.id),
       details: description.trim().slice(0, 2000),
-      ip: getClientIp(request) ?? undefined,
-      userAgent: request.headers.get("user-agent") ?? undefined,
+      context: ctx,
     });
 
     return NextResponse.json({

@@ -14,10 +14,11 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prismaReadonly } from "@/lib/prisma-readonly";
 import { validateAiSql } from "@/lib/sql-safety";
 import { generateSchemaDescription } from "@/lib/generate-schema-description";
-import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
+import { withErrorHandler } from "@/lib/api-helpers";
 import { resolveNames } from "@/lib/name-resolution";
 import { getSchema } from "@/lib/schema";
 import { logAuditEvent } from "@/lib/audit";
+import { extractRequestContext } from "@/lib/request-context";
 import { logger } from "@/lib/logger";
 import { getSessionUser } from "@/lib/session";
 import { createRateLimiter, getRateLimitKey } from "@/lib/rate-limit";
@@ -220,6 +221,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const ctx = extractRequestContext(request, session);
     const { question, model: modelName } = await request.json();
 
     if (!question || typeof question !== "string") {
@@ -293,7 +295,7 @@ export async function POST(request: NextRequest) {
     // multi-statement attacks, and SQL comments. See src/lib/sql-safety.ts.
     const safety = validateAiSql(sql);
     if (!safety.safe) {
-      logger.warn({ sql, reason: safety.reason }, "AI generated unsafe query");
+      logger.warn({ sql, reason: safety.reason, correlationId: ctx.correlationId }, "AI generated unsafe query");
       return NextResponse.json({
         error: "The AI generated an unsafe query. Please rephrase your question.",
       }, { status: 400 });
@@ -307,23 +309,19 @@ export async function POST(request: NextRequest) {
         return await tx.$queryRawUnsafe(sql) as Record<string, unknown>[];
       });
     } catch (dbError) {
-      logger.error({ err: dbError, sql }, "AI SQL execution failed");
+      logger.error({ err: dbError, sql, correlationId: ctx.correlationId }, "AI SQL execution failed");
       return NextResponse.json({
         error: "Query execution failed. Please try rephrasing your question.",
       }, { status: 500 });
     }
 
     // Audit: log AI query execution (fire-and-forget)
-    const ip = getClientIp(request);
-    const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
-      userId: session.userId,
       action: "ai_query",
       entity: "sql",
       entityId: String(rows.length),
       details: sql,
-      ip,
-      userAgent,
+      context: ctx,
     });
 
     // Serialize BigInt values to numbers
@@ -350,13 +348,11 @@ export async function POST(request: NextRequest) {
 
     // Audit: log cross-border data disclosure to Google Gemini (fire-and-forget)
     logAuditEvent({
-      userId: session.userId,
       action: "ai_external_disclosure",
       entity: "gemini",
       entityId: String(aiRows.length),
       details: `provider=google/gemini model=${resolvedModelName} rows=${aiRows.length}`,
-      ip,
-      userAgent,
+      context: ctx,
     });
 
     // Step 4: Generate natural language answer + chart

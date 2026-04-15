@@ -15,8 +15,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSchema, foreignKeyName } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
-import { withErrorHandler, SENSITIVE_ENTITIES, getClientIp } from "@/lib/api-helpers";
+import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
+import { extractRequestContext } from "@/lib/request-context";
 import { getSessionUser } from "@/lib/session";
 import type { Row } from "@/lib/parsers";
 
@@ -50,6 +51,8 @@ function getImportOrder(schema: ReturnType<typeof getSchema>): string[] {
 
 export async function GET(request: NextRequest) {
   return withErrorHandler("GET /api/backup", async () => {
+    const session = await getSessionUser(request);
+    const ctx = extractRequestContext(request, session);
     const schema = getSchema();
     const importOrder = getImportOrder(schema);
 
@@ -103,15 +106,12 @@ export async function GET(request: NextRequest) {
     };
 
     // Audit: log backup export (fire-and-forget)
-    const session = await getSessionUser(request);
     logAuditEvent({
-      userId: session?.userId ?? null,
       action: "export",
       entity: "backup",
       entityId: "full",
       details: `entities=${Object.keys(entities).length}`,
-      ip: getClientIp(request),
-      userAgent: request.headers.get("user-agent") ?? undefined,
+      context: ctx,
     });
 
     const dateStr = new Date().toISOString().split("T")[0];

@@ -12,10 +12,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
 import { withErrorHandler } from "@/lib/api-helpers";
+import { extractRequestContext } from "@/lib/request-context";
 import { resolvePatient } from "@/lib/patient-helpers";
 import { prisma } from "@/lib/prisma";
 import { logAuditEvent } from "@/lib/audit";
-import { getClientIp } from "@/lib/api-helpers";
 
 // Fields the patient can view
 // maintenance_plan_expiry excluded — it encodes clinical treatment history
@@ -60,6 +60,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const ctx = extractRequestContext(request, session);
     const patient = await resolvePatient(session.userId);
     if (!patient) {
       return NextResponse.json(
@@ -88,13 +89,11 @@ export async function PUT(request: NextRequest) {
     });
 
     logAuditEvent({
-      userId: session.userId,
       action: "patient_self_update",
       entity: "patient",
       entityId: String(patient.id),
       details: `Updated fields: ${Object.keys(updates).join(", ")}`,
-      ip: getClientIp(request) ?? undefined,
-      userAgent: request.headers.get("user-agent") ?? undefined,
+      context: ctx,
     });
 
     // Return only visible fields
