@@ -282,14 +282,25 @@ export async function update(
   entityName: string,
   id: number,
   data: Record<string, unknown>,
-  options?: { expectedUpdatedAt?: string }
+  options?: { expectedUpdatedAt?: string; allowedFields?: string[] }
 ) {
   const schema = getSchema();
   const entity = schema.entities[entityName];
   if (!entity) throw new Error(`Unknown entity: ${entityName}`);
 
   const model = getModelDelegate(entityName);
-  const transformed = transformInput(entityName, data, entity);
+
+  // Strip keys not in allowedFields before transformation
+  const safeData =
+    options?.allowedFields
+      ? Object.fromEntries(
+          Object.entries(data).filter(([key]) =>
+            options.allowedFields!.includes(key)
+          )
+        )
+      : data;
+
+  const transformed = transformInput(entityName, safeData, entity);
   const includes = buildIncludes(entityName, entity);
 
   // Optimistic locking: if the caller provides an expected updatedAt, use
