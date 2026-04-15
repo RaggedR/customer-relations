@@ -68,7 +68,7 @@ export default function PortalLoginPage() {
         return;
       }
 
-      router.push("/portal");
+      router.replace("/portal");
     } catch {
       setError("Network error — please try again");
     } finally {
@@ -94,7 +94,7 @@ export default function PortalLoginPage() {
         return;
       }
 
-      router.push("/portal");
+      router.replace("/portal");
     } catch {
       setError("Network error — please try again");
     } finally {

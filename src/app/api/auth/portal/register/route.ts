@@ -51,25 +51,21 @@ export async function POST(request: NextRequest) {
     }
 
     const normEmail = email.toLowerCase().trim();
-
-    // Check for existing accounts
-    const existingUser = await prisma.user.findFirst({ where: { email: normEmail } });
-    if (existingUser) {
-      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
-    }
-
-    const existingPatient = await prisma.patient.findFirst({ where: { email: normEmail } });
-    if (existingPatient) {
-      return NextResponse.json(
-        { error: "A patient record with this email already exists. Please use the login page to claim your account." },
-        { status: 409 },
-      );
-    }
-
-    // Create Patient + User in a transaction
     const passwordHash = await hashPassword(password);
 
+    // Atomic check-and-create: prevents TOCTOU race where two concurrent
+    // registrations both pass the existence checks and create duplicates.
     const { patient, user } = await prisma.$transaction(async (tx) => {
+      const existingUser = await tx.user.findFirst({ where: { email: normEmail } });
+      if (existingUser) {
+        throw new Error("USER_EXISTS");
+      }
+
+      const existingPatient = await tx.patient.findFirst({ where: { email: normEmail } });
+      if (existingPatient) {
+        throw new Error("PATIENT_EXISTS");
+      }
+
       const patient = await tx.patient.create({
         data: {
           name: name.trim(),
@@ -133,6 +129,16 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
+    const message = (error as Error).message;
+    if (message === "USER_EXISTS") {
+      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+    }
+    if (message === "PATIENT_EXISTS") {
+      return NextResponse.json(
+        { error: "A patient record with this email already exists. Please use the login page to claim your account." },
+        { status: 409 },
+      );
+    }
     logger.error({ err: error }, "Portal registration error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

@@ -61,7 +61,7 @@ export default function PortalClaimPage() {
         return;
       }
 
-      router.push("/portal");
+      router.replace("/portal");
     } catch {
       setError("Network error — please try again");
     } finally {

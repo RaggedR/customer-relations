@@ -79,11 +79,13 @@ export function requiresRole(pathname: string): Role | null {
   }
 
   // Nurse routes (check before default to handle /api/nurse/*)
-  if (pathname.startsWith("/nurse/") || pathname.startsWith("/api/nurse/"))
+  // Matches both /nurse and /nurse/* — bare path has no trailing slash
+  if (pathname === "/nurse" || pathname.startsWith("/nurse/") || pathname.startsWith("/api/nurse/"))
     return "nurse";
 
   // Patient portal routes
-  if (pathname.startsWith("/portal/") || pathname.startsWith("/api/portal/"))
+  // Matches both /portal and /portal/* — bare path has no trailing slash
+  if (pathname === "/portal" || pathname.startsWith("/portal/") || pathname.startsWith("/api/portal/"))
     return "patient";
 
   // Everything else requires admin (default-deny)
