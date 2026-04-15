@@ -15,6 +15,9 @@ import { withErrorHandler } from "@/lib/api-helpers";
 import { extractRequestContext } from "@/lib/request-context";
 import { resolvePatient } from "@/lib/patient-helpers";
 import { logAuditEvent } from "@/lib/audit";
+import { createRateLimiter } from "@/lib/rate-limit";
+
+const correctionsLimiter = createRateLimiter(3, 60 * 60 * 1000); // 3 per hour
 
 export async function POST(request: NextRequest) {
   return withErrorHandler("POST /api/portal/corrections", async () => {
@@ -29,6 +32,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "No patient profile linked to this account" },
         { status: 403 },
+      );
+    }
+
+    // Per-patient rate limit: 3 correction requests per hour
+    const rl = correctionsLimiter(`patient:${patient.id}`);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many correction requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetMs - Date.now()) / 1000)) } },
       );
     }
 
