@@ -15,32 +15,21 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
-import fs from "fs/promises";
-import path from "path";
 import { create } from "@/lib/repository";
 import { getSchema } from "@/lib/schema";
 import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { getSessionUser } from "@/lib/session";
+import { storeFile } from "@/lib/attachment-store";
 
-const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
-const ALLOWED_MIME_TYPES = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "text/csv",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/json",
-  "text/vcard",
-  "text/plain",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-]);
+const VALID_CATEGORIES = [
+  "referral_letter",
+  "test_result",
+  "clinical_document",
+  "other",
+] as const;
 
 export async function POST(request: NextRequest) {
   const schema = getSchema();
@@ -62,16 +51,25 @@ export async function POST(request: NextRequest) {
   }
 
   const file = formData.get("file") as File | null;
-  const patientId = formData.get("patientId") as string | null;
+  const patientIdRaw = formData.get("patientId") as string | null;
   const category = (formData.get("category") as string) || "other";
   const description = (formData.get("description") as string) || "";
 
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: "file is required" }, { status: 400 });
   }
-  if (!patientId) {
+  if (!patientIdRaw) {
     return NextResponse.json(
       { error: "patientId is required" },
+      { status: 400 }
+    );
+  }
+
+  // Validate patientId as a positive integer before any filesystem use
+  const patientId = parseInt(patientIdRaw, 10);
+  if (isNaN(patientId) || patientId <= 0 || String(patientId) !== patientIdRaw.trim()) {
+    return NextResponse.json(
+      { error: "patientId must be a positive integer" },
       { status: 400 }
     );
   }
@@ -83,72 +81,56 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!ALLOWED_MIME_TYPES.has(file.type)) {
+  if (!VALID_CATEGORIES.includes(category as (typeof VALID_CATEGORIES)[number])) {
     return NextResponse.json(
-      { error: `File type not allowed: ${file.type}` },
-      { status: 415 }
-    );
-  }
-
-  const validCategories = [
-    "referral_letter",
-    "test_result",
-    "clinical_document",
-    "other",
-  ];
-  if (!validCategories.includes(category)) {
-    return NextResponse.json(
-      { error: `category must be one of: ${validCategories.join(", ")}` },
-      { status: 400 }
-    );
-  }
-
-  // Sanitise filename — strip path separators, quotes, and control characters
-  const safeName = file.name.replace(/[/\\"\r\n]/g, "_");
-  const uniqueName = `${randomUUID()}-${safeName}`;
-  const patientDir = path.join(UPLOADS_DIR, patientId);
-  const storagePath = path.join(patientDir, uniqueName);
-
-  // Ensure the relative path stays inside uploads/
-  const resolved = path.resolve(storagePath);
-  if (!resolved.startsWith(UPLOADS_DIR + path.sep)) {
-    return NextResponse.json(
-      { error: "Invalid file path" },
+      { error: `category must be one of: ${VALID_CATEGORIES.join(", ")}` },
       { status: 400 }
     );
   }
 
   return withErrorHandler("POST /api/attachments/upload", async () => {
-    await fs.mkdir(patientDir, { recursive: true });
+    let stored;
+    try {
+      stored = await storeFile(patientId, file, file.name);
+    } catch (err) {
+      if (err instanceof TypeError) {
+        // MIME type not allowed (magic-byte rejection)
+        return NextResponse.json(
+          { error: err.message },
+          { status: 415 }
+        );
+      }
+      if (err instanceof RangeError) {
+        // patientId invalid or path traversal
+        return NextResponse.json(
+          { error: err.message },
+          { status: 400 }
+        );
+      }
+      throw err;
+    }
 
-    // Write to a temp file first — if the DB insert fails, we clean up the
-    // temp file instead of leaving an orphaned file at the final path.
-    const tempPath = storagePath + ".tmp";
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(tempPath, buffer);
-
-    // Store relative path in DB (relative to uploads/)
-    const relativePath = path.relative(UPLOADS_DIR, storagePath);
+    // Sanitised filename (without UUID prefix) for the DB record
+    const safeName = file.name.replace(/[/\\"\r\n]/g, "_");
 
     let record;
     try {
       record = await create("attachment", {
         filename: safeName,
-        storage_path: relativePath,
-        mime_type: file.type || "application/octet-stream",
-        size_bytes: file.size,
+        storage_path: stored.storagePath,
+        mime_type: stored.detectedMimeType,
+        size_bytes: stored.sizeBytes,
         category,
         description,
-        patient: Number(patientId),
+        patient: patientId,
       });
     } catch (err) {
-      // DB insert failed — remove temp file to prevent orphans
-      await fs.unlink(tempPath).catch(() => {});
+      // DB insert failed — storeFile already wrote the final file; remove it
+      // to prevent orphans (best-effort, non-fatal if it fails).
+      const { promises: fsp } = await import("fs");
+      await fsp.unlink(stored.filePath).catch(() => {});
       throw err;
     }
-
-    // DB record created successfully — promote temp file to final path
-    await fs.rename(tempPath, storagePath);
 
     const session = await getSessionUser(request);
     logAuditEvent({

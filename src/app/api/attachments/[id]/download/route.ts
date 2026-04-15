@@ -10,14 +10,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createReadStream, promises as fsp } from "fs";
 import { Readable } from "stream";
-import path from "path";
 import { findById } from "@/lib/repository";
 import { getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { getSessionUser } from "@/lib/session";
-
-const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
+import { getFilePath } from "@/lib/attachment-store";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -41,15 +39,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const storagePath = String(record.storage_path);
-    const fullPath = path.resolve(UPLOADS_DIR, storagePath);
+    const storedMimeType = String(record.mime_type || "");
 
-    // Ensure path stays inside uploads/
-    if (!fullPath.startsWith(UPLOADS_DIR + path.sep)) {
-      return NextResponse.json(
-        { error: "Invalid file path" },
-        { status: 400 }
-      );
+    let fileResult;
+    try {
+      fileResult = getFilePath(storagePath, storedMimeType);
+    } catch (err) {
+      if (err instanceof RangeError) {
+        // Path traversal detected — return 400 rather than 500
+        return NextResponse.json(
+          { error: "Invalid file path" },
+          { status: 400 }
+        );
+      }
+      throw err;
     }
+
+    const { fullPath, safeMimeType } = fileResult;
 
     const session = await getSessionUser(request);
     logAuditEvent({
@@ -65,7 +71,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const rawFilename = String(record.filename);
     // Sanitise for Content-Disposition header — strip quotes and control chars
     const safeFilename = rawFilename.replace(/["\r\n]/g, "_");
-    const mimeType = String(record.mime_type || "application/octet-stream");
 
     const fileStat = await fsp.stat(fullPath);
     const nodeStream = createReadStream(fullPath);
@@ -78,7 +83,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return new NextResponse(webStream, {
       headers: {
-        "Content-Type": mimeType,
+        "Content-Type": safeMimeType,
         "Content-Disposition": `attachment; filename="${safeFilename}"`,
         "Content-Length": String(fileStat.size),
         "X-Content-Type-Options": "nosniff",
