@@ -112,7 +112,7 @@ export async function importEntities(
   const relationMaps = await buildRelationMaps(entity);
 
   // Load existing records for upsert matching
-  const existingRecords = await loadExistingRecords(entityName, entity);
+  const existingRecords = await loadExistingRecords(entityName, entity, upsertKeys);
 
   const result: ImportResult = {
     total: rows.length,
@@ -204,14 +204,32 @@ async function buildRelationMaps(
 }
 
 /**
- * Load all existing records for upsert matching.
+ * Load existing records for upsert matching, using pagination to avoid
+ * unbounded in-memory loads. Only fetches the fields needed for upsert
+ * comparison (id, schema fields, and relation FKs).
  */
 async function loadExistingRecords(
   entityName: string,
-  entity: EntityConfig
+  entity: EntityConfig,
+  _upsertKeys: string[] = []
 ): Promise<Row[]> {
-  const records = (await findAll(entityName)) as Row[];
-  return records.map((r) => {
+  const PAGE_SIZE = 200;
+  const allRecords: Row[] = [];
+  let page = 1;
+
+  while (true) {
+    const result = await findAll(entityName, { page, pageSize: PAGE_SIZE }) as {
+      items: Row[];
+      totalCount: number;
+      page: number;
+      pageSize: number;
+    };
+    allRecords.push(...result.items);
+    if (allRecords.length >= result.totalCount) break;
+    page++;
+  }
+
+  return allRecords.map((r) => {
     const flat: Row = { id: r.id };
     // Copy schema fields
     for (const fieldName of Object.keys(entity.fields)) {

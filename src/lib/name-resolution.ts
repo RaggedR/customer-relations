@@ -162,12 +162,6 @@ export async function resolveNames(question: string): Promise<NameResolution> {
             bestMatch = { name: entry.name, type: entry.type, id: entry.id, distance: dist };
           }
         }
-        // Also check against the full name (stripped of apostrophes)
-        const fullName = entry.parts.join("");
-        const distFull = levenshtein(word, fullName);
-        if (distFull <= MAX_DISTANCE && (!bestMatch || distFull < bestMatch.distance)) {
-          bestMatch = { name: entry.name, type: entry.type, id: entry.id, distance: distFull };
-        }
       }
     }
 

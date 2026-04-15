@@ -233,6 +233,12 @@ export async function findAll(
     return { items, totalCount, page, pageSize };
   }
 
+  // No pagination — cap to 1000 rows to prevent unbounded queries.
+  // Callers that need more should use the page parameter.
+  if (args.take === undefined) {
+    args.take = 1000;
+  }
+
   return model.findMany(args);
 }
 

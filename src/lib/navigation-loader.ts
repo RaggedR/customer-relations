@@ -11,6 +11,41 @@ import YAML from "yaml";
 import type { NavigationConfig, WindowDef, TransitionDef } from "./navigation";
 import type { WindowRole } from "./layout";
 
+const VALID_WINDOW_ROLES: ReadonlySet<WindowRole> = new Set([
+  "search", "detail", "property", "form", "ai", "calendar",
+]);
+
+/**
+ * Validate the parsed navigation config.
+ * Throws if any transition references an unknown window type, or any
+ * window declares an invalid role.
+ */
+export function validateNavigation(config: NavigationConfig): void {
+  const errors: string[] = [];
+  const definedWindows = new Set(Object.keys(config.windows));
+
+  // Every window must have a valid role
+  for (const [name, def] of Object.entries(config.windows)) {
+    if (!VALID_WINDOW_ROLES.has(def.role)) {
+      errors.push(`Window "${name}" has invalid role "${def.role}"`);
+    }
+  }
+
+  // Every transition's from/to must reference a defined window type
+  for (const t of config.transitions) {
+    if (!definedWindows.has(t.from)) {
+      errors.push(`Transition references unknown window type "${t.from}" (from)`);
+    }
+    if (!definedWindows.has(t.to)) {
+      errors.push(`Transition references unknown window type "${t.to}" (to)`);
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Invalid navigation.yaml:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
+  }
+}
+
 export function loadNavigationYaml(): NavigationConfig {
   const filePath = path.resolve(process.cwd(), "navigation.yaml");
   const raw = fs.readFileSync(filePath, "utf-8");
@@ -38,5 +73,7 @@ export function loadNavigationYaml(): NavigationConfig {
     idTemplate: t.id,
   }));
 
-  return { windows, transitions };
+  const config = { windows, transitions };
+  validateNavigation(config);
+  return config;
 }
