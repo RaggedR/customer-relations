@@ -1,25 +1,66 @@
 /**
  * Roundtrip Test Helpers
  *
- * Shared utilities for export → import → verify tests.
+ * Shared utilities for export -> import -> verify tests.
  * Handles field normalization (dates, numbers, nulls) so that
  * comparisons work across serialization boundaries.
+ *
+ * Also provides auth cookie generation for HTTP requests to the
+ * dev server, which requires a valid session JWT.
  */
 
 import { getSchema } from "@/lib/schema";
+import { signSession } from "@/lib/auth";
 
 const BASE_URL = "http://localhost:3000";
 
 /**
+ * Test session secret — must match the dev server's SESSION_SECRET env var.
+ * Falls back to a well-known test value that test .env files should use.
+ */
+const TEST_SESSION_SECRET =
+  process.env.SESSION_SECRET || "test-secret-for-integration-tests";
+
+/**
+ * Generate a valid session JWT for integration test HTTP requests.
+ * Signs as admin (userId "1") so all API endpoints are accessible.
+ */
+async function getAuthCookie(): Promise<string> {
+  const token = await signSession(
+    { userId: "1", role: "admin" },
+    TEST_SESSION_SECRET,
+    "1h",
+  );
+  return `session=${token}`;
+}
+
+/**
  * Check whether the dev server is reachable.
  * Integration tests use this to skip gracefully when no server is running.
+ *
+ * Hits the login page (a public route) to avoid auth requirements.
  */
 export async function isServerRunning(): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE_URL}/api/patient`, {
+    const res = await fetch(`${BASE_URL}/login`, {
       signal: AbortSignal.timeout(2000),
     });
-    return res.ok;
+    // Any response (including redirects) means the server is up
+    return res.status < 500;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check whether the database is reachable by attempting a lightweight query.
+ * Returns false if the DB connection fails (e.g., DB doesn't exist).
+ */
+export async function isDatabaseAvailable(): Promise<boolean> {
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.$queryRaw`SELECT 1`;
+    return true;
   } catch {
     return false;
   }
@@ -71,7 +112,7 @@ export function compareField(
   if (origNull && reimNull) return { match: true };
   if (origNull !== reimNull) {
     // Special case: empty string on one side, null on the other
-    // This is a known asymmetry in CSV roundtrip (null → "" → null)
+    // This is a known asymmetry in CSV roundtrip (null -> "" -> null)
     if (
       (origNull && reimported === "") ||
       (reimNull && original === "")
@@ -173,6 +214,7 @@ export function assertFieldsMatch(
 
 /**
  * POST a file to an import endpoint using multipart form data.
+ * Includes auth cookie for the dev server's proxy auth check.
  */
 export async function postImportFile(
   url: string,
@@ -184,18 +226,25 @@ export async function postImportFile(
   const blobContent = typeof content === "string" ? content : new Uint8Array(content);
   const blob = new Blob([blobContent], { type: mimeType });
   formData.append("file", blob, filename);
+
+  const cookie = await getAuthCookie();
   return fetch(`${BASE_URL}${url}`, {
     method: "POST",
     body: formData,
+    headers: { Cookie: cookie },
   });
 }
 
 /**
  * GET an export endpoint and return the response.
+ * Includes auth cookie for the dev server's proxy auth check.
  */
 export async function getExport(
   url: string,
   format: string
 ): Promise<Response> {
-  return fetch(`${BASE_URL}${url}?format=${format}`);
+  const cookie = await getAuthCookie();
+  return fetch(`${BASE_URL}${url}?format=${format}`, {
+    headers: { Cookie: cookie },
+  });
 }

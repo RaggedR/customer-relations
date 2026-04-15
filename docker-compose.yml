@@ -26,6 +26,8 @@ services:
     environment:
       DATABASE_URL: postgresql://crm:${POSTGRES_PASSWORD:-crm_dev_password}@db:5432/customer_relations
       SESSION_SECRET: ${SESSION_SECRET}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Customer Relations <noreply@example.com>}
     depends_on:
       db:
         condition: service_healthy
