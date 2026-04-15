@@ -52,19 +52,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const nurseName = nurse.name ?? "Unknown Nurse";
     const now = new Date();
 
-    // Load clinical and personal notes for this patient
-    const [clinicalNotes, personalNotes] = await Promise.all([
+    // Pagination params — default page 1, pageSize 20
+    const page = Math.max(1, parseInt(request.nextUrl.searchParams.get("page") ?? "1", 10) || 1);
+    const pageSize = Math.max(1, Math.min(200, parseInt(request.nextUrl.searchParams.get("pageSize") ?? "20", 10) || 20));
+
+    // Load clinical and personal notes for this patient (paginated)
+    const [clinicalResult, personalResult] = await Promise.all([
       findAll("clinical_note", {
         filterBy: { patientId },
         sortBy: "date",
         sortOrder: "desc",
-      }) as Promise<Record<string, unknown>[]>,
+        page,
+        pageSize,
+      }) as Promise<{ items: Record<string, unknown>[]; totalCount: number; page: number; pageSize: number }>,
       findAll("personal_note", {
         filterBy: { patientId },
         sortBy: "date",
         sortOrder: "desc",
-      }) as Promise<Record<string, unknown>[]>,
+        page,
+        pageSize,
+      }) as Promise<{ items: Record<string, unknown>[]; totalCount: number; page: number; pageSize: number }>,
     ]);
+
+    const clinicalNotes = clinicalResult.items;
+    const personalNotes = personalResult.items;
 
     // Render each note as a watermarked PNG (base64 data URI)
     const notes = [
@@ -105,7 +116,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       userAgent,
     });
 
-    return NextResponse.json({ patientRef, notes });
+    return NextResponse.json({
+      patientRef,
+      notes,
+      pagination: {
+        page,
+        pageSize,
+        totalClinical: clinicalResult.totalCount,
+        totalPersonal: personalResult.totalCount,
+        totalNotes: clinicalResult.totalCount + personalResult.totalCount,
+      },
+    });
   });
 }
 
