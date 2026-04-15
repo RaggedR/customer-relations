@@ -8,6 +8,7 @@
 
 import { createHash } from "crypto";
 import type { NextRequest } from "next/server";
+import { COOKIE_NAME } from "@/lib/session";
 
 interface Window {
   start: number;
@@ -66,7 +67,7 @@ export function createRateLimiter(
  * Prefers session cookie (per-user); falls back to IP (per-origin).
  */
 export function getRateLimitKey(request: NextRequest): string {
-  const session = request.cookies.get("session")?.value;
+  const session = request.cookies.get(COOKIE_NAME)?.value;
   // Hash the session token before using it as a map key — no raw JWTs in memory.
   // Use 128-bit (32 hex chars) to prevent pre-image collision attacks on attacker-controlled input.
   if (session) return `session:${createHash("sha256").update(session).digest("hex").slice(0, 32)}`;

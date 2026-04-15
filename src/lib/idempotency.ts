@@ -19,7 +19,7 @@ interface CachedResponse {
 
 const TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const MAX_ENTRIES = 10_000;
-const MAX_KEY_LENGTH = 128;
+export const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 const store = new Map<string, CachedResponse>();
 
 function evictIfOverLimit() {
@@ -46,7 +46,8 @@ function evictIfOverLimit() {
  * Returns the cached response if found, null otherwise.
  */
 export function getIdempotentResponse(key: string): NextResponse | null {
-  const safeKey = key.slice(0, MAX_KEY_LENGTH);
+  if (key.length > MAX_IDEMPOTENCY_KEY_LENGTH) return null;
+  const safeKey = key;
   const cached = store.get(safeKey);
   if (!cached) return null;
   if (cached.expiresAt < Date.now()) {
@@ -69,8 +70,9 @@ export async function cacheIdempotentResponse(
   key: string,
   response: NextResponse,
 ): Promise<void> {
+  if (key.length > MAX_IDEMPOTENCY_KEY_LENGTH) return;
   evictIfOverLimit();
-  const safeKey = key.slice(0, MAX_KEY_LENGTH);
+  const safeKey = key;
   const body = await response.clone().text();
   store.set(safeKey, {
     body,

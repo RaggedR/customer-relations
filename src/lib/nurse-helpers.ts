@@ -19,12 +19,15 @@ export async function resolveNurse(userId: number) {
 
 /**
  * Resolve the nurse's display name from their userId.
+ * Delegates to resolveNurse to avoid redundant DB queries.
  */
 export async function resolveNurseName(userId: number): Promise<string | null> {
+  const nurse = await resolveNurse(userId);
+  if (nurse) return nurse.name ?? null;
+  // resolveNurse already fetched the user; if no nurse record, fall back to
+  // the user's name by re-fetching only when necessary.
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user?.email) return user?.name ?? null;
-  const nurse = await prisma.nurse.findFirst({ where: { email: user.email } });
-  return nurse?.name ?? user.name ?? null;
+  return user?.name ?? null;
 }
 
 /**

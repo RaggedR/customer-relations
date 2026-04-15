@@ -18,7 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSchema, foreignKeyName } from "@/lib/schema";
 import { findAll, findById, create, update, remove, validateEntity } from "@/lib/repository";
 import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
-import { getIdempotentResponse, cacheIdempotentResponse } from "@/lib/idempotency";
+import { getIdempotentResponse, cacheIdempotentResponse, MAX_IDEMPOTENCY_KEY_LENGTH } from "@/lib/idempotency";
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -91,6 +91,12 @@ export function makeListCreateHandlers(entityName: string) {
     // Idempotency: key is scoped to the entity to prevent cross-endpoint collisions.
     // These endpoints are admin-only (proxy-enforced), so per-user scoping is not needed.
     const rawKey = request.headers.get("idempotency-key");
+    if (rawKey && rawKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+      return NextResponse.json(
+        { error: `Idempotency-Key must be at most ${MAX_IDEMPOTENCY_KEY_LENGTH} characters` },
+        { status: 400 },
+      );
+    }
     const idempotencyKey = rawKey ? `${entityName}:${rawKey}` : null;
     if (idempotencyKey) {
       const cached = getIdempotentResponse(idempotencyKey);
