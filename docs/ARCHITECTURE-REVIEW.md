@@ -15,37 +15,23 @@ The architecture is fundamentally sound. The two-dimensional model (UI pipeline 
 
 ## Priority Refactors
 
-### P1: Generate AI Schema Description from schema.yaml
-- **Problem:** `src/app/api/ai/route.ts` has 135 lines of hardcoded SQL DDL (`SCHEMA_DESCRIPTION`). This is a second source of truth. It's ALREADY stale — `user`, `session`, `audit_log` entities were added to schema.yaml but are not in the AI's schema description.
-- **Fix:** Generate `SCHEMA_DESCRIPTION` from `getSchema()` at startup.
-- **Principle:** Single source of truth, eliminate information leak.
-- **Blast radius:** 1 file + 1 new utility function.
+### P1: Generate AI Schema Description from schema.yaml — RESOLVED
+- **Status:** Fixed. `generateSchemaDescription()` in `src/lib/generate-schema-description.ts` dynamically generates DDL from `getSchema()`. The hardcoded `SCHEMA_DESCRIPTION` was removed.
 
-### P2: Eliminate Duplicate Entity-Specific Routes
-- **Problem:** `hearing-aid/export/` and `hearing-aid/import/` are fully superseded by the generic `[entity]/export` and `[entity]/import` routes.
-- **Fix:** Delete them. The generic routes already handle hearing_aid.
-- **Note:** `patient/`, `nurse/` shadows MUST stay (Next.js App Router constraint). `appointment/` MUST stay (CalDAV side effects).
-- **Blast radius:** 2 routes removed, 0 functionality lost.
+### P2: Eliminate Duplicate Entity-Specific Routes — RESOLVED
+- **Status:** Fixed. The `hearing-aid/export/` and `hearing-aid/import/` routes were removed. Generic `[entity]/export` and `[entity]/import` handle all entities.
 
-### P3: Extract Shared Entity Label Source of Truth
-- **Problem:** `navigation.ts:formatLabel` and `schema-hierarchy.ts:entityLabel` have the SAME hardcoded entity name → display name map. Adding an entity requires editing both.
-- **Fix:** Add optional `label` field to entities in `schema.yaml`. Derive in `schema-hierarchy.ts`. Remove the map from `navigation.ts`.
-- **Blast radius:** 3 files.
+### P3: Extract Shared Entity Label Source of Truth — RESOLVED
+- **Status:** Fixed. `schema.yaml` has `label` and `label_singular` fields. `entityLabel()` in `src/lib/schema.ts` reads from them. The duplicate `formatLabel` in navigation.ts was removed.
 
-### P4: Extract CardDAV Auth to Shared Module
-- **Problem:** `checkAuth()` is copy-pasted identically in 3 carddav route files.
-- **Fix:** Move to `src/lib/carddav-auth.ts`.
-- **Blast radius:** 4 files (3 routes + 1 new module).
+### P4: Extract CardDAV Auth to Shared Module — RESOLVED
+- **Status:** Fixed. `checkAuth()` lives in `src/lib/carddav-auth.ts`, imported by all 3 carddav route files.
 
-### P5: Narrow parsers.ts Public Interface
-- **Problem:** `buildHeaderMap` and `normaliseRows` are exported but are internal helpers. They leak implementation detail to `import.ts`.
-- **Fix:** Unexport them. Only `parseFile`, `Row`, and `detectFormat` should be public.
-- **Blast radius:** 2 files.
+### P5: Narrow parsers.ts Public Interface — RESOLVED
+- **Status:** Fixed. `buildHeaderMap` and `normaliseRows` are no longer exported.
 
-### P6: Remove Dead Components
-- **Problem:** `PatientDetailPanel` and `PatientFormPanel` appear orphaned — not wired into `DashboardShell`. They predate the generic system.
-- **Fix:** Verify no imports reference them, then delete.
-- **Blast radius:** 2 files removed.
+### P6: Remove Dead Components — RESOLVED
+- **Status:** Fixed. `PatientDetailPanel` and `PatientFormPanel` were deleted.
 
 ---
 

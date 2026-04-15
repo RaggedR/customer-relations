@@ -25,6 +25,8 @@ export interface FieldConfig {
 export interface RelationConfig {
   type: "belongs_to";
   entity: string;
+  required?: boolean;
+  on_delete?: "cascade" | "restrict" | "set_null";
 }
 
 // --- Representation types (external format mappings) ---

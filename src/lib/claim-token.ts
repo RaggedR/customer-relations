@@ -18,7 +18,7 @@ export async function issueClaim(email: string): Promise<string> {
   const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
 
   await prisma.claimToken.create({
-    data: { email, tokenHash, expiresAt },
+    data: { email, token_hash: tokenHash, expires_at: expiresAt },
   });
 
   return rawToken;
@@ -33,15 +33,15 @@ export async function consumeClaim(rawToken: string): Promise<{ email: string } 
 
   // Use a transaction to atomically check and mark as used (prevents replay)
   return prisma.$transaction(async (tx) => {
-    const claim = await tx.claimToken.findUnique({ where: { tokenHash } });
+    const claim = await tx.claimToken.findUnique({ where: { token_hash: tokenHash } });
 
     if (!claim) return null;
-    if (claim.usedAt) return null;
-    if (claim.expiresAt < new Date()) return null;
+    if (claim.used_at) return null;
+    if (claim.expires_at < new Date()) return null;
 
     await tx.claimToken.update({
       where: { id: claim.id },
-      data: { usedAt: new Date() },
+      data: { used_at: new Date() },
     });
 
     return { email: claim.email };
@@ -57,8 +57,8 @@ export async function purgeStaleClaims(): Promise<number> {
   const result = await prisma.claimToken.deleteMany({
     where: {
       OR: [
-        { expiresAt: { lt: cutoff } },
-        { usedAt: { not: null }, createdAt: { lt: cutoff } },
+        { expires_at: { lt: cutoff } },
+        { used_at: { not: null }, createdAt: { lt: cutoff } },
       ],
     },
   });

@@ -74,9 +74,12 @@ function generateModel(
     for (const [relName, rel] of Object.entries(entity.relations)) {
       const relModelName = toPascalCase(rel.entity);
       const fkName = foreignKeyName(toSnakeCase(relName));
-      lines.push(`  ${fkName} Int?`);
+      const optional = rel.required ? "" : "?";
+      const onDeleteMap = { cascade: "Cascade", restrict: "Restrict", set_null: "SetNull" } as const;
+      const onDelete = rel.on_delete ? `, onDelete: ${onDeleteMap[rel.on_delete]}` : "";
+      lines.push(`  ${fkName} Int${optional}`);
       lines.push(
-        `  ${relName} ${relModelName}? @relation(fields: [${fkName}], references: [id])`
+        `  ${relName} ${relModelName}${optional} @relation(fields: [${fkName}], references: [id]${onDelete})`
       );
     }
   }

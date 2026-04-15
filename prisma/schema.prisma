@@ -41,8 +41,8 @@ model Referral {
   reason String?
   expiry_date DateTime?
   notes String?
-  patientId Int?
-  patient Patient? @relation(fields: [patientId], references: [id])
+  patientId Int
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
   @@index([patientId])
 }
 
@@ -54,8 +54,8 @@ model ClinicalNote {
   note_type String?
   content String
   clinician String?
-  patientId Int?
-  patient Patient? @relation(fields: [patientId], references: [id])
+  patientId Int
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
   attachments Attachment[]
   @@index([patientId])
 }
@@ -66,8 +66,8 @@ model PersonalNote {
   updatedAt DateTime @updatedAt
   date DateTime
   content String
-  patientId Int?
-  patient Patient? @relation(fields: [patientId], references: [id])
+  patientId Int
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
   @@index([patientId])
 }
 
@@ -88,8 +88,8 @@ model HearingAid {
   warranty_end_date DateTime?
   last_repair_details String?
   repair_address String?
-  patientId Int?
-  patient Patient? @relation(fields: [patientId], references: [id])
+  patientId Int
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
   @@index([patientId])
 }
 
@@ -103,8 +103,8 @@ model ClaimItem {
   amount Float?
   status String?
   notes String?
-  patientId Int?
-  patient Patient? @relation(fields: [patientId], references: [id])
+  patientId Int
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
   @@index([patientId])
 }
 
@@ -121,9 +121,9 @@ model Appointment {
   notes String?
   caldav_etag String?
   patientId Int?
-  patient Patient? @relation(fields: [patientId], references: [id])
+  patient Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
   nurseId Int?
-  nurse Nurse? @relation(fields: [nurseId], references: [id])
+  nurse Nurse? @relation(fields: [nurseId], references: [id], onDelete: SetNull)
   @@index([date])
   @@index([patientId])
   @@index([nurseId, date])
@@ -152,7 +152,7 @@ model NurseSpecialty {
   specialty String
   notes String?
   nurseId Int?
-  nurse Nurse? @relation(fields: [nurseId], references: [id])
+  nurse Nurse? @relation(fields: [nurseId], references: [id], onDelete: Cascade)
   @@index([nurseId])
 }
 
@@ -166,7 +166,7 @@ model CalendarConnection {
   refresh_token String?
   token_expiry DateTime?
   nurseId Int?
-  nurse Nurse? @relation(fields: [nurseId], references: [id])
+  nurse Nurse? @relation(fields: [nurseId], references: [id], onDelete: Cascade)
   @@index([nurseId])
 }
 
@@ -181,9 +181,9 @@ model Attachment {
   category String?
   description String?
   patientId Int?
-  patient Patient? @relation(fields: [patientId], references: [id])
+  patient Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
   clinical_noteId Int?
-  clinical_note ClinicalNote? @relation(fields: [clinical_noteId], references: [id])
+  clinical_note ClinicalNote? @relation(fields: [clinical_noteId], references: [id], onDelete: SetNull)
   @@index([patientId])
   @@index([clinical_noteId])
 }
@@ -211,8 +211,18 @@ model Session {
   ip String?
   user_agent String?
   userId Int?
-  user User? @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId])
+}
+
+model ClaimToken {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  email String
+  token_hash String @unique
+  used_at DateTime?
+  expires_at DateTime
 }
 
 model AuditLog {
@@ -227,17 +237,8 @@ model AuditLog {
   ip String?
   user_agent String?
   userId Int?
-  user User? @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
   @@index([timestamp])
   @@index([userId])
   @@index([entity, entity_id])
-}
-
-model ClaimToken {
-  id        Int       @id @default(autoincrement())
-  email     String
-  tokenHash String    @unique
-  usedAt    DateTime?
-  expiresAt DateTime
-  createdAt DateTime  @default(now())
 }

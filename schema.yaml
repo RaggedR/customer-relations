@@ -51,7 +51,7 @@ entities:
       expiry_date: { type: date }
       notes: { type: text }
     relations:
-      patient: { type: belongs_to, entity: patient, required: true }
+      patient: { type: belongs_to, entity: patient, required: true, on_delete: restrict }
 
   clinical_note:
     label: "Clinical Notes"
@@ -69,7 +69,7 @@ entities:
       content: { type: text, required: true }
       clinician: { type: string }
     relations:
-      patient: { type: belongs_to, entity: patient, required: true }
+      patient: { type: belongs_to, entity: patient, required: true, on_delete: restrict }
 
   personal_note:
     label: "Personal Notes"
@@ -83,7 +83,7 @@ entities:
       date: { type: datetime, required: true }
       content: { type: text, required: true }
     relations:
-      patient: { type: belongs_to, entity: patient, required: true }
+      patient: { type: belongs_to, entity: patient, required: true, on_delete: restrict }
 
   hearing_aid:
     label: "Hearing Aids"
@@ -107,7 +107,7 @@ entities:
       last_repair_details: { type: text }
       repair_address: { type: text }
     relations:
-      patient: { type: belongs_to, entity: patient, required: true }
+      patient: { type: belongs_to, entity: patient, required: true, on_delete: restrict }
     representations:
       csv:
         headers:
@@ -147,7 +147,7 @@ entities:
       status: { type: enum, values: [pending, claimed, paid, rejected] }
       notes: { type: text }
     relations:
-      patient: { type: belongs_to, entity: patient, required: true }
+      patient: { type: belongs_to, entity: patient, required: true, on_delete: restrict }
 
   appointment:
     sidebar_addable: true
@@ -166,8 +166,8 @@ entities:
       notes: { type: text }
       caldav_etag: { type: string }  # ETag from CalDAV server for optimistic concurrency
     relations:
-      patient: { type: belongs_to, entity: patient }
-      nurse: { type: belongs_to, entity: nurse }
+      patient: { type: belongs_to, entity: patient, on_delete: set_null }
+      nurse: { type: belongs_to, entity: nurse, on_delete: set_null }
     representations:
       ical:
         mapping:
@@ -224,7 +224,7 @@ entities:
       specialty: { type: string, required: true }
       notes: { type: text }
     relations:
-      nurse: { type: belongs_to, entity: nurse }
+      nurse: { type: belongs_to, entity: nurse, on_delete: cascade }
 
   calendar_connection:
     sensitive: true
@@ -237,7 +237,7 @@ entities:
       refresh_token: { type: string }
       token_expiry: { type: datetime }
     relations:
-      nurse: { type: belongs_to, entity: nurse }
+      nurse: { type: belongs_to, entity: nurse, on_delete: cascade }
 
   attachment:
     display:
@@ -254,8 +254,8 @@ entities:
       category: { type: enum, values: [referral_letter, test_result, clinical_document, other] }
       description: { type: text }
     relations:
-      patient: { type: belongs_to, entity: patient }
-      clinical_note: { type: belongs_to, entity: clinical_note }
+      patient: { type: belongs_to, entity: patient, on_delete: set_null }
+      clinical_note: { type: belongs_to, entity: clinical_note, on_delete: set_null }
 
   # --- Auth & compliance entities (infrastructure, not shown in sidebar) ---
 
@@ -277,7 +277,15 @@ entities:
       ip: { type: string }
       user_agent: { type: string }
     relations:
-      user: { type: belongs_to, entity: user }
+      user: { type: belongs_to, entity: user, on_delete: cascade }
+
+  claim_token:
+    sensitive: true
+    fields:
+      email: { type: email, required: true }
+      token_hash: { type: string, required: true, unique: true }
+      used_at: { type: datetime }
+      expires_at: { type: datetime, required: true }
 
   audit_log:
     sensitive: true
@@ -292,6 +300,6 @@ entities:
       ip: { type: string }
       user_agent: { type: string }
     relations:
-      user: { type: belongs_to, entity: user }
+      user: { type: belongs_to, entity: user, on_delete: set_null }
     indexes:
       - [entity, entity_id]
