@@ -171,8 +171,13 @@ export async function resolveNames(question: string): Promise<NameResolution> {
         // Confident — auto-resolve with ID-based pseudonym (no real name sent to LLM)
         const pseudonym = pseudonymMap.get(bestMatch.name) ?? `${bestMatch.type === "patient" ? "Patient" : "Nurse"} #${bestMatch.id}`;
         const resolved = JSON.stringify({ type: bestMatch.type, id: bestMatch.id, pseudonym });
+        // Strip any stale [CRM_RESOLVED] block from a previous resolution before appending.
+        // Follow-up queries can accumulate stale blocks if the user rephrases the question.
+        const strippedQuestion = question
+          .replace(/\[CRM_RESOLVED\][\s\S]*?\[\/CRM_RESOLVED\]/g, "")
+          .trim();
         return {
-          question: question + `\n\n[CRM_RESOLVED]${resolved}[/CRM_RESOLVED]`,
+          question: strippedQuestion + `\n\n[CRM_RESOLVED]${resolved}[/CRM_RESOLVED]`,
           resolvedId: bestMatch.id,
           resolvedType: bestMatch.type as "patient" | "nurse",
           resolvedName: safeName,
