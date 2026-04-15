@@ -60,6 +60,15 @@ export async function withErrorHandler(
     ) {
       return NextResponse.json({ error: message }, { status: 404 });
     }
+    if (message.startsWith("Invalid sort field:")) {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    if (message === "CONFLICT") {
+      return NextResponse.json(
+        { error: "Record was modified by another request. Please reload and try again." },
+        { status: 409 },
+      );
+    }
     logger.error({ err: error, label }, "Request handler error");
     return NextResponse.json(
       { error: "Internal server error" },

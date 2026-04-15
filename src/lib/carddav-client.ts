@@ -10,7 +10,7 @@
 
 import { DAVClient } from "tsdav";
 import { generateVCard } from "./vcard";
-import { decryptToken } from "./token-crypto";
+import { tryDecrypt } from "./token-crypto";
 import { logger } from "@/lib/logger";
 import type { Row } from "./parsers";
 
@@ -117,19 +117,6 @@ export async function deleteContact(
 }
 
 // ── Internal ──────────────────────────────────────────────
-
-/**
- * Decrypt a stored token, falling back to plaintext for legacy
- * rows that were stored before encryption was enabled.
- */
-function tryDecrypt(token: string | null): string | undefined {
-  if (!token) return undefined;
-  try {
-    return decryptToken(token);
-  } catch {
-    return token;
-  }
-}
 
 async function getClient(conn: ContactConnection): Promise<DAVClient> {
   const isGoogle = conn.provider === "google";

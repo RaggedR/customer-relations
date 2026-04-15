@@ -58,7 +58,7 @@ export async function getSessionUser(
   if (!payload) return null;
 
   const userId = parseInt(payload.userId, 10);
-  if (isNaN(userId)) return null;
+  if (isNaN(userId) || String(userId) !== payload.userId) return null;
 
   return { userId, role: payload.role };
 }

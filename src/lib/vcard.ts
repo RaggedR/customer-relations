@@ -6,6 +6,7 @@
  */
 
 import { getVCardRepresentation, reverseMapping } from "@/lib/schema";
+import { escapeText, unescapeText, unfoldLines } from "@/lib/text-codec";
 import type { Row } from "@/lib/parsers";
 
 /**
@@ -74,7 +75,7 @@ export function parseVCard(
   const reverse = reverseMapping(vcard.mapping);
   const result: Row = {};
 
-  const lines = unfoldVCardLines(vcardText);
+  const lines = unfoldLines(vcardText);
 
   for (const line of lines) {
     const colonIdx = line.indexOf(":");
@@ -128,7 +129,7 @@ function formatVCardValue(prop: string, value: unknown): string {
     case "ADR":
       // vCard ADR format: ;;street;city;state;zip;country
       // We store the full address as a single string
-      return `;;${escapeVCardText(str)};;;;`;
+      return `;;${escapeText(str)};;;;`;
     case "BDAY":
       // Ensure YYYY-MM-DD format
       try {
@@ -138,7 +139,7 @@ function formatVCardValue(prop: string, value: unknown): string {
         return str;
       }
     default:
-      return escapeVCardText(str);
+      return escapeText(str);
   }
 }
 
@@ -150,45 +151,11 @@ function parseVCardValue(prop: string, value: string): string {
       // Reconstruct a readable address
       return parts
         .filter((p) => p.trim())
-        .map((p) => unescapeVCardText(p))
+        .map((p) => unescapeText(p))
         .join(", ");
     }
     default:
-      return unescapeVCardText(value);
+      return unescapeText(value);
   }
 }
 
-function escapeVCardText(text: string): string {
-  return text
-    .replace(/\\/g, "\\\\")
-    .replace(/;/g, "\\;")
-    .replace(/,/g, "\\,")
-    .replace(/\n/g, "\\n");
-}
-
-function unescapeVCardText(text: string): string {
-  return text
-    .replace(/\\n/gi, "\n")
-    .replace(/\\,/g, ",")
-    .replace(/\\;/g, ";")
-    .replace(/\\\\/g, "\\");
-}
-
-/**
- * Unfold vCard continuation lines (lines starting with space
- * are continuations of the previous line).
- */
-function unfoldVCardLines(text: string): string[] {
-  const raw = text.split(/\r?\n/);
-  const lines: string[] = [];
-  for (const line of raw) {
-    if (line.startsWith(" ") || line.startsWith("\t")) {
-      if (lines.length > 0) {
-        lines[lines.length - 1] += line.slice(1);
-      }
-    } else {
-      lines.push(line);
-    }
-  }
-  return lines;
-}

@@ -275,7 +275,8 @@ export async function create(
 export async function update(
   entityName: string,
   id: number,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  options?: { expectedUpdatedAt?: string }
 ) {
   const schema = getSchema();
   const entity = schema.entities[entityName];
@@ -284,6 +285,27 @@ export async function update(
   const model = getModelDelegate(entityName);
   const transformed = transformInput(entityName, data, entity);
   const includes = buildIncludes(entityName, entity);
+
+  // Optimistic locking: if the caller provides an expected updatedAt, use
+  // updateMany with a WHERE clause that includes updated_at. This is atomic
+  // at the DB level — a single UPDATE ... WHERE id = ? AND updated_at = ?.
+  if (options?.expectedUpdatedAt) {
+    const result = await model.updateMany({
+      where: { id, updated_at: new Date(options.expectedUpdatedAt) },
+      data: transformed,
+    });
+    if (result.count === 0) {
+      const existing = await model.findUnique({ where: { id } });
+      if (!existing) throw new Error(`Record not found: ${entityName}#${id}`);
+      throw new Error("CONFLICT");
+    }
+    // Fetch the updated record with includes for the response
+    const args: Record<string, unknown> = { where: { id } };
+    if (Object.keys(includes).length > 0) {
+      args.include = includes;
+    }
+    return model.findUnique(args);
+  }
 
   const args: Record<string, unknown> = {
     where: { id },

@@ -303,7 +303,7 @@ export async function POST(request: NextRequest) {
     let rows: Record<string, unknown>[];
     try {
       rows = await prismaReadonly.$transaction(async (tx) => {
-        await tx.$executeRawUnsafe("SET LOCAL statement_timeout = '5s'");
+        await tx.$executeRaw`SET LOCAL statement_timeout = '5s'`;
         return await tx.$queryRawUnsafe(sql) as Record<string, unknown>[];
       });
     } catch (dbError) {

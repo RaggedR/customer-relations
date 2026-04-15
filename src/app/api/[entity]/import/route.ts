@@ -65,6 +65,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
+  // Reject oversized files before loading into memory
+  const MAX_IMPORT_SIZE = 20 * 1024 * 1024; // 20 MB
+  if (file.size > MAX_IMPORT_SIZE) {
+    return NextResponse.json(
+      { error: `File too large (max ${MAX_IMPORT_SIZE / 1024 / 1024}MB)` },
+      { status: 413 }
+    );
+  }
+
   // Parse file into row objects
   const buffer = Buffer.from(await file.arrayBuffer());
   let rows;

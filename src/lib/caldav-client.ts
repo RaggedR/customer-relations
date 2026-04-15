@@ -11,7 +11,7 @@
 import { DAVClient, type DAVCalendar } from "tsdav";
 import { generateVEvent, makeUid } from "./ical";
 import { findAll } from "./repository";
-import { decryptToken } from "./token-crypto";
+import { tryDecrypt } from "./token-crypto";
 import { withRetry } from "./retry";
 import { logger } from "@/lib/logger";
 import type { Row } from "./parsers";
@@ -24,20 +24,6 @@ interface CalendarConnection {
   refresh_token: string | null;
   token_expiry: Date | null;
   nurseId: number;
-}
-
-/**
- * Decrypt a stored token, falling back to plaintext for legacy
- * rows that were stored before encryption was enabled.
- */
-function tryDecrypt(token: string | null): string | undefined {
-  if (!token) return undefined;
-  try {
-    return decryptToken(token);
-  } catch {
-    // Legacy plaintext token — return as-is for graceful migration
-    return token;
-  }
 }
 
 async function getClient(conn: CalendarConnection): Promise<DAVClient> {

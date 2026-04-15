@@ -121,21 +121,34 @@ export async function POST(request: NextRequest) {
   return withErrorHandler("POST /api/attachments/upload", async () => {
     await fs.mkdir(patientDir, { recursive: true });
 
+    // Write to a temp file first — if the DB insert fails, we clean up the
+    // temp file instead of leaving an orphaned file at the final path.
+    const tempPath = storagePath + ".tmp";
     const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(storagePath, buffer);
+    await fs.writeFile(tempPath, buffer);
 
     // Store relative path in DB (relative to uploads/)
     const relativePath = path.relative(UPLOADS_DIR, storagePath);
 
-    const record = await create("attachment", {
-      filename: safeName,
-      storage_path: relativePath,
-      mime_type: file.type || "application/octet-stream",
-      size_bytes: file.size,
-      category,
-      description,
-      patient: Number(patientId),
-    });
+    let record;
+    try {
+      record = await create("attachment", {
+        filename: safeName,
+        storage_path: relativePath,
+        mime_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+        category,
+        description,
+        patient: Number(patientId),
+      });
+    } catch (err) {
+      // DB insert failed — remove temp file to prevent orphans
+      await fs.unlink(tempPath).catch(() => {});
+      throw err;
+    }
+
+    // DB record created successfully — promote temp file to final path
+    await fs.rename(tempPath, storagePath);
 
     const session = await getSessionUser(request);
     logAuditEvent({

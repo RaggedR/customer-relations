@@ -165,7 +165,10 @@ export function makeGetUpdateDeleteHandlers(entityName: string) {
         return NextResponse.json({ errors }, { status: 400 });
       }
 
-      const item = await update(entityName, numId, body);
+      const expectedUpdatedAt = body.updatedAt ?? body.updated_at;
+      const item = await update(entityName, numId, body, {
+        expectedUpdatedAt: expectedUpdatedAt ? String(expectedUpdatedAt) : undefined,
+      });
       return NextResponse.json(item);
     });
   }

@@ -45,6 +45,20 @@ export function encryptToken(plaintext: string): string {
   return `${iv.toString("hex")}:${tag.toString("hex")}:${encrypted.toString("hex")}`;
 }
 
+/**
+ * Decrypt a stored token, falling back to plaintext for legacy
+ * rows that were stored before encryption was enabled.
+ */
+export function tryDecrypt(token: string | null): string | undefined {
+  if (!token) return undefined;
+  try {
+    return decryptToken(token);
+  } catch {
+    // Legacy plaintext token — return as-is for graceful migration
+    return token;
+  }
+}
+
 export function decryptToken(stored: string): string {
   const parts = stored.split(":");
   if (parts.length !== 3) {
