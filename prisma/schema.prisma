@@ -231,3 +231,12 @@ model AuditLog {
   @@index([userId])
   @@index([entity, entity_id])
 }
+
+model ClaimToken {
+  id        Int       @id @default(autoincrement())
+  email     String
+  tokenHash String    @unique
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+}

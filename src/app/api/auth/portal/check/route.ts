@@ -16,8 +16,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { SignJWT } from "jose";
-import { getSecret } from "@/lib/session";
+import { issueClaim } from "@/lib/claim-token";
 import { sendClaimEmail } from "@/lib/email";
 import { createRateLimiter } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/api-helpers";
@@ -56,16 +55,7 @@ export async function POST(request: NextRequest) {
       where: { email: normEmail },
     });
     if (patient) {
-      // Generate a claim token (JWT, 24h expiry).
-      // Uses SESSION_SECRET — same key as session JWTs. Acceptable while email
-      // is stubbed. When wiring a real email provider, switch to a DB-backed
-      // single-use token table (hash stored on patient record, cleared on claim).
-      const secret = new TextEncoder().encode(getSecret());
-      const token = await new SignJWT({ email: normEmail, purpose: "claim" })
-        .setProtectedHeader({ alg: "HS256" })
-        .setIssuedAt()
-        .setExpirationTime("24h")
-        .sign(secret);
+      const token = await issueClaim(normEmail);
 
       const baseUrl = request.nextUrl.origin;
       const claimUrl = `${baseUrl}/portal/claim?token=${token}`;
