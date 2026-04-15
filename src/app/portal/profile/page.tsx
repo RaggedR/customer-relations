@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,10 +15,10 @@ interface Profile {
   address: string | null;
   date_of_birth: string | null;
   status: string;
-  maintenance_plan_expiry: string | null;
 }
 
 export default function PortalProfilePage() {
+  const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +27,8 @@ export default function PortalProfilePage() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
   // Correction request
   const [showCorrection, setShowCorrection] = useState(false);
@@ -37,6 +39,7 @@ export default function PortalProfilePage() {
   useEffect(() => {
     fetch("/api/portal/profile")
       .then((res) => {
+        if (res.status === 401) { router.push("/portal/login"); return null; }
         if (!res.ok) throw new Error("Failed to load profile");
         return res.json();
       })
@@ -52,22 +55,24 @@ export default function PortalProfilePage() {
   async function handleSaveContact(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setSaveMessage(null);
+    setSaveError(null);
+    setSaveSuccess(null);
     try {
       const res = await fetch("/api/portal/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, address }),
       });
+      if (res.status === 401) { router.push("/portal/login"); return; }
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to save");
       }
       const updated = await res.json();
       setProfile(updated);
-      setSaveMessage("Contact details updated.");
+      setSaveSuccess("Contact details updated.");
     } catch (err) {
-      setSaveMessage((err as Error).message);
+      setSaveError((err as Error).message);
     } finally {
       setSaving(false);
     }
@@ -108,9 +113,6 @@ export default function PortalProfilePage() {
           <Field label="Email" value={profile.email} />
           <Field label="Date of birth" value={profile.date_of_birth ? new Date(profile.date_of_birth).toLocaleDateString("en-AU") : "—"} />
           <Field label="Status" value={profile.status} />
-          {profile.maintenance_plan_expiry && (
-            <Field label="Plan expiry" value={new Date(profile.maintenance_plan_expiry).toLocaleDateString("en-AU")} />
-          )}
         </div>
       </section>
 
@@ -125,7 +127,8 @@ export default function PortalProfilePage() {
             <Label htmlFor="address">Address</Label>
             <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} />
           </div>
-          {saveMessage && <p className="text-sm text-muted-foreground">{saveMessage}</p>}
+          {saveError && <p className="text-sm text-red-400">{saveError}</p>}
+          {saveSuccess && <p className="text-sm text-green-400">{saveSuccess}</p>}
           <Button type="submit" disabled={saving}>
             {saving ? "Saving..." : "Update contact details"}
           </Button>

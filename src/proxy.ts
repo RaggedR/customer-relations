@@ -16,6 +16,11 @@ function parseCookie(request: NextRequest): string | undefined {
   return request.cookies.get(COOKIE_NAME)?.value;
 }
 
+/** Redirect to the appropriate login page based on which role was required. */
+function loginUrl(requiredRole: string): string {
+  return requiredRole === "patient" ? "/portal/login" : "/login";
+}
+
 /**
  * Next.js 16 proxy (global request interceptor).
  *
@@ -37,19 +42,20 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   // Protected route — verify session
+  const redirect = loginUrl(requiredRole);
   const token = parseCookie(request);
   if (!token) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL(redirect, request.url));
   }
 
   const payload = await verifyToken(token, getSecret());
   if (!payload) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL(redirect, request.url));
   }
 
   // Check role hierarchy
   if (!hasRole(payload, requiredRole)) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL(redirect, request.url));
   }
 
   // Session DB check: verify the session record exists and is not idle-timed-out.
@@ -57,7 +63,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const dbSession = await prisma.session.findUnique({ where: { token } });
   if (!dbSession) {
     // JWT is valid but session was revoked or never created
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL(redirect, request.url));
   }
 
   // Idle timeout: nurses 10 min, admins 30 min.
@@ -72,7 +78,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     const idleMs = Date.now() - dbSession.last_active.getTime();
     if (idleMs > idleTimeoutMs) {
       await prisma.session.delete({ where: { id: dbSession.id } });
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(new URL(redirect, request.url));
     }
   }
 

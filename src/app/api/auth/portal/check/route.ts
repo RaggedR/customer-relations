@@ -56,7 +56,10 @@ export async function POST(request: NextRequest) {
       where: { email: normEmail },
     });
     if (patient) {
-      // Generate a claim token (JWT, 24h expiry)
+      // Generate a claim token (JWT, 24h expiry).
+      // Uses SESSION_SECRET — same key as session JWTs. Acceptable while email
+      // is stubbed. When wiring a real email provider, switch to a DB-backed
+      // single-use token table (hash stored on patient record, cleared on claim).
       const secret = new TextEncoder().encode(getSecret());
       const token = await new SignJWT({ email: normEmail, purpose: "claim" })
         .setProtectedHeader({ alg: "HS256" })

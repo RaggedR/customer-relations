@@ -5,7 +5,7 @@
  * PUT  /api/portal/profile — updates allowed contact fields only
  *
  * Patients can view all their non-sensitive fields and update a limited
- * set of contact fields (phone, email, address). Other fields (name,
+ * set of contact fields (phone, address). Other fields (name, email,
  * Medicare number, date of birth) require a correction request to Clare.
  */
 
@@ -18,9 +18,11 @@ import { logAuditEvent } from "@/lib/audit";
 import { getClientIp } from "@/lib/api-helpers";
 
 // Fields the patient can view
+// maintenance_plan_expiry excluded — it encodes clinical treatment history
+// (HSP plan dates) which patients access through their treating clinician, not self-service.
 const VISIBLE_FIELDS = [
   "id", "name", "email", "phone", "address",
-  "date_of_birth", "status", "maintenance_plan_expiry",
+  "date_of_birth", "status",
 ] as const;
 
 // Fields the patient can self-edit (contact details only)

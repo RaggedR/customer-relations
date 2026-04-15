@@ -37,7 +37,12 @@ export default function PortalLoginPage() {
         return;
       }
 
-      setStep(data.status as Step);
+      const validSteps: Step[] = ["login", "claim_sent", "register"];
+      if (validSteps.includes(data.status)) {
+        setStep(data.status);
+      } else {
+        setError("Unexpected response. Please try again.");
+      }
     } catch {
       setError("Network error — please try again");
     } finally {

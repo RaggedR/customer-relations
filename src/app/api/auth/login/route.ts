@@ -15,10 +15,8 @@ import { verifyPassword } from "@/lib/password";
 import { getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { logger } from "@/lib/logger";
-import { COOKIE_NAME, COOKIE_OPTIONS, getSecret } from "@/lib/session";
+import { COOKIE_NAME, COOKIE_OPTIONS, SESSION_MAX_AGE, getSecret } from "@/lib/session";
 import { createRateLimiter } from "@/lib/rate-limit";
-
-const SESSION_MAX_AGE = 8 * 60 * 60; // 8 hours in seconds
 const loginLimiter = createRateLimiter(5, 60_000); // 5 attempts per minute
 
 export async function POST(request: NextRequest) {

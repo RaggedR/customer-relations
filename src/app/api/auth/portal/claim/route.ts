@@ -6,6 +6,11 @@
  *
  * Verifies a claim token (from the set-password email), creates a User
  * account linked to the existing Patient record, and logs the patient in.
+ *
+ * Note: Claim tokens are JWTs signed with SESSION_SECRET (same key as session
+ * tokens). If SESSION_SECRET rotates, outstanding claim links break. This is
+ * acceptable while email is stubbed — when a real email provider is wired up,
+ * consider a DB-backed single-use token table instead.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,11 +21,21 @@ import { hashPassword } from "@/lib/password";
 import { getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { logger } from "@/lib/logger";
-import { COOKIE_NAME, COOKIE_OPTIONS, getSecret } from "@/lib/session";
+import { COOKIE_NAME, COOKIE_OPTIONS, SESSION_MAX_AGE, getSecret } from "@/lib/session";
+import { createRateLimiter } from "@/lib/rate-limit";
 
-const SESSION_MAX_AGE = 8 * 60 * 60; // 8 hours
+const claimLimiter = createRateLimiter(5, 60_000); // 5 attempts per minute per IP
 
 export async function POST(request: NextRequest) {
+  const clientIp = getClientIp(request) ?? "unknown";
+  const rl = claimLimiter(`ip:${clientIp}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetMs - Date.now()) / 1000)) } },
+    );
+  }
+
   try {
     const { token, password } = await request.json();
 
@@ -46,29 +61,30 @@ export async function POST(request: NextRequest) {
     }
 
     const email = payload.email;
-
-    // Verify the Patient record still exists
-    const patient = await prisma.patient.findFirst({ where: { email } });
-    if (!patient) {
-      return NextResponse.json({ error: "Patient record not found" }, { status: 404 });
-    }
-
-    // Check if a User was already created (double-click protection)
-    const existingUser = await prisma.user.findFirst({ where: { email } });
-    if (existingUser) {
-      return NextResponse.json({ error: "Account already exists. Please log in." }, { status: 409 });
-    }
-
-    // Create User account
     const passwordHash = await hashPassword(password);
-    const user = await prisma.user.create({
-      data: {
-        email,
-        name: patient.name,
-        password_hash: passwordHash,
-        role: "patient",
-        active: true,
-      },
+
+    // Atomic check-and-create: prevents TOCTOU race where two concurrent
+    // requests both pass the existingUser check and create duplicate users.
+    const user = await prisma.$transaction(async (tx) => {
+      const patient = await tx.patient.findFirst({ where: { email } });
+      if (!patient) {
+        throw new Error("PATIENT_NOT_FOUND");
+      }
+
+      const existingUser = await tx.user.findFirst({ where: { email } });
+      if (existingUser) {
+        throw new Error("ACCOUNT_EXISTS");
+      }
+
+      return tx.user.create({
+        data: {
+          email,
+          name: patient.name,
+          password_hash: passwordHash,
+          role: "patient",
+          active: true,
+        },
+      });
     });
 
     // Sign session
@@ -84,7 +100,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         last_active: new Date(),
         expires_at: new Date(Date.now() + SESSION_MAX_AGE * 1000),
-        ip: getClientIp(request) ?? null,
+        ip: clientIp !== "unknown" ? clientIp : null,
         user_agent: request.headers.get("user-agent") ?? null,
       },
     });
@@ -103,13 +119,20 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       action: "account_claimed",
       entity: "patient",
-      entityId: String(patient.id),
-      ip: getClientIp(request) ?? undefined,
+      entityId: email,
+      ip: clientIp !== "unknown" ? clientIp : undefined,
       userAgent: request.headers.get("user-agent") ?? undefined,
     });
 
     return response;
   } catch (error) {
+    const message = (error as Error).message;
+    if (message === "PATIENT_NOT_FOUND") {
+      return NextResponse.json({ error: "Patient record not found" }, { status: 404 });
+    }
+    if (message === "ACCOUNT_EXISTS") {
+      return NextResponse.json({ error: "Account already exists. Please log in." }, { status: 409 });
+    }
     logger.error({ err: error }, "Portal claim error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

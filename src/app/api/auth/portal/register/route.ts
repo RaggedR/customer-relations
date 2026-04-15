@@ -15,10 +15,8 @@ import { hashPassword } from "@/lib/password";
 import { getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { logger } from "@/lib/logger";
-import { COOKIE_NAME, COOKIE_OPTIONS, getSecret } from "@/lib/session";
+import { COOKIE_NAME, COOKIE_OPTIONS, SESSION_MAX_AGE, getSecret } from "@/lib/session";
 import { createRateLimiter } from "@/lib/rate-limit";
-
-const SESSION_MAX_AGE = 8 * 60 * 60;
 const registerLimiter = createRateLimiter(3, 60_000); // 3 registrations per minute per IP
 
 export async function POST(request: NextRequest) {
@@ -42,6 +40,14 @@ export async function POST(request: NextRequest) {
     }
     if (!name || typeof name !== "string" || name.trim().length < 2) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    }
+
+    // Validate dateOfBirth if provided
+    if (dateOfBirth) {
+      const dob = new Date(dateOfBirth);
+      if (isNaN(dob.getTime()) || dob > new Date()) {
+        return NextResponse.json({ error: "Invalid date of birth" }, { status: 400 });
+      }
     }
 
     const normEmail = email.toLowerCase().trim();

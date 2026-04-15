@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 interface Appointment {
   id: number;
@@ -21,6 +22,7 @@ const STATUS_COLOURS: Record<string, string> = {
 };
 
 export default function PortalAppointmentsPage() {
+  const router = useRouter();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +30,7 @@ export default function PortalAppointmentsPage() {
   useEffect(() => {
     fetch("/api/portal/appointments")
       .then((res) => {
+        if (res.status === 401) { router.push("/portal/login"); return []; }
         if (!res.ok) throw new Error("Failed to load appointments");
         return res.json();
       })
