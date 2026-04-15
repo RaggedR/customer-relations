@@ -10,10 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSchema } from "@/lib/schema";
+import { getSchema, isSensitive } from "@/lib/schema";
 import { parseFile } from "@/lib/parsers";
 import { importEntities } from "@/lib/import";
-import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
+import { withErrorHandler } from "@/lib/api-helpers";
 
 interface RouteParams {
   params: Promise<{ entity: string }>;
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) {
+  if (isSensitive(entityName)) {
     return NextResponse.json(
       { error: `Import of ${entityName} is not allowed` },
       { status: 403 }

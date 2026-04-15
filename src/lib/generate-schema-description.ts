@@ -8,11 +8,10 @@
  * Sensitive entities (calendar_connection, user, session, audit_log) are
  * excluded by default — they contain OAuth tokens, credentials, or audit
  * records that the AI must never see. The excluded set is the single source
- * of truth in SENSITIVE_ENTITIES (api-helpers.ts).
+ * of truth: `sensitive: true` in schema.yaml.
  */
 
-import { getSchema, fieldTypes, toPascalCase } from "@/lib/schema";
-import { SENSITIVE_ENTITIES } from "@/lib/api-helpers";
+import { getSchema, fieldTypes, toPascalCase, isSensitive } from "@/lib/schema";
 
 /** Map Prisma types to SQL types for the DDL */
 const PRISMA_TO_SQL: Record<string, string> = {
@@ -25,7 +24,7 @@ const PRISMA_TO_SQL: Record<string, string> = {
 };
 
 export function generateSchemaDescription(
-  exclude: readonly string[] = SENSITIVE_ENTITIES
+  exclude?: readonly string[]
 ): string {
   const schema = getSchema();
   const lines: string[] = [
@@ -33,7 +32,7 @@ export function generateSchemaDescription(
   ];
 
   for (const [entityName, entity] of Object.entries(schema.entities)) {
-    if (exclude.includes(entityName)) continue;
+    if (exclude ? exclude.includes(entityName) : isSensitive(entityName)) continue;
 
     const modelName = toPascalCase(entityName);
     lines.push("");
@@ -45,7 +44,7 @@ export function generateSchemaDescription(
     const fieldEntries = Object.entries(entity.fields);
     const relationEntries = entity.relations
       ? Object.entries(entity.relations).filter(
-          ([, rel]) => !exclude.includes(rel.entity)
+          ([, rel]) => exclude ? !exclude.includes(rel.entity) : !isSensitive(rel.entity)
         )
       : [];
 

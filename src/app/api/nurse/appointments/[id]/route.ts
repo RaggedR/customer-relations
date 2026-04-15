@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
 import { withErrorHandler } from "@/lib/api-helpers";
+import { parseIdParam } from "@/lib/route-factory";
 import { resolveNurse } from "@/lib/nurse-helpers";
 import { findById } from "@/lib/repository";
 
@@ -24,11 +25,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await params;
-    const appointmentId = parseInt(id, 10);
-    if (isNaN(appointmentId)) {
-      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-    }
+    const idResult = await parseIdParam(params);
+    if (idResult instanceof NextResponse) return idResult;
+    const appointmentId = idResult;
 
     const nurse = await resolveNurse(session.userId);
     if (!nurse) {

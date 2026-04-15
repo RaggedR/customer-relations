@@ -13,9 +13,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSchema, foreignKeyName } from "@/lib/schema";
+import { getSchema, foreignKeyName, isSensitive } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
-import { withErrorHandler, SENSITIVE_ENTITIES, getClientIp } from "@/lib/api-helpers";
+import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { getSessionUser } from "@/lib/session";
 import type { Row } from "@/lib/parsers";
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     const entities: Record<string, Row[]> = {};
 
     for (const entityName of importOrder) {
-      if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) continue;
+      if (isSensitive(entityName)) continue;
 
       const records = (await findAll(entityName)) as Row[];
       // Strip nested relation objects — just keep flat fields + FK IDs

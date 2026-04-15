@@ -69,6 +69,7 @@ export interface DisplayConfig {
 }
 
 export interface EntityConfig {
+  sensitive?: boolean;
   label?: string;
   label_singular?: string;
   fields: Record<string, FieldConfig>;

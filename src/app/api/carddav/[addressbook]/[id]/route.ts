@@ -11,6 +11,7 @@ import { findById, update } from "@/lib/repository";
 import { generateVCard, parseVCard } from "@/lib/vcard";
 import { checkAuth, addressBookToEntity } from "@/lib/carddav-auth";
 import { withErrorHandler } from "@/lib/api-helpers";
+import { parseIdParam } from "@/lib/route-factory";
 import type { Row } from "@/lib/parsers";
 
 interface RouteParams {
@@ -25,15 +26,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
   }
 
-  const { addressbook, id: idStr } = await params;
+  const { addressbook } = await params;
   const entityName = addressBookToEntity(addressbook);
-  const id = parseInt(idStr, 10);
-
-  if (!entityName || isNaN(id)) {
+  if (!entityName) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  return withErrorHandler(`GET /api/carddav/${addressbook}/${idStr}`, async () => {
+  const idResult = await parseIdParam(params);
+  if (idResult instanceof NextResponse) return new NextResponse("Not found", { status: 404 });
+  const id = idResult;
+
+  return withErrorHandler(`GET /api/carddav/${addressbook}/${id}`, async () => {
     const record = (await findById(entityName, id)) as Row | null;
     if (!record) {
       return new NextResponse("Not found", { status: 404 });
@@ -58,15 +61,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     });
   }
 
-  const { addressbook, id: idStr } = await params;
+  const { addressbook } = await params;
   const entityName = addressBookToEntity(addressbook);
-  const id = parseInt(idStr, 10);
-
-  if (!entityName || isNaN(id)) {
+  if (!entityName) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  return withErrorHandler(`PUT /api/carddav/${addressbook}/${idStr}`, async () => {
+  const idResult = await parseIdParam(params);
+  if (idResult instanceof NextResponse) return new NextResponse("Not found", { status: 404 });
+  const id = idResult;
+
+  return withErrorHandler(`PUT /api/carddav/${addressbook}/${id}`, async () => {
     const body = await request.text();
     const parsed = parseVCard(entityName, body);
 

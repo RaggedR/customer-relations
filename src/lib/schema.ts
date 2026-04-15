@@ -52,6 +52,18 @@ export type { FieldTypeDefinition } from "@/engine/field-types";
 export { reverseRelationKey, foreignKeyName };
 export { toPascalCase, toSnakeCase } from "@/engine/naming";
 
+// ─── Sensitive Entity Check ────────────────────────────────────
+
+/**
+ * Check whether an entity is marked as sensitive in the schema.
+ * Sensitive entities (user, session, audit_log, calendar_connection) must not
+ * be accessible via generic CRUD, export, import, or backup endpoints.
+ */
+export function isSensitive(entityName: string): boolean {
+  const schema = getSchema();
+  return schema.entities[entityName]?.sensitive === true;
+}
+
 // ─── Schema Hierarchy ──────────────────────────────────────────
 
 export interface SchemaHierarchy {

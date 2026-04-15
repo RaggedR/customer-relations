@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
 import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
+import { parseIdParam } from "@/lib/route-factory";
 import { logAuditEvent } from "@/lib/audit";
 import { getIdempotentResponse, cacheIdempotentResponse } from "@/lib/idempotency";
 import { renderWatermarkedImage } from "@/lib/image-renderer";
@@ -30,11 +31,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await params;
-    const appointmentId = parseInt(id, 10);
-    if (isNaN(appointmentId)) {
-      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-    }
+    const idResult = await parseIdParam(params);
+    if (idResult instanceof NextResponse) return idResult;
+    const appointmentId = idResult;
 
     // Verify nurse identity and appointment ownership
     const nurse = await resolveNurse(session.userId);
@@ -126,11 +125,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (cached) return cached;
     }
 
-    const { id } = await params;
-    const appointmentId = parseInt(id, 10);
-    if (isNaN(appointmentId)) {
-      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-    }
+    const idResult = await parseIdParam(params);
+    if (idResult instanceof NextResponse) return idResult;
+    const appointmentId = idResult;
 
     // Auth-before-body: resolve nurse identity and appointment ownership before
     // parsing the body, so unauthenticated callers cannot probe content validators.

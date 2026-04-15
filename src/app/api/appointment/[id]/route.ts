@@ -15,6 +15,7 @@ import {
   deleteAppointment,
 } from "@/lib/caldav-client";
 import { withErrorHandler } from "@/lib/api-helpers";
+import { parseIdParam } from "@/lib/route-factory";
 import { logger } from "@/lib/logger";
 
 interface RouteParams {
@@ -22,11 +23,9 @@ interface RouteParams {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const { id } = await params;
-  const numId = parseInt(id, 10);
-  if (isNaN(numId)) {
-    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-  }
+  const result = await parseIdParam(params);
+  if (result instanceof NextResponse) return result;
+  const numId = result;
   return withErrorHandler(`GET /api/appointment/${numId}`, async () => {
     const item = await findById("appointment", numId);
     if (!item) {
@@ -37,11 +36,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
-  const { id } = await params;
-  const numId = parseInt(id, 10);
-  if (isNaN(numId)) {
-    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-  }
+  const result = await parseIdParam(params);
+  if (result instanceof NextResponse) return result;
+  const numId = result;
   return withErrorHandler(`PUT /api/appointment/${numId}`, async () => {
     const body = await request.json();
     const errors = validateEntity("appointment", body);
@@ -61,11 +58,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const { id } = await params;
-  const numId = parseInt(id, 10);
-  if (isNaN(numId)) {
-    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-  }
+  const result = await parseIdParam(params);
+  if (result instanceof NextResponse) return result;
+  const numId = result;
   return withErrorHandler(`DELETE /api/appointment/${numId}`, async () => {
     // Get the appointment first to know the nurseId
     const existing = (await findById("appointment", numId)) as Record<string, unknown> | null;
