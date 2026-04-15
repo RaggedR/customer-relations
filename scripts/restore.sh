@@ -69,41 +69,49 @@ restore_json() {
   fi
   echo ""
 
-  # Read import order from backup
-  IMPORT_ORDER=$(python3 -c "
+  # Read import order from backup — pass path via argv, never interpolated into code
+  IMPORT_ORDER=$(python3 - "$src" <<'PYEOF'
 import json, sys
-with open('$src') as f:
+with open(sys.argv[1]) as f:
     data = json.load(f)
 order = data.get('import_order', list(data.get('entities', {}).keys()))
 print(' '.join(order))
-")
+PYEOF
+)
 
   for ENTITY in $IMPORT_ORDER; do
+    # Guard: entity names must be simple lowercase identifiers (a-z and underscores only)
+    if [[ ! "$ENTITY" =~ ^[a-z_]+$ ]]; then
+      echo "  WARNING: skipping entity with unsafe name: '$ENTITY'" >&2
+      continue
+    fi
+
     # Extract entity data and POST to import endpoint
     SLUG=$(echo "$ENTITY" | tr '_' '-')
-    COUNT=$(python3 -c "
-import json
-with open('$src') as f:
+    COUNT=$(python3 - "$src" "$ENTITY" <<'PYEOF'
+import json, sys
+with open(sys.argv[1]) as f:
     data = json.load(f)
-entities = data.get('entities', {}).get('$ENTITY', [])
+entities = data.get('entities', {}).get(sys.argv[2], [])
 print(len(entities))
-")
+PYEOF
+)
 
     if [ "$COUNT" = "0" ]; then
       echo "  $ENTITY: 0 records — skipping"
       continue
     fi
 
-    # Write entity data to temp file
+    # Write entity data to temp file — pass path and entity via argv
     TEMP_FILE=$(mktemp /tmp/restore-XXXX.json)
-    python3 -c "
-import json
-with open('$src') as f:
+    python3 - "$src" "$ENTITY" "$TEMP_FILE" <<'PYEOF'
+import json, sys
+with open(sys.argv[1]) as f:
     data = json.load(f)
-entities = data.get('entities', {}).get('$ENTITY', [])
-with open('$TEMP_FILE', 'w') as out:
+entities = data.get('entities', {}).get(sys.argv[2], [])
+with open(sys.argv[3], 'w') as out:
     json.dump(entities, out)
-"
+PYEOF
 
     RESULT=$(curl -sf -X POST "http://localhost:3000/api/$SLUG/import" \
       -F "file=@$TEMP_FILE;filename=restore.json" 2>/dev/null || echo '{"error":"API call failed"}')

@@ -13,10 +13,17 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { logger } from "@/lib/logger";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_BYTES = 12;
 const KEY_HEX_LENGTH = 64; // 32 bytes = 64 hex chars
+
+/**
+ * Matches the encrypted wire format: iv_hex:tag_hex:ciphertext_hex
+ * All three segments must be non-empty hex strings.
+ */
+const ENCRYPTED_FORMAT = /^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/;
 
 function getKey(): Buffer {
   const hex = process.env.TOKEN_ENCRYPTION_KEY;
@@ -46,17 +53,31 @@ export function encryptToken(plaintext: string): string {
 }
 
 /**
- * Decrypt a stored token, falling back to plaintext for legacy
- * rows that were stored before encryption was enabled.
+ * Decrypt a stored token with safe legacy-plaintext fallback.
+ *
+ * Two-path logic:
+ *   - Token matches encrypted format (iv:tag:ciphertext hex) → MUST decrypt or throw.
+ *     Silent fallback to plaintext would mask key mismatch, corruption, or tampering.
+ *   - Token does NOT match encrypted format → treat as a legacy plaintext token stored
+ *     before encryption was enabled. Log a warning and return as-is.
+ *
+ * Rename note: was `tryDecrypt`. Renamed to `tryDecryptLegacy` to make the dual
+ * behavior explicit and searchable.
  */
-export function tryDecrypt(token: string | null): string | undefined {
+export function tryDecryptLegacy(token: string | null): string | undefined {
   if (!token) return undefined;
-  try {
+
+  if (ENCRYPTED_FORMAT.test(token)) {
+    // Looks encrypted — must succeed or the token is corrupt / wrong key.
     return decryptToken(token);
-  } catch {
-    // Legacy plaintext token — return as-is for graceful migration
-    return token;
   }
+
+  // Does not match encrypted format → legacy plaintext row.
+  logger.warn(
+    { tokenPrefix: token.slice(0, 8) },
+    "tryDecryptLegacy: returning legacy plaintext token — migrate to encrypted storage",
+  );
+  return token;
 }
 
 export function decryptToken(stored: string): string {

@@ -10,7 +10,7 @@
 
 import { DAVClient } from "tsdav";
 import { generateVCard } from "./vcard";
-import { tryDecrypt } from "./token-crypto";
+import { tryDecryptLegacy } from "./token-crypto";
 import { logger } from "@/lib/logger";
 import type { Row } from "./parsers";
 
@@ -120,8 +120,8 @@ export async function deleteContact(
 
 async function getClient(conn: ContactConnection): Promise<DAVClient> {
   const isGoogle = conn.provider === "google";
-  const accessToken = tryDecrypt(conn.access_token);
-  const refreshToken = tryDecrypt(conn.refresh_token);
+  const accessToken = tryDecryptLegacy(conn.access_token);
+  const refreshToken = tryDecryptLegacy(conn.refresh_token);
 
   const client = new DAVClient({
     serverUrl: isGoogle
