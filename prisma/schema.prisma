@@ -139,6 +139,7 @@ model Nurse {
   registration_number String?
   caldav_url String?
   google_calendar_id String?
+  feed_token String?
   notes String?
   appointments Appointment[]
   nurse_specialtys NurseSpecialty[]
@@ -231,13 +232,4 @@ model AuditLog {
   @@index([timestamp])
   @@index([userId])
   @@index([entity, entity_id])
-}
-
-model ClaimToken {
-  id        Int       @id @default(autoincrement())
-  email     String
-  tokenHash String    @unique
-  usedAt    DateTime?
-  expiresAt DateTime
-  createdAt DateTime  @default(now())
 }

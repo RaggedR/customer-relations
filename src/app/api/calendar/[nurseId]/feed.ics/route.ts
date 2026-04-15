@@ -1,49 +1,29 @@
 /**
  * iCal Feed — Read-only calendar subscription per nurse
  *
- * GET /api/calendar/{nurseId}/feed.ics?token=HMAC
+ * GET /api/calendar/{nurseId}/feed.ics?token=<raw-bearer-token>
  *
  * Calendar apps subscribe to this URL to see a nurse's appointments.
- * Requires a `token` query parameter: an HMAC-SHA256 of the nurseId
- * signed with SESSION_SECRET. This allows calendar apps (which cannot
- * send cookies) to authenticate without storing credentials.
+ * Requires a `token` query parameter: a per-nurse bearer token whose
+ * SHA-256 hash is stored in the nurse.feed_token DB column.
  *
- * The admin generates feed URLs containing the token.
+ * Tokens are generated via generateFeedToken() in src/lib/bearer-token.ts.
+ * Each nurse has exactly one token at a time; call revokeFeedToken() to
+ * invalidate it (e.g., before generating a replacement).
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac } from "crypto";
+import { verifyFeedToken } from "@/lib/bearer-token";
 import { findAll, findById } from "@/lib/repository";
 import { generateCalendarFeed } from "@/lib/ical";
 import { withErrorHandler } from "@/lib/api-helpers";
+import { logAuditEvent } from "@/lib/audit";
 import { logger } from "@/lib/logger";
-import { getSecret } from "@/lib/session";
+import { getClientIp } from "@/lib/api-helpers";
 import type { Row } from "@/lib/parsers";
 
 interface RouteParams {
   params: Promise<{ nurseId: string }>;
-}
-
-function validateFeedToken(nurseId: string, token: string): boolean {
-  let secret: string;
-  try {
-    secret = getSecret();
-  } catch (err) {
-    // SESSION_SECRET is missing — this is a fatal config error, not a bad token.
-    // Log it so operators can see the misconfiguration rather than a silent 401 flood.
-    logger.error({ err }, "SESSION_SECRET not set — cannot validate feed token");
-    return false;
-  }
-  const expected = createHmac("sha256", secret)
-    .update(nurseId)
-    .digest("hex");
-  // Constant-time comparison to prevent timing attacks
-  if (expected.length !== token.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < expected.length; i++) {
-    mismatch |= expected.charCodeAt(i) ^ token.charCodeAt(i);
-  }
-  return mismatch === 0;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -54,12 +34,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return new NextResponse("Invalid nurse ID", { status: 400 });
   }
 
-  // Validate HMAC token from query string (calendar apps can't send cookies)
+  // Validate DB-backed bearer token (calendar apps cannot send cookies)
   const token = request.nextUrl.searchParams.get("token");
   if (!token) {
     return new NextResponse("Missing token parameter", { status: 401 });
   }
-  if (!validateFeedToken(nurseIdStr, token)) {
+
+  const valid = await verifyFeedToken(nurseId, token);
+  if (!valid) {
+    logger.warn({ nurseId }, "iCal feed: rejected invalid token");
     return new NextResponse("Invalid token", { status: 401 });
   }
 
@@ -74,6 +57,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       sortBy: "date",
       sortOrder: "asc",
     })) as Row[];
+
+    // Audit: record each feed access for compliance tracing
+    await logAuditEvent({
+      action: "ical_feed_access",
+      entity: "nurse",
+      entityId: String(nurseId),
+      details: `iCal feed served (${appointments.length} appointments)`,
+      ip: getClientIp(request),
+      userAgent: request.headers.get("user-agent") ?? undefined,
+    });
 
     const calName = `${nurse.name} — Customer Relations`;
     const ical = generateCalendarFeed(appointments, calName);
