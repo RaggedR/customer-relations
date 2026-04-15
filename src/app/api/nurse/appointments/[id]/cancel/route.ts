@@ -13,7 +13,7 @@ import { withErrorHandler } from "@/lib/api-helpers";
 import { parseIdParam } from "@/lib/route-factory";
 import { logAuditEvent } from "@/lib/audit";
 import { extractRequestContext } from "@/lib/request-context";
-import { resolveNurse, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
+import { resolveNurse, requireAupAcknowledgement, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
 import { prisma } from "@/lib/prisma";
 
 const MAX_REASON_LENGTH = 2000;
@@ -34,11 +34,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (idResult instanceof NextResponse) return idResult;
     const appointmentId = idResult;
 
-    // Verify nurse identity and appointment ownership
+    // Verify nurse identity, AUP, and appointment ownership
     const nurse = await resolveNurse(session.userId);
     if (!nurse) {
       return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
     }
+
+    const aupError = requireAupAcknowledgement(nurse);
+    if (aupError) return aupError;
 
     const appointment = await verifyAppointmentOwnership(appointmentId, nurse.id);
     if (!appointment) {

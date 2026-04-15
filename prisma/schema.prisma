@@ -22,6 +22,8 @@ model Patient {
   status String?
   maintenance_plan_expiry DateTime?
   notes String?
+  userId Int?
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
   referrals Referral[]
   clinical_notes ClinicalNote[]
   personal_notes PersonalNote[]
@@ -29,6 +31,7 @@ model Patient {
   claim_items ClaimItem[]
   appointments Appointment[]
   attachments Attachment[]
+  @@index([userId])
 }
 
 model Referral {
@@ -141,9 +144,13 @@ model Nurse {
   google_calendar_id String?
   feed_token String?
   notes String?
+  aup_acknowledged_at DateTime?
+  userId Int?
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
   appointments Appointment[]
   nurse_specialtys NurseSpecialty[]
   calendar_connections CalendarConnection[]
+  @@index([userId])
 }
 
 model NurseSpecialty {
@@ -198,6 +205,8 @@ model User {
   password_hash String
   role String
   active Boolean? @default(true)
+  patients Patient[]
+  nurses Nurse[]
   sessions Session[]
   audit_logs AuditLog[]
 }

@@ -18,6 +18,8 @@ entities:
       status: { type: enum, values: [active, inactive, discharged] }
       maintenance_plan_expiry: { type: date }
       notes: { type: text }
+    relations:
+      user: { type: belongs_to, entity: user, on_delete: set_null }
     representations:
       vcard:
         mapping:
@@ -202,6 +204,9 @@ entities:
       google_calendar_id: { type: string }
       feed_token: { type: string, ai_visible: false }
       notes: { type: text }
+      aup_acknowledged_at: { type: datetime }
+    relations:
+      user: { type: belongs_to, entity: user, on_delete: set_null }
     representations:
       vcard:
         mapping:

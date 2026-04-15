@@ -17,7 +17,7 @@ import { logAuditEvent } from "@/lib/audit";
 import { extractRequestContext } from "@/lib/request-context";
 import { getIdempotentResponse, cacheIdempotentResponse } from "@/lib/idempotency";
 import { renderWatermarkedImage } from "@/lib/image-renderer";
-import { resolveNurse, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
+import { resolveNurse, requireAupAcknowledgement, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
 import { findAll, create } from "@/lib/repository";
 import { getSchema } from "@/lib/schema";
 
@@ -37,11 +37,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (idResult instanceof NextResponse) return idResult;
     const appointmentId = idResult;
 
-    // Verify nurse identity and appointment ownership
+    // Verify nurse identity, AUP, and appointment ownership
     const nurse = await resolveNurse(session.userId);
     if (!nurse) {
       return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
     }
+
+    const aupError = requireAupAcknowledgement(nurse);
+    if (aupError) return aupError;
 
     const appointment = await verifyAppointmentOwnership(appointmentId, nurse.id);
     if (!appointment?.patientId) {
@@ -150,12 +153,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (idResult instanceof NextResponse) return idResult;
     const appointmentId = idResult;
 
-    // Auth-before-body: resolve nurse identity and appointment ownership before
-    // parsing the body, so unauthenticated callers cannot probe content validators.
+    // Auth-before-body: resolve nurse identity, AUP, and appointment ownership
+    // before parsing the body, so unauthenticated callers cannot probe content validators.
     const nurse = await resolveNurse(session.userId);
     if (!nurse) {
       return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
     }
+
+    const aupError = requireAupAcknowledgement(nurse);
+    if (aupError) return aupError;
 
     const appointment = await verifyAppointmentOwnership(appointmentId, nurse.id);
     if (!appointment?.patientId) {

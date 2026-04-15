@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { parseIdParam } from "@/lib/route-factory";
-import { resolveNurse } from "@/lib/nurse-helpers";
+import { resolveNurse, requireAupAcknowledgement } from "@/lib/nurse-helpers";
 import { findById } from "@/lib/repository";
 
 interface RouteParams {
@@ -33,6 +33,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!nurse) {
       return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
     }
+
+    const aupError = requireAupAcknowledgement(nurse);
+    if (aupError) return aupError;
 
     const appointment = await findById("appointment", appointmentId) as Record<string, unknown> | null;
 

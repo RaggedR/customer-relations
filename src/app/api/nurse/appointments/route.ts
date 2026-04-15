@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
 import { withErrorHandler } from "@/lib/api-helpers";
-import { resolveNurse } from "@/lib/nurse-helpers";
+import { resolveNurse, requireAupAcknowledgement } from "@/lib/nurse-helpers";
 import { findAll } from "@/lib/repository";
 
 export async function GET(request: NextRequest) {
@@ -30,6 +30,9 @@ export async function GET(request: NextRequest) {
         { status: 403 },
       );
     }
+
+    const aupError = requireAupAcknowledgement(nurse);
+    if (aupError) return aupError;
 
     // Date range: default to today + 7 days
     const { searchParams } = new URL(request.url);

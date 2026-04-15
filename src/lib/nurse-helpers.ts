@@ -5,29 +5,55 @@
  * appointment ownership (the nurse is assigned to the appointment).
  */
 
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Resolve the logged-in user's nurse record by matching email.
+ * Resolve the logged-in user's nurse record.
+ *
+ * Strategy:
+ * 1. Try the FK relation (Nurse.userId == userId) — O(1) index lookup.
+ * 2. Fall back to email match for legacy records created before the FK
+ *    column was added (Nurse.userId IS NULL).
+ *
  * Returns null if the user is not linked to a nurse entity.
  */
 export async function resolveNurse(userId: number) {
+  // 1. FK-first: fast path for records with the userId column populated.
+  const byFk = await prisma.nurse.findFirst({ where: { userId } });
+  if (byFk) return byFk;
+
+  // 2. Legacy fallback: email match for records that pre-date the FK.
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user?.email) return null;
-  return prisma.nurse.findFirst({ where: { email: user.email } });
+  return prisma.nurse.findFirst({ where: { email: user.email, userId: null } });
 }
 
 /**
- * Resolve the nurse's display name from their userId.
- * Delegates to resolveNurse to avoid redundant DB queries.
+ * Check that a nurse has acknowledged the Acceptable Use Policy.
+ *
+ * Returns a 403 NextResponse if `aup_acknowledged_at` is null, or null if
+ * the nurse has acknowledged. Call this after resolveNurse() in every nurse
+ * portal route.
+ *
+ * Usage:
+ *   const aupError = requireAupAcknowledgement(nurse);
+ *   if (aupError) return aupError;
  */
-export async function resolveNurseName(userId: number): Promise<string | null> {
-  const nurse = await resolveNurse(userId);
-  if (nurse) return nurse.name ?? null;
-  // resolveNurse already fetched the user; if no nurse record, fall back to
-  // the user's name by re-fetching only when necessary.
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  return user?.name ?? null;
+export function requireAupAcknowledgement(
+  nurse: { aup_acknowledged_at: Date | null },
+): NextResponse | null {
+  if (!nurse.aup_acknowledged_at) {
+    return NextResponse.json(
+      {
+        error: "aup_required",
+        message:
+          "You must acknowledge the Acceptable Use Policy before accessing the nurse portal.",
+      },
+      { status: 403 },
+    );
+  }
+  return null;
 }
 
 /**
