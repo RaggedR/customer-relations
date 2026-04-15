@@ -3,6 +3,14 @@ import type { NextConfig } from "next";
 const csp = [
   "default-src 'self'",
   "script-src 'self'",
+  // TODO(Fix 18): Replace 'unsafe-inline' with nonce-based CSP.
+  // Next.js 16 supports nonces via proxy.ts (src/proxy.ts already exists).
+  // The pattern: generate a nonce per-request in the proxy, set
+  // `x-nonce` and `Content-Security-Policy` headers there, and remove this
+  // static header declaration from next.config.ts entirely.
+  // See node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md
+  // Caveat: nonces force all pages into dynamic rendering (no static/ISR/PPR).
+  // Audit page rendering assumptions before enabling.
   "style-src 'self' 'unsafe-inline'", // Next.js SSR injects inline styles
   "img-src 'self' data: blob:",       // watermarked canvas images use data:/blob: URIs
   "font-src 'self'",
