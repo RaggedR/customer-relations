@@ -120,7 +120,7 @@ export async function importEntities(
   const relationMaps = await buildRelationMaps(entity);
 
   // Load existing records for upsert matching
-  const existingRecords = await loadExistingRecords(entityName, entity, upsertKeys);
+  const existingRecords = await loadExistingRecords(entityName, entity);
 
   const result: ImportResult = {
     total: rows.length,
@@ -276,8 +276,7 @@ async function buildRelationMaps(
  */
 async function loadExistingRecords(
   entityName: string,
-  entity: EntityConfig,
-  _upsertKeys: string[] = []
+  entity: EntityConfig
 ): Promise<Row[]> {
   const PAGE_SIZE = 200;
   const allRecords: Row[] = [];

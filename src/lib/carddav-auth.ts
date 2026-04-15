@@ -7,6 +7,8 @@
 
 import { timingSafeEqual, createHash } from "crypto";
 import { createRateLimiter } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/api-helpers";
+import { getSchema } from "@/lib/schema";
 
 const carddavLimiter = createRateLimiter(20, 60_000); // 20 requests/minute per IP
 
@@ -15,9 +17,7 @@ export function checkAuth(request: Request): boolean {
   if (!CARDDAV_PASSWORD) return false; // Deny all if password not configured
 
   // Rate limit by IP to prevent brute-force
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim()
-    ?? request.headers.get("x-real-ip")
-    ?? "unknown";
+  const ip = getClientIp(request) ?? "unknown";
   const rl = carddavLimiter(ip);
   if (!rl.allowed) return false;
 
@@ -35,13 +35,20 @@ export function checkAuth(request: Request): boolean {
   return timingSafeEqual(a, b);
 }
 
+/**
+ * Map an address book path segment (plural entity name) to the canonical
+ * entity name. The mapping is derived dynamically from schema entities
+ * that have `carddav: true`, so adding a new CardDAV-enabled entity to
+ * schema.yaml is sufficient — no code change required here.
+ *
+ * Convention: address book name = entity name + "s" (simple pluralisation).
+ */
 export function addressBookToEntity(addressbook: string): string | null {
-  switch (addressbook) {
-    case "patients":
-      return "patient";
-    case "nurses":
-      return "nurse";
-    default:
-      return null;
+  const schema = getSchema();
+  for (const [entityName, entityConfig] of Object.entries(schema.entities)) {
+    if (entityConfig.carddav && `${entityName}s` === addressbook) {
+      return entityName;
+    }
   }
+  return null;
 }

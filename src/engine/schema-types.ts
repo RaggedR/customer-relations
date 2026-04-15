@@ -82,6 +82,7 @@ export interface EntityConfig {
   sidebar_addable?: boolean;
   exportable?: boolean;
   immutable?: boolean;
+  carddav?: boolean; // true = entity is exposed via CardDAV address books
   indexes?: string[][]; // Compound indexes, e.g. [["nurseId", "date"]]
 }
 

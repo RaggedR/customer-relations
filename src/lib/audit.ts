@@ -7,11 +7,6 @@ export interface AuditEvent {
   entity: string;
   entityId: string;
   details?: string;
-  // Individual fields (legacy — prefer context)
-  userId?: number | null;
-  ip?: string;
-  userAgent?: string;
-  // Or pass a RequestContext (takes precedence)
   context?: RequestContext;
 }
 
@@ -20,9 +15,9 @@ export interface AuditEvent {
  * Never throws — logs to stderr on failure so the calling request is not blocked.
  */
 export async function logAuditEvent(event: AuditEvent): Promise<void> {
-  const userId = event.context?.userId ?? event.userId ?? null;
-  const ip = event.context?.ip ?? event.ip;
-  const userAgent = event.context?.userAgent ?? event.userAgent;
+  const userId = event.context?.userId ?? null;
+  const ip = event.context?.ip;
+  const userAgent = event.context?.userAgent;
 
   try {
     await prisma.auditLog.create({

@@ -21,6 +21,7 @@ vi.mock("@/lib/logger", () => ({
 import { logAuditEvent } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import type { RequestContext } from "@/lib/request-context";
 
 const mockCreate = prisma.auditLog.create as ReturnType<typeof vi.fn>;
 
@@ -33,7 +34,7 @@ describe("Audit — logAuditEvent", () => {
     mockCreate.mockResolvedValue({ id: "log-1" });
 
     await logAuditEvent({
-      userId: 1,
+      context: { userId: 1 } as RequestContext,
       action: "view",
       entity: "patient",
       entityId: "p42",
@@ -56,7 +57,7 @@ describe("Audit — logAuditEvent", () => {
     // Should not throw
     await expect(
       logAuditEvent({
-        userId: 1,
+        context: { userId: 1 } as RequestContext,
         action: "view",
         entity: "patient",
         entityId: "p1",
@@ -70,12 +71,10 @@ describe("Audit — logAuditEvent", () => {
     mockCreate.mockResolvedValue({ id: "log-2" });
 
     await logAuditEvent({
-      userId: 1,
+      context: { userId: 1, ip: "192.168.1.1", userAgent: "Mozilla/5.0" } as RequestContext,
       action: "update",
       entity: "appointment",
       entityId: "a5",
-      ip: "192.168.1.1",
-      userAgent: "Mozilla/5.0",
     });
 
     const call = mockCreate.mock.calls[0][0];

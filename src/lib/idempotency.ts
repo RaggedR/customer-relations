@@ -47,11 +47,10 @@ function evictIfOverLimit() {
  */
 export function getIdempotentResponse(key: string): NextResponse | null {
   if (key.length > MAX_IDEMPOTENCY_KEY_LENGTH) return null;
-  const safeKey = key;
-  const cached = store.get(safeKey);
+  const cached = store.get(key);
   if (!cached) return null;
   if (cached.expiresAt < Date.now()) {
-    store.delete(safeKey);
+    store.delete(key);
     return null;
   }
   return new NextResponse(cached.body, {
@@ -72,9 +71,8 @@ export async function cacheIdempotentResponse(
 ): Promise<void> {
   if (key.length > MAX_IDEMPOTENCY_KEY_LENGTH) return;
   evictIfOverLimit();
-  const safeKey = key;
   const body = await response.clone().text();
-  store.set(safeKey, {
+  store.set(key, {
     body,
     status: response.status,
     expiresAt: Date.now() + TTL_MS,

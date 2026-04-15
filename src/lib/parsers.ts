@@ -150,7 +150,7 @@ async function parseXlsx(buffer: Buffer): Promise<Row[]> {
   try {
     await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
   } catch (err) {
-    throw new Error("Failed to parse XLSX file: possibly corrupted or too large");
+    throw new Error("Failed to parse XLSX file: possibly corrupted or too large", { cause: err });
   }
 
   const sheet = workbook.worksheets[0];

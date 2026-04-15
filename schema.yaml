@@ -1,6 +1,7 @@
 entities:
   patient:
     exportable: true
+    carddav: true
     display:
       title: name
       subtitle: [phone, email]
@@ -194,6 +195,7 @@ entities:
       - [nurseId, date]
 
   nurse:
+    carddav: true
     upsert_keys: [name]
     fields:
       name: { type: string, required: true }
