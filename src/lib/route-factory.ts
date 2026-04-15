@@ -15,9 +15,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSchema, foreignKeyName } from "@/lib/schema";
+import { getSchema, foreignKeyName, isSensitive } from "@/lib/schema";
 import { findAll, findById, create, update, remove, validateEntity } from "@/lib/repository";
-import { withErrorHandler, SENSITIVE_ENTITIES } from "@/lib/api-helpers";
+import { withErrorHandler } from "@/lib/api-helpers";
 import { getIdempotentResponse, cacheIdempotentResponse } from "@/lib/idempotency";
 
 // ── Helpers ──────────────────────────────────────────────
@@ -27,7 +27,7 @@ interface IdRouteParams {
 }
 
 /** Parse and validate the ID path parameter. Returns the numeric ID or a 400 response. */
-async function parseIdParam(params: Promise<{ id: string }>): Promise<number | NextResponse> {
+export async function parseIdParam(params: Promise<{ id: string }>): Promise<number | NextResponse> {
   const { id } = await params;
   const numId = parseInt(id, 10);
   if (isNaN(numId)) {
@@ -43,7 +43,7 @@ async function parseIdParam(params: Promise<{ id: string }>): Promise<number | N
  * Includes search, sort, and relation filtering.
  */
 export function makeListCreateHandlers(entityName: string) {
-  if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) {
+  if (isSensitive(entityName)) {
     const blocked = async () =>
       NextResponse.json({ error: `Access to ${entityName} is not allowed` }, { status: 403 });
     return { GET: blocked, POST: blocked };
@@ -124,7 +124,7 @@ export function makeListCreateHandlers(entityName: string) {
  * Create GET, PUT, and DELETE handlers for a named entity by ID.
  */
 export function makeGetUpdateDeleteHandlers(entityName: string) {
-  if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) {
+  if (isSensitive(entityName)) {
     const blocked = async () =>
       NextResponse.json({ error: `Access to ${entityName} is not allowed` }, { status: 403 });
     return { GET: blocked, PUT: blocked, DELETE: blocked };

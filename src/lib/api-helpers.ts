@@ -8,20 +8,6 @@ import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 
 /**
- * Entities containing sensitive fields (tokens, passwords, credentials) that
- * must not be accessible via the generic CRUD API, export, import, or backups.
- * - calendar_connection: contains OAuth tokens (excluded from AI schema + exports)
- * - user/session: password hashes and live session tokens
- * - audit_log: tamper-evident log — must not be writable or exportable
- */
-export const SENSITIVE_ENTITIES = [
-  "calendar_connection",
-  "user",
-  "session",
-  "audit_log",
-] as const;
-
-/**
  * Extract the client IP address from standard proxy headers.
  *
  * Takes the first entry from X-Forwarded-For (the originating client IP),

@@ -11,9 +11,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import { getSchema, getCsvRepresentation } from "@/lib/schema";
+import { getSchema, getCsvRepresentation, isSensitive } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
-import { withErrorHandler, SENSITIVE_ENTITIES, getClientIp } from "@/lib/api-helpers";
+import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
 import { logAuditEvent } from "@/lib/audit";
 import { getSessionUser } from "@/lib/session";
 import type { Row } from "@/lib/parsers";
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  if (SENSITIVE_ENTITIES.includes(entityName as typeof SENSITIVE_ENTITIES[number])) {
+  if (isSensitive(entityName)) {
     return NextResponse.json(
       { error: `Export of ${entityName} is not allowed` },
       { status: 403 }

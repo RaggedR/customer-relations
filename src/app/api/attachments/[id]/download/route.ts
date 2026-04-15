@@ -13,6 +13,7 @@ import { Readable } from "stream";
 import path from "path";
 import { findById } from "@/lib/repository";
 import { getClientIp } from "@/lib/api-helpers";
+import { parseIdParam } from "@/lib/route-factory";
 import { logAuditEvent } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { getSessionUser } from "@/lib/session";
@@ -24,12 +25,9 @@ interface RouteParams {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const { id } = await params;
-  const numId = parseInt(id, 10);
-
-  if (isNaN(numId)) {
-    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-  }
+  const result = await parseIdParam(params);
+  if (result instanceof NextResponse) return result;
+  const numId = result;
 
   try {
     const record = (await findById("attachment", numId)) as Record<

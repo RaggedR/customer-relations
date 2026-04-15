@@ -226,6 +226,7 @@ entities:
       nurse: { type: belongs_to, entity: nurse }
 
   calendar_connection:
+    sensitive: true
     label: "Calendar Connections"
     label_singular: "Calendar Connection"
     fields:
@@ -258,6 +259,7 @@ entities:
   # --- Auth & compliance entities (infrastructure, not shown in sidebar) ---
 
   user:
+    sensitive: true
     fields:
       email: { type: email, required: true, unique: true }
       name: { type: string, required: true }
@@ -266,6 +268,7 @@ entities:
       active: { type: boolean, default: true }
 
   session:
+    sensitive: true
     fields:
       token: { type: string, required: true, unique: true }
       last_active: { type: datetime, required: true }
@@ -276,6 +279,7 @@ entities:
       user: { type: belongs_to, entity: user }
 
   audit_log:
+    sensitive: true
     label: "Audit Logs"
     label_singular: "Audit Log"
     fields:

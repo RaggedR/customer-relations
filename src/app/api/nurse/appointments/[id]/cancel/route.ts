@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
 import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
+import { parseIdParam } from "@/lib/route-factory";
 import { logAuditEvent } from "@/lib/audit";
 import { resolveNurse, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
 import { prisma } from "@/lib/prisma";
@@ -27,11 +28,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await params;
-    const appointmentId = parseInt(id, 10);
-    if (isNaN(appointmentId)) {
-      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-    }
+    const idResult = await parseIdParam(params);
+    if (idResult instanceof NextResponse) return idResult;
+    const appointmentId = idResult;
 
     // Verify nurse identity and appointment ownership
     const nurse = await resolveNurse(session.userId);

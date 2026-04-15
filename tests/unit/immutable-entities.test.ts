@@ -33,12 +33,12 @@ describe("schema.yaml — immutable flag", () => {
     expect(schema.entities.patient.immutable).toBeUndefined();
   });
 
-  it("immutable entities are not in SENSITIVE_ENTITIES (they should be readable)", async () => {
-    const { SENSITIVE_ENTITIES } = await import("@/lib/api-helpers");
+  it("immutable entities are not sensitive (they should be readable)", async () => {
+    const { isSensitive } = await import("@/lib/schema");
     const schema = getSchema();
     for (const [name, entity] of Object.entries(schema.entities)) {
       if ((entity as { immutable?: boolean }).immutable) {
-        expect(SENSITIVE_ENTITIES).not.toContain(name);
+        expect(isSensitive(name)).toBe(false);
       }
     }
   });
