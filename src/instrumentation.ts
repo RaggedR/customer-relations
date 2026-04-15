@@ -29,10 +29,15 @@ export async function register() {
       ).catch(() => {}).finally(() => process.exit(0));
     });
 
-    // Production startup checks: warn about missing optional env vars
+    // Production startup checks
     if (process.env.NODE_ENV === "production") {
+      // Hard requirement: TOKEN_ENCRYPTION_KEY must be set for OAuth token security
+      if (!process.env.TOKEN_ENCRYPTION_KEY) {
+        console.error("[STARTUP FATAL] TOKEN_ENCRYPTION_KEY not set — refusing to start with plaintext OAuth tokens in production");
+        process.exit(1);
+      }
+
       const warnings: string[] = [];
-      if (!process.env.TOKEN_ENCRYPTION_KEY) warnings.push("TOKEN_ENCRYPTION_KEY not set — OAuth tokens stored in plaintext");
       if (!process.env.DATABASE_URL_READONLY) warnings.push("DATABASE_URL_READONLY not set — AI queries use read-write connection");
       if (!process.env.CARDDAV_PASSWORD) warnings.push("CARDDAV_PASSWORD not set — CardDAV endpoints are disabled");
       for (const w of warnings) console.warn(`[STARTUP WARNING] ${w}`);
