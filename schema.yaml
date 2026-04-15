@@ -51,7 +51,7 @@ entities:
       expiry_date: { type: date }
       notes: { type: text }
     relations:
-      patient: { type: belongs_to, entity: patient }
+      patient: { type: belongs_to, entity: patient, required: true }
 
   clinical_note:
     label: "Clinical Notes"
@@ -69,7 +69,7 @@ entities:
       content: { type: text, required: true }
       clinician: { type: string }
     relations:
-      patient: { type: belongs_to, entity: patient }
+      patient: { type: belongs_to, entity: patient, required: true }
 
   personal_note:
     label: "Personal Notes"
@@ -83,7 +83,7 @@ entities:
       date: { type: datetime, required: true }
       content: { type: text, required: true }
     relations:
-      patient: { type: belongs_to, entity: patient }
+      patient: { type: belongs_to, entity: patient, required: true }
 
   hearing_aid:
     label: "Hearing Aids"
@@ -107,7 +107,7 @@ entities:
       last_repair_details: { type: text }
       repair_address: { type: text }
     relations:
-      patient: { type: belongs_to, entity: patient }
+      patient: { type: belongs_to, entity: patient, required: true }
     representations:
       csv:
         headers:
@@ -147,7 +147,7 @@ entities:
       status: { type: enum, values: [pending, claimed, paid, rejected] }
       notes: { type: text }
     relations:
-      patient: { type: belongs_to, entity: patient }
+      patient: { type: belongs_to, entity: patient, required: true }
 
   appointment:
     sidebar_addable: true
@@ -174,9 +174,9 @@ entities:
           start_time: DTSTART_TIME
           end_time: DTEND_TIME
           location: LOCATION
-          notes: DESCRIPTION
         # APP 8 (cross-border disclosure): patient name removed from iCal summary
         # so that patient PII is not sent to Google Calendar / Apple Calendar servers.
+        # notes → DESCRIPTION suppressed: clinical notes must not leave the system boundary.
         summary_template: "{specialty} — Appt #{id}"
       csv:
         headers:

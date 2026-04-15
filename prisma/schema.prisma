@@ -15,7 +15,7 @@ model Patient {
   updatedAt DateTime @updatedAt
   name String
   date_of_birth DateTime?
-  medicare_number String?
+  medicare_number String? @unique
   phone String?
   email String?
   address String?
@@ -43,6 +43,7 @@ model Referral {
   notes String?
   patientId Int?
   patient Patient? @relation(fields: [patientId], references: [id])
+  @@index([patientId])
 }
 
 model ClinicalNote {
@@ -56,6 +57,7 @@ model ClinicalNote {
   patientId Int?
   patient Patient? @relation(fields: [patientId], references: [id])
   attachments Attachment[]
+  @@index([patientId])
 }
 
 model PersonalNote {
@@ -66,6 +68,7 @@ model PersonalNote {
   content String
   patientId Int?
   patient Patient? @relation(fields: [patientId], references: [id])
+  @@index([patientId])
 }
 
 model HearingAid {
@@ -87,6 +90,7 @@ model HearingAid {
   repair_address String?
   patientId Int?
   patient Patient? @relation(fields: [patientId], references: [id])
+  @@index([patientId])
 }
 
 model ClaimItem {
@@ -101,6 +105,7 @@ model ClaimItem {
   notes String?
   patientId Int?
   patient Patient? @relation(fields: [patientId], references: [id])
+  @@index([patientId])
 }
 
 model Appointment {
@@ -118,6 +123,9 @@ model Appointment {
   patient Patient? @relation(fields: [patientId], references: [id])
   nurseId Int?
   nurse Nurse? @relation(fields: [nurseId], references: [id])
+  @@index([date])
+  @@index([patientId])
+  @@index([nurseId, date])
 }
 
 model Nurse {
@@ -126,7 +134,7 @@ model Nurse {
   updatedAt DateTime @updatedAt
   name String
   phone String?
-  email String?
+  email String? @unique
   registration_number String?
   caldav_url String?
   google_calendar_id String?
@@ -144,6 +152,7 @@ model NurseSpecialty {
   notes String?
   nurseId Int?
   nurse Nurse? @relation(fields: [nurseId], references: [id])
+  @@index([nurseId])
 }
 
 model CalendarConnection {
@@ -157,6 +166,7 @@ model CalendarConnection {
   token_expiry DateTime?
   nurseId Int?
   nurse Nurse? @relation(fields: [nurseId], references: [id])
+  @@index([nurseId])
 }
 
 model Attachment {
@@ -173,17 +183,19 @@ model Attachment {
   patient Patient? @relation(fields: [patientId], references: [id])
   clinical_noteId Int?
   clinical_note ClinicalNote? @relation(fields: [clinical_noteId], references: [id])
+  @@index([patientId])
+  @@index([clinical_noteId])
 }
 
 model User {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  email String
+  email String @unique
   name String
   password_hash String
   role String
-  active Boolean?
+  active Boolean? @default(true)
   sessions Session[]
   audit_logs AuditLog[]
 }
@@ -192,13 +204,14 @@ model Session {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  token       String   @unique
+  token String @unique
   last_active DateTime
   expires_at DateTime
   ip String?
   user_agent String?
   userId Int?
   user User? @relation(fields: [userId], references: [id])
+  @@index([userId])
 }
 
 model AuditLog {
@@ -214,4 +227,7 @@ model AuditLog {
   user_agent String?
   userId Int?
   user User? @relation(fields: [userId], references: [id])
+  @@index([timestamp])
+  @@index([userId])
+  @@index([entity, entity_id])
 }
