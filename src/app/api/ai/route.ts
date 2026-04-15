@@ -189,12 +189,151 @@ Respond with JSON in this exact format:
 
 Return valid JSON only, no markdown code fences.`;
 
+const ALLOWED_MODELS = new Set(["gemini-2.5-flash", "gemini-2.0-flash"]);
+
 function getGenAI() {
   const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) {
     throw new Error("GOOGLE_API_KEY is not set in environment variables");
   }
   return new GoogleGenerativeAI(apiKey);
+}
+
+/**
+ * LLM call 1: send the system prompt + user question to Gemini, parse the
+ * JSON response, strip code fences, and validate the generated SQL is safe.
+ * Returns { sql, explanation } or throws on parse/safety failure.
+ *
+ * "Refused" responses (when Gemini declines to answer) are signalled by
+ * returning { refused: true, message: string } — callers must handle this
+ * before using the sql field.
+ */
+async function generateSql(
+  model: ReturnType<ReturnType<typeof getGenAI>["getGenerativeModel"]>,
+  question: string,
+): Promise<{ sql: string; explanation: string } | { refused: true; message: string }> {
+  const sqlResponse = await withRetry(
+    () => model.generateContent([
+      { text: SYSTEM_PROMPT },
+      { text: `User question: ${question}` },
+    ]),
+    { label: "Gemini SQL generation" },
+  );
+
+  const sqlText = sqlResponse.response.text().trim();
+  const cleaned = stripCodeFences(sqlText);
+  const parsed = JSON.parse(cleaned); // throws on invalid JSON
+
+  if (parsed.refused) {
+    return { refused: true, message: parsed.message || "Sorry, I can't help you with that." };
+  }
+
+  const sql: string = parsed.sql;
+
+  // Safety check: scan the entire query for DML/DDL, system catalog access,
+  // multi-statement attacks, and SQL comments. See src/lib/sql-safety.ts.
+  const safety = validateAiSql(sql);
+  if (!safety.safe) {
+    logger.warn({ sql, reason: safety.reason }, "AI generated unsafe query");
+    throw Object.assign(new Error("unsafe_sql"), { safetyReason: safety.reason });
+  }
+
+  return { sql, explanation: parsed.explanation };
+}
+
+/**
+ * Execute the AI-generated SQL inside a transaction with a short statement
+ * timeout. Serialises BigInt result values to numbers.
+ * Returns the result rows or throws on database error.
+ */
+async function executeQuery(sql: string): Promise<Record<string, unknown>[]> {
+  const rows = await prismaReadonly.$transaction(async (tx) => {
+    await tx.$executeRaw`SET LOCAL statement_timeout = '5s'`;
+    return await tx.$queryRawUnsafe(sql) as Record<string, unknown>[];
+  });
+
+  // Serialize BigInt values to numbers
+  return rows.map((row) => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row)) {
+      out[k] = typeof v === "bigint" ? Number(v) : v;
+    }
+    return out;
+  });
+}
+
+/**
+ * LLM call 2: send the SQL + result rows to Gemini and ask for a natural
+ * language answer and optional chart config. De-pseudonymises both the answer
+ * text and any chart labels before returning.
+ */
+async function generateAnswer(
+  model: ReturnType<ReturnType<typeof getGenAI>["getGenerativeModel"]>,
+  question: string,
+  sql: string,
+  rows: Record<string, unknown>[],
+  pseudonymMap: Map<string, string>,
+  inversePseudonymMap: Map<string, string>,
+  resolvedName?: string,
+): Promise<{ answer: string; chart: unknown }> {
+  // Redact sensitive columns and pseudonymise names before sending to Gemini
+  const redactedRows = redactForAi(rows);
+  const aiRows = pseudonymiseRows(redactedRows, pseudonymMap);
+
+  // Pseudonymise the question for LLM call 2 — replace the real name Clare typed
+  // with the pseudonym so Gemini never sees the real name in the question text either.
+  let aiQuestion = question;
+  if (resolvedName) {
+    const pseudonym = pseudonymMap.get(resolvedName) ?? resolvedName;
+    aiQuestion = question.replace(
+      new RegExp(resolvedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"),
+      pseudonym,
+    );
+  }
+
+  const resultsResponse = await withRetry(
+    () => model.generateContent([
+      { text: RESULTS_PROMPT },
+      { text: `User question: ${aiQuestion}` },
+      { text: `SQL executed: ${sql}` },
+      { text: `Results (${aiRows.length} rows): ${JSON.stringify(aiRows.slice(0, 100))}` },
+    ]),
+    { label: "Gemini answer generation" },
+  );
+
+  const resultsText = resultsResponse.response.text().trim();
+  let answerResult;
+  try {
+    const cleaned = stripCodeFences(resultsText);
+    answerResult = JSON.parse(cleaned);
+  } catch {
+    answerResult = { answer: resultsText, chart: null };
+  }
+
+  // Re-map pseudonyms back to real names in the answer for Clare's display
+  const answer = depseudonymiseAnswer(
+    answerResult.answer ?? resultsText,
+    inversePseudonymMap,
+  );
+
+  // Depseudonymise chart labels so Clare sees real names, not "Patient #42"
+  let chart = answerResult.chart;
+  if (chart?.data && Array.isArray(chart.data)) {
+    chart = {
+      ...chart,
+      data: chart.data.map((d: Record<string, unknown>) => {
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(d)) {
+          out[k] = typeof v === "string"
+            ? depseudonymiseAnswer(v, inversePseudonymMap)
+            : v;
+        }
+        return out;
+      }),
+    };
+  }
+
+  return { answer, chart };
 }
 
 export async function POST(request: NextRequest) {
@@ -230,6 +369,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Question too long (max 2000 characters)" }, { status: 400 });
     }
 
+    if (modelName && !ALLOWED_MODELS.has(modelName)) {
+      return NextResponse.json({ error: "Model not allowed" }, { status: 400 });
+    }
+
     // Resolve fuzzy names before sending to the LLM
     const resolved = await resolveNames(question);
 
@@ -253,59 +396,37 @@ export async function POST(request: NextRequest) {
     );
 
     // Step 1: Generate SQL
-    const sqlResponse = await withRetry(
-      () => model.generateContent([
-        { text: SYSTEM_PROMPT },
-        { text: `User question: ${resolved.question}` },
-      ]),
-      { label: "Gemini SQL generation" },
-    );
-
-    const sqlText = sqlResponse.response.text().trim();
     let sqlResult;
     try {
-      // Strip markdown code fences if present
-      const cleaned = stripCodeFences(sqlText);
-      const parsed = JSON.parse(cleaned);
-
-      // Handle refused questions
-      if (parsed.refused) {
+      sqlResult = await generateSql(model, resolved.question);
+    } catch (err) {
+      if (err instanceof Error && err.message === "unsafe_sql") {
         return NextResponse.json({
-          question,
-          answer: parsed.message || "Sorry, I can't help you with that.",
-          sql: null,
-          rows: [],
-          rowCount: 0,
-          chart: null,
-        });
+          error: "The AI generated an unsafe query. Please rephrase your question.",
+        }, { status: 400 });
       }
-      sqlResult = parsed;
-    } catch {
       return NextResponse.json({
         error: "Failed to parse AI response",
-        raw: sqlText,
       }, { status: 500 });
     }
 
-    const sql = sqlResult.sql;
-
-    // Safety check: scan the entire query for DML/DDL, system catalog access,
-    // multi-statement attacks, and SQL comments. See src/lib/sql-safety.ts.
-    const safety = validateAiSql(sql);
-    if (!safety.safe) {
-      logger.warn({ sql, reason: safety.reason }, "AI generated unsafe query");
+    if ("refused" in sqlResult) {
       return NextResponse.json({
-        error: "The AI generated an unsafe query. Please rephrase your question.",
-      }, { status: 400 });
+        question,
+        answer: sqlResult.message,
+        sql: null,
+        rows: [],
+        rowCount: 0,
+        chart: null,
+      });
     }
 
-    // Step 2: Execute SQL inside a transaction so SET LOCAL applies to the query
-    let rows: Record<string, unknown>[];
+    const { sql, explanation } = sqlResult;
+
+    // Step 2: Execute SQL
+    let serializedRows: Record<string, unknown>[];
     try {
-      rows = await prismaReadonly.$transaction(async (tx) => {
-        await tx.$executeRaw`SET LOCAL statement_timeout = '5s'`;
-        return await tx.$queryRawUnsafe(sql) as Record<string, unknown>[];
-      });
+      serializedRows = await executeQuery(sql);
     } catch (dbError) {
       logger.error({ err: dbError, sql }, "AI SQL execution failed");
       return NextResponse.json({
@@ -320,92 +441,38 @@ export async function POST(request: NextRequest) {
       userId: session.userId,
       action: "ai_query",
       entity: "sql",
-      entityId: String(rows.length),
+      entityId: String(serializedRows.length),
       details: sql,
       ip,
       userAgent,
     });
-
-    // Serialize BigInt values to numbers
-    const serializedRows = rows.map((row) => {
-      const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(row)) {
-        out[k] = typeof v === "bigint" ? Number(v) : v;
-      }
-      return out;
-    });
-
-    // Step 3: Redact sensitive columns and pseudonymise names before sending to Gemini.
-    // Clare sees full results (serializedRows) in the UI; Gemini gets redacted + pseudonymised version.
-    const redactedRows = redactForAi(serializedRows);
-    const aiRows = pseudonymiseRows(redactedRows, resolved.pseudonymMap);
-
-    // Pseudonymise the question for Call 2 — replace the real name Clare typed
-    // with the pseudonym so Gemini never sees the real name in the question text either.
-    let aiQuestion = question;
-    if (resolved.resolvedName) {
-      const pseudonym = resolved.pseudonymMap.get(resolved.resolvedName) ?? resolved.resolvedName;
-      aiQuestion = question.replace(new RegExp(resolved.resolvedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), pseudonym);
-    }
 
     // Audit: log cross-border data disclosure to Google Gemini (fire-and-forget)
     logAuditEvent({
       userId: session.userId,
       action: "ai_external_disclosure",
       entity: "gemini",
-      entityId: String(aiRows.length),
-      details: `provider=google/gemini model=${resolvedModelName} rows=${aiRows.length}`,
+      entityId: String(serializedRows.length),
+      details: `provider=google/gemini model=${resolvedModelName} rows=${serializedRows.length}`,
       ip,
       userAgent,
     });
 
-    // Step 4: Generate natural language answer + chart
-    const resultsResponse = await withRetry(
-      () => model.generateContent([
-        { text: RESULTS_PROMPT },
-        { text: `User question: ${aiQuestion}` },
-        { text: `SQL executed: ${sql}` },
-        { text: `Results (${aiRows.length} rows): ${JSON.stringify(aiRows.slice(0, 100))}` },
-      ]),
-      { label: "Gemini answer generation" },
-    );
-
-    const resultsText = resultsResponse.response.text().trim();
-    let answerResult;
-    try {
-      const cleaned = stripCodeFences(resultsText);
-      answerResult = JSON.parse(cleaned);
-    } catch {
-      answerResult = { answer: resultsText, chart: null };
-    }
-
-    // Re-map pseudonyms back to real names in the answer for Clare's display
-    const answer = depseudonymiseAnswer(
-      answerResult.answer ?? resultsText,
+    // Step 3: Generate natural language answer + chart
+    const { answer, chart } = await generateAnswer(
+      model,
+      question,
+      sql,
+      serializedRows,
+      resolved.pseudonymMap,
       resolved.inversePseudonymMap,
+      resolved.resolvedName,
     );
-
-    // Depseudonymise chart labels so Clare sees real names, not "Patient #42"
-    let chart = answerResult.chart;
-    if (chart?.data && Array.isArray(chart.data)) {
-      chart = {
-        ...chart,
-        data: chart.data.map((d: Record<string, unknown>) => {
-          const out: Record<string, unknown> = {};
-          for (const [k, v] of Object.entries(d)) {
-            out[k] = typeof v === "string"
-              ? depseudonymiseAnswer(v, resolved.inversePseudonymMap)
-              : v;
-          }
-          return out;
-        }),
-      };
-    }
 
     return NextResponse.json({
       question,
       sql,
-      explanation: sqlResult.explanation,
+      explanation,
       answer,
       chart,
       rows: serializedRows,
