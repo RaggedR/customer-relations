@@ -7,15 +7,14 @@
  * Verifies a claim token (from the set-password email), creates a User
  * account linked to the existing Patient record, and logs the patient in.
  *
- * Note: Claim tokens are JWTs signed with SESSION_SECRET (same key as session
- * tokens). If SESSION_SECRET rotates, outstanding claim links break. This is
- * acceptable while email is stubbed — when a real email provider is wired up,
- * consider a DB-backed single-use token table instead.
+ * Claim tokens are DB-backed, single-use, and hash-only (raw token never
+ * stored). They expire after 24 hours and are consumed atomically to
+ * prevent replay attacks.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { jwtVerify } from "jose";
+import { consumeClaim } from "@/lib/claim-token";
 import { signSession } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
 import { getClientIp } from "@/lib/api-helpers";
@@ -46,21 +45,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
     }
 
-    // Verify the claim token
-    const secret = new TextEncoder().encode(getSecret());
-    let payload;
-    try {
-      const result = await jwtVerify(token, secret);
-      payload = result.payload as { email?: string; purpose?: string };
-    } catch {
-      return NextResponse.json({ error: "Invalid or expired link. Please request a new one." }, { status: 401 });
+    // Verify and consume the claim token (single-use, DB-backed)
+    const result = await consumeClaim(token);
+    if (!result) {
+      return NextResponse.json(
+        { error: "Invalid or expired link. Please request a new one." },
+        { status: 401 },
+      );
     }
 
-    if (payload.purpose !== "claim" || !payload.email) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
-
-    const email = payload.email;
+    const email = result.email;
     const passwordHash = await hashPassword(password);
 
     // Atomic check-and-create: prevents TOCTOU race where two concurrent

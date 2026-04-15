@@ -215,3 +215,12 @@ model AuditLog {
   userId Int?
   user User? @relation(fields: [userId], references: [id])
 }
+
+model ClaimToken {
+  id        Int       @id @default(autoincrement())
+  email     String
+  tokenHash String    @unique
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+}
