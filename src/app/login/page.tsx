@@ -32,7 +32,15 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/");
+      // Role-based redirect: patients go to portal, nurses to nurse dashboard
+      const role = data.user?.role;
+      if (role === "patient") {
+        router.push("/portal");
+      } else if (role === "nurse") {
+        router.push("/nurse");
+      } else {
+        router.push("/");
+      }
     } catch {
       setError("Network error — please try again");
     } finally {

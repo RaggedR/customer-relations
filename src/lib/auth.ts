@@ -70,17 +70,22 @@ export function requiresRole(pathname: string): Role | null {
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico" ||
     pathname.startsWith("/.well-known/") ||
-    pathname.startsWith("/api/carddav/") // CardDAV uses Basic auth via checkAuth() in carddav-auth.ts
+    pathname.startsWith("/api/carddav/") || // CardDAV uses Basic auth via checkAuth() in carddav-auth.ts
+    pathname === "/portal/login" ||
+    pathname === "/portal/claim" ||
+    pathname === "/portal/privacy"
   ) {
     return null;
   }
 
   // Nurse routes (check before default to handle /api/nurse/*)
-  if (pathname.startsWith("/nurse/") || pathname.startsWith("/api/nurse/"))
+  // Matches both /nurse and /nurse/* — bare path has no trailing slash
+  if (pathname === "/nurse" || pathname.startsWith("/nurse/") || pathname.startsWith("/api/nurse/"))
     return "nurse";
 
   // Patient portal routes
-  if (pathname.startsWith("/portal/") || pathname.startsWith("/api/portal/"))
+  // Matches both /portal and /portal/* — bare path has no trailing slash
+  if (pathname === "/portal" || pathname.startsWith("/portal/") || pathname.startsWith("/api/portal/"))
     return "patient";
 
   // Everything else requires admin (default-deny)

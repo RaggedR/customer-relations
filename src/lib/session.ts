@@ -15,6 +15,7 @@ import type { NextRequest } from "next/server";
 import { verifyToken, type Role } from "@/lib/auth";
 
 export const COOKIE_NAME = "session";
+export const SESSION_MAX_AGE = 8 * 60 * 60; // 8 hours in seconds
 
 export const COOKIE_OPTIONS = {
   httpOnly: true,
