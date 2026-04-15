@@ -16,91 +16,19 @@ import { validateAiSql } from "@/lib/sql-safety";
 import { generateSchemaDescription } from "@/lib/generate-schema-description";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { resolveNames } from "@/lib/name-resolution";
-import { getSchema } from "@/lib/schema";
 import { logAuditEvent } from "@/lib/audit";
 import { extractRequestContext } from "@/lib/request-context";
 import { logger } from "@/lib/logger";
 import { getSessionUser } from "@/lib/session";
 import { createRateLimiter, getRateLimitKey } from "@/lib/rate-limit";
 import { withRetry } from "@/lib/retry";
+import {
+  redactForAi,
+  pseudonymiseRows,
+  depseudonymiseAnswer,
+} from "@/lib/ai-privacy";
 
 const aiLimiter = createRateLimiter(30, 60_000); // 30 requests per minute
-
-/**
- * Collect field names marked ai_visible: false in schema.yaml.
- * These columns are stripped from query results before sending to Gemini.
- * Normalised to lowercase without underscores for fuzzy column matching.
- */
-function getAiRedactedColumns(): Set<string> {
-  const schema = getSchema();
-  const redacted = new Set<string>();
-  for (const entity of Object.values(schema.entities)) {
-    for (const [fieldName, field] of Object.entries(entity.fields)) {
-      if (field.ai_visible === false) {
-        redacted.add(fieldName.toLowerCase().replace(/[\s_]/g, ""));
-      }
-    }
-  }
-  return redacted;
-}
-
-/**
- * Strip AI-excluded columns from query result rows before sending to Gemini.
- * Defence-in-depth: even if the schema description excludes a field, the SQL
- * might still select it via aliasing or * expansion.
- */
-function redactForAi(
-  rows: Record<string, unknown>[],
-): Record<string, unknown>[] {
-  const redacted = getAiRedactedColumns();
-  if (redacted.size === 0) return rows;
-  return rows.map((row) => {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(row)) {
-      if (!redacted.has(k.toLowerCase().replace(/[\s_]/g, ""))) {
-        out[k] = v;
-      }
-    }
-    return out;
-  });
-}
-
-/**
- * Replace known patient/nurse names with pseudonyms in query result rows
- * before sending to Gemini. Only replaces exact string matches in values,
- * not inside free-text content fields (clinical note content is left as-is).
- */
-function pseudonymiseRows(
-  rows: Record<string, unknown>[],
-  pseudonymMap: Map<string, string>,
-): Record<string, unknown>[] {
-  if (pseudonymMap.size === 0) return rows;
-  return rows.map((row) => {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(row)) {
-      if (typeof v === "string" && pseudonymMap.has(v)) {
-        out[k] = pseudonymMap.get(v);
-      } else {
-        out[k] = v;
-      }
-    }
-    return out;
-  });
-}
-
-/**
- * Replace pseudonyms in Gemini's answer text back to real names for display.
- */
-function depseudonymiseAnswer(
-  answer: string,
-  inversePseudonymMap: Map<string, string>,
-): string {
-  let result = answer;
-  for (const [pseudonym, realName] of inversePseudonymMap) {
-    result = result.replaceAll(pseudonym, realName);
-  }
-  return result;
-}
 
 /** Strip markdown code fences that LLMs sometimes wrap around JSON responses. */
 function stripCodeFences(text: string): string {
@@ -465,14 +393,16 @@ export async function POST(request: NextRequest) {
       resolved.resolvedName,
     );
 
+    const cappedRows = serializedRows.slice(0, 100);
     return NextResponse.json({
       question,
       sql,
       explanation,
       answer,
       chart,
-      rows: serializedRows,
+      rows: cappedRows,
       rowCount: serializedRows.length,
+      truncated: serializedRows.length > 100,
     });
   });
 }
