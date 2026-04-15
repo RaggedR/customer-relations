@@ -70,7 +70,7 @@ export function requiresRole(pathname: string): Role | null {
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico" ||
     pathname.startsWith("/.well-known/") ||
-    pathname.startsWith("/api/carddav/")
+    pathname.startsWith("/api/carddav/") // CardDAV uses Basic auth via checkAuth() in carddav-auth.ts
   ) {
     return null;
   }
