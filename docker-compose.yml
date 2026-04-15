@@ -31,6 +31,8 @@ services:
       CARDDAV_PASSWORD: ${CARDDAV_PASSWORD}
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE}
       DATABASE_URL_READONLY: ${DATABASE_URL_READONLY}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Customer Relations <noreply@example.com>}
     depends_on:
       db:
         condition: service_healthy

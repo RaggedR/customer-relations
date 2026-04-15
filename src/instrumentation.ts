@@ -48,11 +48,16 @@ export async function register() {
       if (!process.env.CARDDAV_PASSWORD) {
         logger.warn("CARDDAV_PASSWORD not set — CardDAV endpoints are disabled");
       }
+      if (!process.env.RESEND_API_KEY) {
+        logger.warn("RESEND_API_KEY not set — claim emails will be logged to console only");
+      }
     } else {
       // Development: warn but don't hard-fail
-      if (!process.env.DATABASE_URL_READONLY) {
-        logger.warn("DATABASE_URL_READONLY not set — AI queries use read-write connection");
-      }
+      const warnings: string[] = [];
+      if (!process.env.DATABASE_URL_READONLY) warnings.push("DATABASE_URL_READONLY not set — AI queries use read-write connection");
+      if (!process.env.CARDDAV_PASSWORD) warnings.push("CARDDAV_PASSWORD not set — CardDAV endpoints are disabled");
+      if (!process.env.RESEND_API_KEY) warnings.push("RESEND_API_KEY not set — claim emails will be logged to console only");
+      for (const w of warnings) console.warn(`[STARTUP WARNING] ${w}`);
     }
   }
 }

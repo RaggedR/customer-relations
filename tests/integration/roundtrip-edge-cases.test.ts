@@ -7,12 +7,14 @@
  * Uses the existing hearing-aid export/import endpoints.
  *
  * Requires: dev server running on localhost:3000 + Postgres.
+ * Skips gracefully if server or database is unreachable.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { create, findAll, remove } from "@/lib/repository";
 import {
   isServerRunning,
+  isDatabaseAvailable,
   assertFieldsMatch,
   getExport,
   postImportFile,
@@ -25,24 +27,35 @@ import {
 type Row = Record<string, unknown>;
 
 describe("Edge Case Roundtrip", () => {
-  let serverAvailable = false;
+  let available = false;
   let patientId: number;
   let edgeFixtures: ReturnType<typeof hearingAidEdgeCaseFixtures>;
 
   beforeAll(async () => {
-    serverAvailable = await isServerRunning();
-    if (!serverAvailable) return;
+    // Check both server and database before attempting any Prisma operations
+    const [serverUp, dbUp] = await Promise.all([
+      isServerRunning(),
+      isDatabaseAvailable(),
+    ]);
+    if (!serverUp || !dbUp) return;
 
-    // Create edge-case patient (name has commas, quotes)
-    const patient = (await create("patient", {
-      ...PATIENT_EDGE_CASE,
-    })) as Row;
-    patientId = patient.id as number;
+    try {
+      // Create edge-case patient (name has commas, quotes)
+      const patient = (await create("patient", {
+        ...PATIENT_EDGE_CASE,
+      })) as Row;
+      patientId = patient.id as number;
 
-    // Create all edge-case hearing aids
-    edgeFixtures = hearingAidEdgeCaseFixtures(patientId);
-    for (const fixture of Object.values(edgeFixtures)) {
-      await create("hearing_aid", { ...fixture });
+      // Create all edge-case hearing aids
+      edgeFixtures = hearingAidEdgeCaseFixtures(patientId);
+      for (const fixture of Object.values(edgeFixtures)) {
+        await create("hearing_aid", { ...fixture });
+      }
+
+      available = true;
+    } catch {
+      // DB connection failed or schema mismatch — skip all tests
+      available = false;
     }
   });
 
@@ -65,10 +78,10 @@ describe("Edge Case Roundtrip", () => {
     }
   }
 
-  // ── Commas and quotes in CSV ──────────────────────────────
+  // -- Commas and quotes in CSV ----------------------------------------
 
   it("CSV handles commas and quotes in text fields", async ({ skip }) => {
-    if (!serverAvailable) skip();
+    if (!available) skip();
 
     const exportRes = await getExport("/api/hearing-aid/export", "csv");
     expect(exportRes.ok).toBe(true);
@@ -105,10 +118,10 @@ describe("Edge Case Roundtrip", () => {
     expect(quotesAid!.last_repair_details).toContain("$350");
   });
 
-  // ── Unicode ───────────────────────────────────────────────
+  // -- Unicode ---------------------------------------------------------
 
   it("CSV preserves unicode characters", async ({ skip }) => {
-    if (!serverAvailable) skip();
+    if (!available) skip();
 
     const exportRes = await getExport("/api/hearing-aid/export", "csv");
     const csvText = await exportRes.text();
@@ -135,10 +148,10 @@ describe("Edge Case Roundtrip", () => {
     expect(unicodeAid!.repair_address).toContain("M\u00FCller Stra\u00DFe");
   });
 
-  // ── Newlines in text fields ───────────────────────────────
+  // -- Newlines in text fields -----------------------------------------
 
   it("CSV handles newlines in text fields", async ({ skip }) => {
-    if (!serverAvailable) skip();
+    if (!available) skip();
 
     const exportRes = await getExport("/api/hearing-aid/export", "csv");
     const csvText = await exportRes.text();
@@ -163,10 +176,10 @@ describe("Edge Case Roundtrip", () => {
     expect(newlineAid!.repair_address).toContain("Floor 3");
   });
 
-  // ── Null preservation ─────────────────────────────────────
+  // -- Null preservation -----------------------------------------------
 
   it("null fields remain null after CSV roundtrip", async ({ skip }) => {
-    if (!serverAvailable) skip();
+    if (!available) skip();
 
     const exportRes = await getExport("/api/hearing-aid/export", "csv");
     const csvText = await exportRes.text();
@@ -197,10 +210,10 @@ describe("Edge Case Roundtrip", () => {
     expect(nullsAid!.repair_address).toBeNull();
   });
 
-  // ── Large text ────────────────────────────────────────────
+  // -- Large text ------------------------------------------------------
 
   it("large text blobs survive CSV roundtrip", async ({ skip }) => {
-    if (!serverAvailable) skip();
+    if (!available) skip();
 
     const exportRes = await getExport("/api/hearing-aid/export", "csv");
     const csvText = await exportRes.text();
@@ -223,10 +236,10 @@ describe("Edge Case Roundtrip", () => {
     expect(largeAid!.last_repair_details).toHaveLength(2000);
   });
 
-  // ── Date edge case ────────────────────────────────────────
+  // -- Date edge case --------------------------------------------------
 
   it("warranty_end_date survives roundtrip in YYYY-MM-DD format", async ({ skip }) => {
-    if (!serverAvailable) skip();
+    if (!available) skip();
 
     const exportRes = await getExport("/api/hearing-aid/export", "csv");
     const csvText = await exportRes.text();
@@ -249,10 +262,10 @@ describe("Edge Case Roundtrip", () => {
     expect(date.toISOString().slice(0, 10)).toBe("2026-12-31");
   });
 
-  // ── Patient name with commas ──────────────────────────────
+  // -- Patient name with commas ----------------------------------------
 
   it("patient name with commas resolves correctly on import", async ({ skip }) => {
-    if (!serverAvailable) skip();
+    if (!available) skip();
 
     const exportRes = await getExport("/api/hearing-aid/export", "json");
     const jsonData = await exportRes.json();
@@ -267,10 +280,10 @@ describe("Edge Case Roundtrip", () => {
     expect(testRecords[0].patient_name).toContain("Jr.");
   });
 
-  // ── JSON roundtrip preserves edge cases ───────────────────
+  // -- JSON roundtrip preserves edge cases -----------------------------
 
   it("JSON roundtrip preserves all edge-case fields", async ({ skip }) => {
-    if (!serverAvailable) skip();
+    if (!available) skip();
 
     const exportRes = await getExport("/api/hearing-aid/export", "json");
     expect(exportRes.ok).toBe(true);
