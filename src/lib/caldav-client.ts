@@ -11,7 +11,7 @@
 import { DAVClient, type DAVCalendar } from "tsdav";
 import { generateVEvent, makeUid } from "./ical";
 import { findAll, update } from "./repository";
-import { tryDecrypt } from "./token-crypto";
+import { tryDecryptLegacy } from "./token-crypto";
 import { withRetry } from "./retry";
 import { logger } from "@/lib/logger";
 import type { Row } from "./parsers";
@@ -28,8 +28,8 @@ interface CalendarConnection {
 
 async function getClient(conn: CalendarConnection): Promise<DAVClient> {
   const isGoogle = conn.provider === "google";
-  const accessToken = tryDecrypt(conn.access_token);
-  const refreshToken = tryDecrypt(conn.refresh_token);
+  const accessToken = tryDecryptLegacy(conn.access_token);
+  const refreshToken = tryDecryptLegacy(conn.refresh_token);
 
   const client = new DAVClient({
     serverUrl: isGoogle
