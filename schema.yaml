@@ -164,6 +164,7 @@ entities:
       specialty: { type: string, required: true }
       status: { type: enum, values: [requested, confirmed, completed, cancelled, no_show] }
       notes: { type: text }
+      caldav_etag: { type: string }  # ETag from CalDAV server for optimistic concurrency
     relations:
       patient: { type: belongs_to, entity: patient }
       nurse: { type: belongs_to, entity: nurse }

@@ -119,6 +119,7 @@ model Appointment {
   specialty String
   status String?
   notes String?
+  caldav_etag String?
   patientId Int?
   patient Patient? @relation(fields: [patientId], references: [id])
   nurseId Int?

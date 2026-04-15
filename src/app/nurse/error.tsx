@@ -2,6 +2,13 @@
 
 import { useEffect } from "react";
 
+/**
+ * Error boundary for the nurse portal routes.
+ *
+ * API note: `unstable_retry` is the correct prop name for Next.js 16.x.
+ * It is an unstable API that may be renamed to `retry` in a future release.
+ * See: node_modules/next/dist/docs/01-app/01-getting-started/10-error-handling.md
+ */
 export default function NurseError({
   error,
   unstable_retry,
