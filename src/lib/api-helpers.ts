@@ -6,6 +6,7 @@
 
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
+import type { RequestContext } from "@/lib/request-context";
 
 /**
  * Extract the client IP address from standard proxy headers.
@@ -34,7 +35,8 @@ export function getClientIp(request: Request): string | undefined {
  */
 export async function withErrorHandler(
   label: string,
-  fn: () => Promise<NextResponse>
+  fn: () => Promise<NextResponse>,
+  ctx?: RequestContext
 ): Promise<NextResponse> {
   try {
     return await fn();
@@ -55,7 +57,7 @@ export async function withErrorHandler(
         { status: 409 },
       );
     }
-    logger.error({ err: error, label }, "Request handler error");
+    logger.error({ err: error, label, correlationId: ctx?.correlationId }, "Request handler error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

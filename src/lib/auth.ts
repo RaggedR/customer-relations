@@ -88,6 +88,7 @@ export function requiresRole(pathname: string): Role | null {
     pathname === "/favicon.ico" ||
     pathname.startsWith("/.well-known/") ||
     pathname.startsWith("/api/carddav/") || // CardDAV uses Basic auth via checkAuth() in carddav-auth.ts
+    pathname === "/api/ready" || // Readiness probe — no patient data exposed
     pathname === "/portal/login" ||
     pathname === "/portal/claim" ||
     pathname === "/portal/privacy"

@@ -128,11 +128,13 @@ Every access to patient health information:
 | Admin viewed Medicare numbers | admin_id, patient_id, timestamp, action="view_sensitive" |
 | AI query executed | admin_id, sql, row_count, timestamp, action="ai_query" |
 | AI external disclosure | admin_id, provider, model, row_count, timestamp, action="ai_external_disclosure" |
+| Successful login | user_id, ip, user_agent, timestamp, action="login" |
+| Failed login attempt | email (or user_id if known), ip, user_agent, timestamp, action="login_failed" |
+| Logout | user_id, ip, user_agent, timestamp, action="logout" |
 
 ### What is NOT logged
 
 - Appointment bookings, confirmations, cancellations (operational, not sensitive)
-- Login/logout events
 - Schema changes
 - Navigation actions
 
