@@ -52,6 +52,9 @@ function getImportOrder(schema: ReturnType<typeof getSchema>): string[] {
 export async function GET(request: NextRequest) {
   return withErrorHandler("GET /api/backup", async () => {
     const session = await getSessionUser(request);
+    if (!session || session.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     const ctx = extractRequestContext(request, session);
     const schema = getSchema();
     const importOrder = getImportOrder(schema);
