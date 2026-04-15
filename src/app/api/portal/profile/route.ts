@@ -14,7 +14,7 @@ import { getSessionUser } from "@/lib/session";
 import { withErrorHandler } from "@/lib/api-helpers";
 import { extractRequestContext } from "@/lib/request-context";
 import { resolvePatient } from "@/lib/patient-helpers";
-import { prisma } from "@/lib/prisma";
+import { update } from "@/lib/repository";
 import { logAuditEvent } from "@/lib/audit";
 
 // Fields the patient can view
@@ -83,16 +83,26 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
     }
 
-    const updated = await prisma.patient.update({
-      where: { id: patient.id },
-      data: updates,
+    // Snapshot old values before update for audit trail
+    const oldValues: Record<string, unknown> = {};
+    for (const field of Object.keys(updates)) {
+      oldValues[field] = (patient as Record<string, unknown>)[field] ?? null;
+    }
+
+    const updated = await update("patient", patient.id, updates, {
+      allowedFields: [...EDITABLE_FIELDS],
     });
+
+    // Build "field: old → new" audit details
+    const auditDetails = Object.keys(updates)
+      .map((field) => `${field}: ${String(oldValues[field] ?? "")} → ${String(updates[field] ?? "")}`)
+      .join(", ");
 
     logAuditEvent({
       action: "patient_self_update",
       entity: "patient",
       entityId: String(patient.id),
-      details: `Updated fields: ${Object.keys(updates).join(", ")}`,
+      details: auditDetails,
       context: ctx,
     });
 

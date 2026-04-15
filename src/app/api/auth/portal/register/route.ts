@@ -31,7 +31,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { email, password, name, phone, dateOfBirth, address } = await request.json();
+    const { email, password, name, phone, dateOfBirth, address, privacy_acknowledged } = await request.json();
+
+    if (privacy_acknowledged !== true) {
+      return NextResponse.json(
+        { error: "You must acknowledge the privacy notice to register" },
+        { status: 400 },
+      );
+    }
 
     if (!email || typeof email !== "string") {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
