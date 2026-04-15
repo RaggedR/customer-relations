@@ -214,6 +214,12 @@ export async function POST(request: NextRequest) {
   }
 
   return withErrorHandler("POST /api/ai", async () => {
+    // Defence-in-depth: verify session AND admin role even though proxy enforces both
+    const session = await getSessionUser(request);
+    if (!session || session.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { question, model: modelName } = await request.json();
 
     if (!question || typeof question !== "string") {
@@ -308,11 +314,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Audit: log AI query execution (fire-and-forget)
-    const session = await getSessionUser(request);
     const ip = getClientIp(request);
     const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({
-      userId: session?.userId ?? null,
+      userId: session.userId,
       action: "ai_query",
       entity: "sql",
       entityId: String(rows.length),
@@ -345,7 +350,7 @@ export async function POST(request: NextRequest) {
 
     // Audit: log cross-border data disclosure to Google Gemini (fire-and-forget)
     logAuditEvent({
-      userId: session?.userId ?? null,
+      userId: session.userId,
       action: "ai_external_disclosure",
       entity: "gemini",
       entityId: String(aiRows.length),
