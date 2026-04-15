@@ -214,6 +214,12 @@ export async function POST(request: NextRequest) {
   }
 
   return withErrorHandler("POST /api/ai", async () => {
+    // Defence-in-depth: verify session even though proxy enforces admin role
+    const session = await getSessionUser(request);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { question, model: modelName } = await request.json();
 
     if (!question || typeof question !== "string") {
@@ -308,7 +314,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Audit: log AI query execution (fire-and-forget)
-    const session = await getSessionUser(request);
     const ip = getClientIp(request);
     const userAgent = request.headers.get("user-agent") ?? undefined;
     logAuditEvent({

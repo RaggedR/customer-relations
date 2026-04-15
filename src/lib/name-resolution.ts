@@ -186,10 +186,12 @@ export async function resolveNames(question: string): Promise<NameResolution> {
           inversePseudonymMap,
         };
       } else {
-        // Uncertain — ask the user to confirm
+        // Uncertain — ask user to confirm without exposing the real name
+        const pseudonym = pseudonymMap.get(bestMatch.name)
+          ?? `${bestMatch.type === "patient" ? "Patient" : "Nurse"} #${bestMatch.id}`;
         return {
           question,
-          clarify: `Did you mean ${safeName}?`,
+          clarify: `Did you mean ${pseudonym}? Please use their full name for a precise match.`,
           pseudonymMap,
           inversePseudonymMap,
         };

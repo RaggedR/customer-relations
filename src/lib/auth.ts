@@ -69,7 +69,8 @@ export function requiresRole(pathname: string): Role | null {
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico" ||
-    pathname.startsWith("/.well-known/")
+    pathname.startsWith("/.well-known/") ||
+    pathname.startsWith("/api/carddav/")
   ) {
     return null;
   }

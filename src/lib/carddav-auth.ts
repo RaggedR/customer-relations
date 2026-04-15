@@ -5,12 +5,21 @@
  * for all CardDAV route handlers.
  */
 
-import { timingSafeEqual } from "crypto";
+import { timingSafeEqual, createHash } from "crypto";
+import { createRateLimiter } from "@/lib/rate-limit";
 
-const CARDDAV_PASSWORD = process.env.CARDDAV_PASSWORD || "";
+const carddavLimiter = createRateLimiter(20, 60_000); // 20 requests/minute per IP
 
 export function checkAuth(request: Request): boolean {
+  const CARDDAV_PASSWORD = process.env.CARDDAV_PASSWORD || ""; // Read per-request for hot rotation
   if (!CARDDAV_PASSWORD) return false; // Deny all if password not configured
+
+  // Rate limit by IP to prevent brute-force
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim()
+    ?? request.headers.get("x-real-ip")
+    ?? "unknown";
+  const rl = carddavLimiter(ip);
+  if (!rl.allowed) return false;
 
   const auth = request.headers.get("authorization");
   if (!auth?.startsWith("Basic ")) return false;
@@ -20,11 +29,10 @@ export function checkAuth(request: Request): boolean {
   // passwords may themselves contain colons.
   const colonIdx = decoded.indexOf(":");
   const password = colonIdx >= 0 ? decoded.slice(colonIdx + 1) : "";
-  try {
-    return timingSafeEqual(Buffer.from(password), Buffer.from(CARDDAV_PASSWORD));
-  } catch {
-    return false; // Lengths differ — timingSafeEqual requires equal-length buffers
-  }
+  // Hash both to constant length — prevents timing oracle on password length
+  const a = createHash("sha256").update(password).digest();
+  const b = createHash("sha256").update(CARDDAV_PASSWORD).digest();
+  return timingSafeEqual(a, b);
 }
 
 export function addressBookToEntity(addressbook: string): string | null {
