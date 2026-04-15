@@ -10,8 +10,9 @@
  * - Unknown columns are skipped (logged but not rejected)
  */
 
-import { getSchema, EntityConfig, foreignKeyName } from "@/lib/schema";
-import { create, update, findAll, validateEntity } from "./repository";
+import { getSchema, EntityConfig, foreignKeyName, toPascalCase } from "@/lib/schema";
+import { create, update, findAll, validateEntity, transformInput } from "./repository";
+import { prisma } from "./prisma";
 import type { Row } from "./parsers";
 import { getCsvRepresentation } from "@/lib/schema";
 
@@ -93,6 +94,13 @@ function normaliseRows(rows: Row[], entityName: string): Row[] {
  * 2. Build relation lookup maps (name → id)
  * 3. For each row: resolve relations, coerce types, validate, upsert
  */
+/** A fully-resolved, validated row ready to be written to the database. */
+interface PreparedRow {
+  rowNum: number;
+  cleanData: Row;
+  existingId: number | null;
+}
+
 export async function importEntities(
   entityName: string,
   rawRows: Row[],
@@ -122,6 +130,65 @@ export async function importEntities(
     errors: [],
   };
 
+  if (!skipInvalid) {
+    // Strict mode: validate all rows first, then write all-or-nothing in a transaction.
+    const prepared: PreparedRow[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const rowNum = i + 2; // +2 for 1-indexed + header row
+      const row = rows[i];
+
+      // Resolve relations — a returned null means an error was logged and skipped count updated.
+      // In strict mode, a relation failure is fatal.
+      const tempResult: ImportResult = { ...result, errors: [...result.errors], skipped: 0 };
+      const data = resolveRelations(row, entity, relationMaps, rowNum, tempResult);
+      if (!data) {
+        // Absorb errors from tempResult and abort
+        result.errors.push(...tempResult.errors.slice(result.errors.length));
+        throw new Error(tempResult.errors[tempResult.errors.length - 1] ?? `Row ${rowNum}: relation resolution failed`);
+      }
+
+      coerceTypes(data, entity);
+      const cleanData = stripUnknownFields(data, entity);
+
+      const validationErrors = validateEntity(entityName, cleanData);
+      if (validationErrors.length > 0) {
+        const msgs = validationErrors.map((e) => `Row ${rowNum}: ${e}`);
+        result.errors.push(...msgs);
+        throw new Error(msgs[0]);
+      }
+
+      const existingId = findExistingRecord(cleanData, existingRecords, upsertKeys, entity);
+      prepared.push({ rowNum, cleanData, existingId });
+    }
+
+    // All rows valid — execute writes atomically.
+    await prisma.$transaction(
+      async (tx) => {
+        const txClient = tx as unknown as Record<string, Record<string, Function>>;
+        const modelKey = entityName.charAt(0).toLowerCase() + toPascalCase(entityName).slice(1);
+        const model = txClient[modelKey];
+        if (!model) throw new Error(`No Prisma model found for entity "${entityName}"`);
+
+        for (const { cleanData, existingId } of prepared) {
+          const transformed = transformInput(entityName, cleanData, entity);
+          if (existingId) {
+            await model.update({ where: { id: existingId }, data: transformed });
+            result.updated++;
+          } else {
+            const created = await model.create({ data: transformed }) as Row;
+            existingRecords.push({ id: created.id as number, ...cleanData });
+            result.created++;
+          }
+        }
+      },
+      { timeout: 60_000 }
+    );
+
+    return result;
+  }
+
+  // Lenient mode (skipInvalid: true): process row by row, skip failures.
   for (let i = 0; i < rows.length; i++) {
     const rowNum = i + 2; // +2 for 1-indexed + header row
     const row = rows[i];
@@ -170,7 +237,6 @@ export async function importEntities(
     } catch (err) {
       const msg = `Row ${rowNum}: ${(err as Error).message}`;
       result.errors.push(msg);
-      if (!skipInvalid) throw new Error(msg);
       result.skipped++;
     }
   }

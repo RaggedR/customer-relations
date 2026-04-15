@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
   const dateTo = searchParams.get("dateTo");
   const nurseId = searchParams.get("nurseId");
   const search = searchParams.get("search") || undefined;
+  const pageParam = searchParams.get("page");
+  const pageSizeParam = searchParams.get("pageSize");
 
   const filterBy: Record<string, unknown> = {};
   if (nurseId) filterBy.nurseId = parseInt(nurseId, 10);
@@ -33,6 +35,9 @@ export async function GET(request: NextRequest) {
         : undefined,
       sortBy: "date",
       sortOrder: "asc",
+      page: pageParam ? parseInt(pageParam, 10) : undefined,
+      pageSize: pageSizeParam ? parseInt(pageSizeParam, 10) : undefined,
+      shallow: !!pageParam,
     });
     return NextResponse.json(items);
   });

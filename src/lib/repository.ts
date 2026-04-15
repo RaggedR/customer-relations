@@ -58,8 +58,11 @@ function buildIncludes(
 /**
  * Convert incoming data keys to snake_case for Prisma,
  * and map relation references to foreign key IDs.
+ *
+ * Exported for use in transactional import paths that need to call
+ * model delegates directly on a Prisma transaction client.
  */
-function transformInput(
+export function transformInput(
   entityName: string,
   data: Record<string, unknown>,
   entity: EntityConfig

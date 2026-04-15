@@ -46,7 +46,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ errors }, { status: 400 });
     }
 
-    const item = await update("appointment", numId, body);
+    const expectedUpdatedAt = body.updatedAt ?? body.updated_at;
+    const item = await update("appointment", numId, body, {
+      expectedUpdatedAt: expectedUpdatedAt ? String(expectedUpdatedAt) : undefined,
+    });
 
     // CalDAV update (fire-and-forget)
     updateAppointment(item as Record<string, unknown>).catch((err) =>
