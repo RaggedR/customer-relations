@@ -31,20 +31,21 @@ import { reverseRelationKey, foreignKeyName } from "@/engine/naming";
 // ─── Re-exports: Schema access & types ─────────────────────────
 
 /**
- * Get the loaded schema. On the server, falls through to loadSchema()
- * if the cache is empty (e.g., during build or first request).
- * On the client, expects the schema to be pre-loaded (always true
- * because server startup populates the cache before any handler runs).
+ * Get the loaded schema. Falls through to loadSchema() if the cache
+ * is empty (build time, first request, or tests).
+ *
+ * Uses a dynamic import() for schema-loader to avoid pulling fs into
+ * client bundles statically. Turbopack still traces it (known issue),
+ * but the build continues via continue-on-error in CI.
  */
 export function getSchema(): SchemaConfig {
   try {
     return getSchemaFromCache();
   } catch {
-    // Cache empty — we're on the server (build time or first request).
-    // Dynamic require avoids pulling fs into the client bundle.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { loadSchema } = require("@/engine/schema-loader");
-    return loadSchema();
+    // Cache empty — lazy-load from disk (server-only path).
+    // Static import would pull fs into the client bundle.
+    const loader = require("@/engine/schema-loader") as { loadSchema: () => SchemaConfig };
+    return loader.loadSchema();
   }
 }
 export type {
