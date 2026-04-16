@@ -10,17 +10,13 @@
  */
 
 import { NextResponse } from "next/server";
-import { patientRoute, withCustomRateLimit } from "@/lib/middleware";
+import { patientRoute, withRateLimit } from "@/lib/middleware";
 import { createRateLimiter } from "@/lib/rate-limit";
-import type { TraceContext, SessionContext, AuditContext, PatientContext } from "@/lib/middleware";
 
 const correctionsLimiter = createRateLimiter(3, 60 * 60 * 1000); // 3 per hour
 
 export const POST = patientRoute()
-  .use(withCustomRateLimit<TraceContext & SessionContext & AuditContext & PatientContext>(
-    correctionsLimiter,
-    (ctx) => `patient:${ctx.patient.id}`,
-  ))
+  .use(withRateLimit(correctionsLimiter, (ctx) => `patient:${ctx.patient.id}`))
   .named("POST /api/portal/corrections")
   .handle(async (ctx) => {
     const { description } = await ctx.request.json();

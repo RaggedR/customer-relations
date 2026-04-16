@@ -69,7 +69,10 @@ export class RouteBuilder<Ctx> {
    * signature: (request, context?) => Promise<NextResponse>.
    *
    * The entire chain runs inside:
-   * 1. AsyncLocalStorage.run() — propagates correlationId
+   * 1. AsyncLocalStorage via enterWith() — propagates correlationId.
+   *    enterWith is used instead of run() because the middleware chain
+   *    is not a single callback but a sequential loop. Each request
+   *    arrives in its own async context in Node.js, so enterWith is safe.
    * 2. try/catch — maps errors to 500 responses (withErrorHandler)
    */
   handle(handler: Handler<Ctx>): RouteHandler {

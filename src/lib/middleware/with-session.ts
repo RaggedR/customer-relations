@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import type { RequestContext } from "@/lib/request-context";
 import type { TraceContext, SessionContext, AuditContext } from "./types";
 
@@ -34,7 +35,11 @@ export async function withSession(
     userId: session.userId,
     role: session.role,
     audit(event) {
-      logAuditEvent({ ...event, context: requestContext });
+      // Fire-and-forget: audit must never block the response, but failures
+      // must surface in the error log for compliance investigation.
+      logAuditEvent({ ...event, context: requestContext }).catch((err) => {
+        logger.error({ err }, "Audit event write failed (fire-and-forget)");
+      });
     },
   };
 }

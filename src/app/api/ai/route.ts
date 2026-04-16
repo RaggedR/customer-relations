@@ -125,6 +125,17 @@ function getGenAI() {
   return new GoogleGenerativeAI(apiKey);
 }
 
+/**
+ * LLM call 1: send the system prompt + user question to Gemini, parse the
+ * JSON response, strip code fences, and validate the generated SQL is safe.
+ *
+ * Safety: scans for DML/DDL, system catalog access, multi-statement attacks,
+ * and SQL comments via validateAiSql(). Throws "unsafe_sql" on violation.
+ *
+ * "Refused" responses (when Gemini declines to answer) are signalled by
+ * returning { refused: true, message } — callers must handle this
+ * before using the sql field.
+ */
 async function generateSql(
   model: ReturnType<ReturnType<typeof getGenAI>["getGenerativeModel"]>,
   question: string,
@@ -156,6 +167,10 @@ async function generateSql(
   return { sql, explanation: parsed.explanation };
 }
 
+/**
+ * Execute the AI-generated SQL inside a read-only transaction with a 5s
+ * statement timeout. Serialises BigInt result values to numbers.
+ */
 async function executeQuery(sql: string): Promise<Record<string, unknown>[]> {
   const rows = await prismaReadonly.$transaction(async (tx) => {
     await tx.$executeRaw`SET LOCAL statement_timeout = '5s'`;
@@ -171,6 +186,12 @@ async function executeQuery(sql: string): Promise<Record<string, unknown>[]> {
   });
 }
 
+/**
+ * LLM call 2: send the SQL + result rows to Gemini and ask for a natural
+ * language answer and optional chart config. Redacts sensitive columns and
+ * pseudonymises patient names before sending to Gemini, then de-pseudonymises
+ * both the answer text and any chart labels before returning.
+ */
 async function generateAnswer(
   model: ReturnType<ReturnType<typeof getGenAI>["getGenerativeModel"]>,
   question: string,
@@ -308,6 +329,7 @@ export const POST = adminRoute()
     try {
       serializedRows = await executeQuery(sql);
     } catch (dbError) {
+      // correlationId auto-injected by logger mixin (AsyncLocalStorage)
       logger.error({ err: dbError, sql }, "AI SQL execution failed");
       return NextResponse.json({
         error: "Query execution failed. Please try rephrasing your question.",

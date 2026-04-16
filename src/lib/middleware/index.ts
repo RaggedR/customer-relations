@@ -13,7 +13,7 @@ export { withSession } from "./with-session";
 export { withRole } from "./with-role";
 export { withNurseContext } from "./with-nurse-context";
 export { withPatientContext } from "./with-patient-context";
-export { withRateLimit, withCustomRateLimit } from "./with-rate-limit";
+export { withRateLimit } from "./with-rate-limit";
 export { withParsedId } from "./with-parsed-id";
 
 // Pre-composed stacks

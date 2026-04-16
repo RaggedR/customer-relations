@@ -23,7 +23,7 @@ export async function withParsedId<Ctx extends TraceContext & { _routeParams?: R
   }
 
   const numId = parseInt(raw, 10);
-  if (isNaN(numId)) {
+  if (isNaN(numId) || numId <= 0) {
     return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
   }
 

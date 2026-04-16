@@ -2,8 +2,11 @@
  * withRateLimit — Rate Limiting Layer
  *
  * Factory that returns a middleware applying a rate limiter.
- * Uses the shared getRateLimitKey() for consistent key derivation.
  * Short-circuits with 429 if the limit is exceeded.
+ *
+ * Two forms:
+ * - withRateLimit(limiter) — uses default session/IP key derivation
+ * - withRateLimit(limiter, getKey) — custom key (e.g., per-patient)
  */
 
 import { NextResponse } from "next/server";
@@ -12,43 +15,20 @@ import { getRateLimitKey } from "@/lib/rate-limit";
 import type { RateLimitResult } from "@/lib/rate-limit";
 import type { TraceContext } from "./types";
 
-export function withRateLimit(
-  limiter: (key: string) => RateLimitResult,
-) {
-  return async <Ctx extends TraceContext>(
-    ctx: Ctx,
-  ): Promise<NextResponse | Ctx> => {
-    const key = getRateLimitKey(ctx.request as NextRequest);
-    const result = limiter(key);
-    if (!result.allowed) {
-      return NextResponse.json(
-        { error: "Too many requests. Try again later." },
-        {
-          status: 429,
-          headers: {
-            "Retry-After": String(
-              Math.ceil((result.resetMs - Date.now()) / 1000),
-            ),
-          },
-        },
-      );
-    }
-    return ctx;
-  };
-}
-
 /**
- * withCustomRateLimit — Rate limiting with a custom key derivation.
+ * Create a rate-limiting middleware.
  *
- * For routes that need per-entity rate limiting (e.g., per-patient
- * correction requests) rather than per-session/IP.
+ * @param limiter - Rate limiter function (from createRateLimiter)
+ * @param getKey  - Optional custom key derivation. Defaults to session/IP via getRateLimitKey.
  */
-export function withCustomRateLimit<Ctx extends TraceContext>(
+export function withRateLimit<Ctx extends TraceContext>(
   limiter: (key: string) => RateLimitResult,
-  getKey: (ctx: Ctx) => string,
+  getKey?: (ctx: Ctx) => string,
 ) {
   return async (ctx: Ctx): Promise<NextResponse | Ctx> => {
-    const key = getKey(ctx);
+    const key = getKey
+      ? getKey(ctx)
+      : getRateLimitKey(ctx.request as NextRequest);
     const result = limiter(key);
     if (!result.allowed) {
       return NextResponse.json(
