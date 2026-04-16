@@ -187,17 +187,17 @@ describe("validateEntity()", () => {
   // ── Number validation ────────────────────────────────────────
 
   it("rejects non-numeric value for number field", () => {
-    const errors = validateEntity("patient", {
-      name: "Test",
-      age: "not-a-number",
+    const errors = validateEntity("claim_item", {
+      amount: "not-a-number",
     });
-    expect(errors).toContain("age must be a valid number");
+    expect(errors).toContain("amount must be a valid number");
   });
 
   it("accepts numeric value for number field", () => {
-    const errors = validateEntity("patient", {
-      name: "Test",
-      age: 42,
+    const errors = validateEntity("claim_item", {
+      item_number: "10960",
+      date_of_service: "2026-01-01",
+      amount: 42,
     });
     expect(errors).toEqual([]);
   });

@@ -13,7 +13,8 @@ import { validateEntity } from "@/lib/repository";
 // so here we verify the validator catches the specific cases import was missing.
 
 // Load the real schema so validateEntity can find entity definitions.
-import { loadSchema } from "@/lib/schema";
+// loadSchema uses fs (server-only) — import directly from engine, not the client-safe facade.
+import { loadSchema } from "@/engine/schema-loader";
 
 beforeEach(() => {
   loadSchema();

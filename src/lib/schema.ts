@@ -13,6 +13,10 @@
  * Consolidates the former schema-hierarchy.ts and representations.ts.
  */
 
+// Import getSchema from schema-types (client-safe, no fs dependency)
+// NOT from schema-loader (which imports fs for file reading).
+// This is critical: client components import from this facade, so the
+// entire import chain must be free of Node.js-only modules.
 import {
   getSchema,
   type SchemaConfig,
@@ -21,13 +25,14 @@ import {
   type ICalRepresentation,
   type CsvRepresentation,
   type JsonRepresentation,
-} from "@/engine/schema-loader";
+} from "@/engine/schema-types";
 import { reverseRelationKey, foreignKeyName } from "@/engine/naming";
 
 // ─── Re-exports: Schema access & types ─────────────────────────
 
 export { getSchema };
-export { loadSchema } from "@/engine/schema-loader";
+// loadSchema is server-only (uses fs) — only import it where needed,
+// not re-exported from this client-safe facade.
 export type {
   SchemaConfig,
   EntityConfig,
@@ -40,7 +45,7 @@ export type {
   ICalRepresentation,
   CsvRepresentation,
   JsonRepresentation,
-} from "@/engine/schema-loader";
+} from "@/engine/schema-types";
 
 // ─── Re-exports: Field types ───────────────────────────────────
 

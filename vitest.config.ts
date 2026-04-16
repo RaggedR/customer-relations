@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => ({
     include: ["tests/**/*.test.ts"],
     globals: true,
     env: loadEnv(mode ?? "test", process.cwd(), ""),
+    setupFiles: ["tests/setup.ts"],
   },
   resolve: {
     alias: {
