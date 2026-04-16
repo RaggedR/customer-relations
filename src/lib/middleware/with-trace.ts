@@ -9,7 +9,6 @@
  */
 
 import type { NextRequest } from "next/server";
-import { randomUUID } from "node:crypto";
 import { getClientIp } from "@/lib/api-helpers";
 import { requestStore } from "./async-context";
 import type { TraceContext, RouteParams } from "./types";
@@ -17,7 +16,7 @@ import type { TraceContext, RouteParams } from "./types";
 export async function withTrace(
   ctx: { request: NextRequest; _routeParams?: RouteParams },
 ): Promise<TraceContext & { _routeParams?: RouteParams }> {
-  const correlationId = randomUUID();
+  const correlationId = crypto.randomUUID();
 
   // Initialise the AsyncLocalStorage store for this request.
   // The store is mutable — withSession will update userId later.

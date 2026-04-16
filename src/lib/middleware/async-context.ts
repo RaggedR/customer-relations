@@ -10,7 +10,6 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { randomUUID } from "node:crypto";
 
 export interface RequestStore {
   correlationId: string;
@@ -21,7 +20,7 @@ export const requestStore = new AsyncLocalStorage<RequestStore>();
 
 /** Get the current correlation ID, or generate a fresh one if outside a request. */
 export function getCorrelationId(): string {
-  return requestStore.getStore()?.correlationId ?? randomUUID();
+  return requestStore.getStore()?.correlationId ?? crypto.randomUUID();
 }
 
 /** Get the current user ID, or null if outside a request or unauthenticated. */
