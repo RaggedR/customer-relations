@@ -21,8 +21,12 @@ export function startupSchemaEngine(): void {
   writePrismaSchema(schema);
   console.log("[schema-engine] Generated prisma/schema.prisma");
 
-  // 3. Auto-migrate database
-  runMigration();
+  // 3. Auto-migrate database (skip if no DATABASE_URL — e.g., CI builds)
+  if (process.env.DATABASE_URL) {
+    runMigration();
+  } else {
+    console.log("[schema-engine] No DATABASE_URL — skipping migration (CI/build mode)");
+  }
 
   // 4. Generate Prisma client
   generatePrismaClient();
