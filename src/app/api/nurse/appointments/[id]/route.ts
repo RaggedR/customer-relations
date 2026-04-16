@@ -7,40 +7,20 @@
  * logged-in nurse. No clinical data (notes, referrals) is included.
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/session";
-import { withErrorHandler } from "@/lib/api-helpers";
-import { parseIdParam } from "@/lib/route-factory";
-import { resolveNurse, requireAupAcknowledgement } from "@/lib/nurse-helpers";
+import { NextResponse } from "next/server";
+import { nurseIdRoute } from "@/lib/middleware";
 import { findById } from "@/lib/repository";
 
-interface RouteParams {
-  params: Promise<{ id: string }>;
-}
+export const GET = nurseIdRoute()
+  .named("GET /api/nurse/appointments/[id]")
+  .handle(async (ctx) => {
+    const appointment = await findById("appointment", ctx.entityId) as Record<string, unknown> | null;
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  return withErrorHandler("GET /api/nurse/appointments/[id]", async () => {
-    const session = await getSessionUser(request);
-    if (!session || session.role !== "nurse") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const idResult = await parseIdParam(params);
-    if (idResult instanceof NextResponse) return idResult;
-    const appointmentId = idResult;
-
-    const nurse = await resolveNurse(session.userId);
-    if (!nurse) {
-      return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
-    }
-
-    const aupError = requireAupAcknowledgement(nurse);
-    if (aupError) return aupError;
-
-    const appointment = await findById("appointment", appointmentId) as Record<string, unknown> | null;
-
-    if (!appointment || appointment.nurseId !== nurse.id) {
-      return NextResponse.json({ error: "Appointment not found or not assigned to you" }, { status: 404 });
+    if (!appointment || appointment.nurseId !== ctx.nurse.id) {
+      return NextResponse.json(
+        { error: "Appointment not found or not assigned to you" },
+        { status: 404 },
+      );
     }
 
     const patient = appointment.patient as Record<string, unknown> | null | undefined;
@@ -56,4 +36,3 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       patientId: patient?.id,
     });
   });
-}

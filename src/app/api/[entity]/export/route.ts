@@ -9,19 +9,12 @@
  * Includes parent relation names (e.g. "Patient Name" for hearing aids).
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getSchema, getCsvRepresentation, isSensitive } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
-import { withErrorHandler } from "@/lib/api-helpers";
-import { logAuditEvent } from "@/lib/audit";
-import { extractRequestContext } from "@/lib/request-context";
-import { getSessionUser } from "@/lib/session";
+import { adminRoute } from "@/lib/middleware";
 import type { Row } from "@/lib/parsers";
-
-interface RouteParams {
-  params: Promise<{ entity: string }>;
-}
 
 /**
  * Build column definitions from the schema and CSV representation.
@@ -108,51 +101,53 @@ function flattenRow(
   return row;
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  const { entity: rawEntity } = await params;
-  const entityName = rawEntity.replace(/-/g, "_");
+export const GET = adminRoute()
+  .named("GET /api/[entity]/export")
+  .handle(async (ctx) => {
+    const routeParams = ctx._routeParams;
+    const resolved = routeParams?.params ? await routeParams.params : null;
+    const rawEntity = resolved?.entity;
+    if (!rawEntity) {
+      return NextResponse.json({ error: "Missing entity parameter" }, { status: 400 });
+    }
+    const entityName = rawEntity.replace(/-/g, "_");
 
-  // Validate entity exists
-  const schema = getSchema();
-  if (!schema.entities[entityName]) {
-    return NextResponse.json(
-      { error: `Unknown entity: ${entityName}` },
-      { status: 404 }
-    );
-  }
+    // Validate entity exists
+    const schema = getSchema();
+    if (!schema.entities[entityName]) {
+      return NextResponse.json(
+        { error: `Unknown entity: ${entityName}` },
+        { status: 404 },
+      );
+    }
 
-  if (isSensitive(entityName)) {
-    return NextResponse.json(
-      { error: `Export of ${entityName} is not allowed` },
-      { status: 403 }
-    );
-  }
+    if (isSensitive(entityName)) {
+      return NextResponse.json(
+        { error: `Export of ${entityName} is not allowed` },
+        { status: 403 },
+      );
+    }
 
-  const format =
-    request.nextUrl.searchParams.get("format")?.toLowerCase() || "xlsx";
+    const format =
+      ctx.request.nextUrl.searchParams.get("format")?.toLowerCase() || "xlsx";
 
-  if (!["xlsx", "csv", "json"].includes(format)) {
-    return NextResponse.json(
-      { error: "format must be xlsx, csv, or json" },
-      { status: 400 }
-    );
-  }
+    if (!["xlsx", "csv", "json"].includes(format)) {
+      return NextResponse.json(
+        { error: "format must be xlsx, csv, or json" },
+        { status: 400 },
+      );
+    }
 
-  const slug = entityName.replace(/_/g, "-");
-
-  return withErrorHandler(`GET /api/${entityName}/export`, async () => {
+    const slug = entityName.replace(/_/g, "-");
     const items = (await findAll(entityName)) as Row[];
     const columns = buildColumns(entityName);
     const rows = items.map((item) => flattenRow(item, entityName, columns));
 
-    const session = await getSessionUser(request);
-    const ctx = extractRequestContext(request, session);
-    logAuditEvent({
+    ctx.audit({
       action: "export",
       entity: entityName,
       entityId: "*",
       details: `Exported ${items.length} ${entityName} records as ${format}`,
-      context: ctx,
     });
 
     // ── JSON ──────────────────────────────────────────────
@@ -224,4 +219,3 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   });
-}

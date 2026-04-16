@@ -9,13 +9,9 @@
  * Medicare number, date of birth) require a correction request to Clare.
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/session";
-import { withErrorHandler } from "@/lib/api-helpers";
-import { extractRequestContext } from "@/lib/request-context";
-import { resolvePatient } from "@/lib/patient-helpers";
+import { NextResponse } from "next/server";
+import { patientRoute } from "@/lib/middleware";
 import { update } from "@/lib/repository";
-import { logAuditEvent } from "@/lib/audit";
 
 // Fields the patient can view
 // maintenance_plan_expiry excluded — it encodes clinical treatment history
@@ -28,48 +24,22 @@ const VISIBLE_FIELDS = [
 // Fields the patient can self-edit (contact details only)
 const EDITABLE_FIELDS = ["phone", "address"] as const;
 
-export async function GET(request: NextRequest) {
-  return withErrorHandler("GET /api/portal/profile", async () => {
-    const session = await getSessionUser(request);
-    if (!session || session.role !== "patient") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const patient = await resolvePatient(session.userId);
-    if (!patient) {
-      return NextResponse.json(
-        { error: "No patient profile linked to this account" },
-        { status: 403 },
-      );
-    }
-
+export const GET = patientRoute()
+  .named("GET /api/portal/profile")
+  .handle(async (ctx) => {
     // Return only visible fields
     const profile: Record<string, unknown> = {};
     for (const field of VISIBLE_FIELDS) {
-      profile[field] = (patient as Record<string, unknown>)[field] ?? null;
+      profile[field] = (ctx.patient as Record<string, unknown>)[field] ?? null;
     }
 
     return NextResponse.json(profile);
   });
-}
 
-export async function PUT(request: NextRequest) {
-  return withErrorHandler("PUT /api/portal/profile", async () => {
-    const session = await getSessionUser(request);
-    if (!session || session.role !== "patient") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const ctx = extractRequestContext(request, session);
-    const patient = await resolvePatient(session.userId);
-    if (!patient) {
-      return NextResponse.json(
-        { error: "No patient profile linked to this account" },
-        { status: 403 },
-      );
-    }
-
-    const body = await request.json();
+export const PUT = patientRoute()
+  .named("PUT /api/portal/profile")
+  .handle(async (ctx) => {
+    const body = await ctx.request.json();
 
     // Only allow editing of contact fields
     const updates: Record<string, unknown> = {};
@@ -86,10 +56,10 @@ export async function PUT(request: NextRequest) {
     // Snapshot old values before update for audit trail
     const oldValues: Record<string, unknown> = {};
     for (const field of Object.keys(updates)) {
-      oldValues[field] = (patient as Record<string, unknown>)[field] ?? null;
+      oldValues[field] = (ctx.patient as Record<string, unknown>)[field] ?? null;
     }
 
-    const updated = await update("patient", patient.id, updates, {
+    const updated = await update("patient", ctx.patient.id, updates, {
       allowedFields: [...EDITABLE_FIELDS],
     });
 
@@ -98,12 +68,11 @@ export async function PUT(request: NextRequest) {
       .map((field) => `${field}: ${String(oldValues[field] ?? "")} → ${String(updates[field] ?? "")}`)
       .join(", ");
 
-    logAuditEvent({
+    ctx.audit({
       action: "patient_self_update",
       entity: "patient",
-      entityId: String(patient.id),
+      entityId: String(ctx.patient.id),
       details: auditDetails,
-      context: ctx,
     });
 
     // Return only visible fields
@@ -114,4 +83,3 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(profile);
   });
-}

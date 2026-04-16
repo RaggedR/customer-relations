@@ -12,13 +12,10 @@
  * nurse → patient → children → appointment → attachment
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSchema, foreignKeyName, isSensitive } from "@/lib/schema";
 import { findAll } from "@/lib/repository";
-import { withErrorHandler } from "@/lib/api-helpers";
-import { logAuditEvent } from "@/lib/audit";
-import { extractRequestContext } from "@/lib/request-context";
-import { getSessionUser } from "@/lib/session";
+import { adminRoute } from "@/lib/middleware";
 import type { Row } from "@/lib/parsers";
 
 /**
@@ -49,13 +46,9 @@ function getImportOrder(schema: ReturnType<typeof getSchema>): string[] {
   return ordered;
 }
 
-export async function GET(request: NextRequest) {
-  return withErrorHandler("GET /api/backup", async () => {
-    const session = await getSessionUser(request);
-    if (!session || session.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    const ctx = extractRequestContext(request, session);
+export const GET = adminRoute()
+  .named("GET /api/backup")
+  .handle(async (ctx) => {
     const schema = getSchema();
     const importOrder = getImportOrder(schema);
 
@@ -108,13 +101,11 @@ export async function GET(request: NextRequest) {
       entities,
     };
 
-    // Audit: log backup export (fire-and-forget)
-    logAuditEvent({
+    ctx.audit({
       action: "export",
       entity: "backup",
       entityId: "full",
       details: `entities=${Object.keys(entities).length}`,
-      context: ctx,
     });
 
     const dateStr = new Date().toISOString().split("T")[0];
@@ -125,4 +116,3 @@ export async function GET(request: NextRequest) {
       },
     });
   });
-}
