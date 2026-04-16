@@ -13,12 +13,12 @@
  * Consolidates the former schema-hierarchy.ts and representations.ts.
  */
 
-// Import getSchema from schema-types (client-safe, no fs dependency)
+// Import from schema-types (client-safe, no fs dependency).
 // NOT from schema-loader (which imports fs for file reading).
 // This is critical: client components import from this facade, so the
 // entire import chain must be free of Node.js-only modules.
 import {
-  getSchema,
+  getSchema as getSchemaFromCache,
   type SchemaConfig,
   type RepresentationsConfig,
   type VCardRepresentation,
@@ -30,9 +30,23 @@ import { reverseRelationKey, foreignKeyName } from "@/engine/naming";
 
 // ─── Re-exports: Schema access & types ─────────────────────────
 
-export { getSchema };
-// loadSchema is server-only (uses fs) — only import it where needed,
-// not re-exported from this client-safe facade.
+/**
+ * Get the loaded schema. On the server, falls through to loadSchema()
+ * if the cache is empty (e.g., during build or first request).
+ * On the client, expects the schema to be pre-loaded (always true
+ * because server startup populates the cache before any handler runs).
+ */
+export function getSchema(): SchemaConfig {
+  try {
+    return getSchemaFromCache();
+  } catch {
+    // Cache empty — we're on the server (build time or first request).
+    // Dynamic require avoids pulling fs into the client bundle.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { loadSchema } = require("@/engine/schema-loader");
+    return loadSchema();
+  }
+}
 export type {
   SchemaConfig,
   EntityConfig,
