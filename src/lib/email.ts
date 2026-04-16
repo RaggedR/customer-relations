@@ -13,7 +13,8 @@ interface ClaimEmailParams {
   patientName: string;
 }
 
-let resendClient: { emails: { send: (params: unknown) => Promise<unknown> } } | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Resend is an optional dep, dynamically imported
+let resendClient: any = null;
 
 async function getResend() {
   if (resendClient) return resendClient;
