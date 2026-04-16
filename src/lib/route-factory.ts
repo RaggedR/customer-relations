@@ -5,8 +5,11 @@
  * route files due to Next.js App Router routing precedence (static
  * directories shadow the dynamic [entity] catch-all).
  *
+ * Uses the composable middleware stack (adminRoute) for auth, tracing,
+ * and audit logging. POST/PUT/DELETE include automatic CRUD audit entries.
+ *
  * Entity validation is NOT done here — the repository throws "Unknown entity"
- * errors for invalid names, and withErrorHandler maps those to 404 responses.
+ * errors for invalid names, and the error boundary maps those to 404 responses.
  *
  * Usage:
  *   // src/app/api/patient/route.ts
@@ -14,17 +17,13 @@
  *   export const { GET, POST } = makeListCreateHandlers("patient");
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSchema, foreignKeyName, isSensitive } from "@/lib/schema";
 import { findAll, findById, create, update, remove, validateEntity } from "@/lib/repository";
-import { withErrorHandler } from "@/lib/api-helpers";
 import { getIdempotentResponse, cacheIdempotentResponse, MAX_IDEMPOTENCY_KEY_LENGTH } from "@/lib/idempotency";
+import { adminRoute, adminIdRoute } from "@/lib/middleware";
 
 // ── Helpers ──────────────────────────────────────────────
-
-interface IdRouteParams {
-  params: Promise<{ id: string }>;
-}
 
 /** Parse and validate the ID path parameter. Returns the numeric ID or a 400 response. */
 export async function parseIdParam(params: Promise<{ id: string }>): Promise<number | NextResponse> {
@@ -41,6 +40,7 @@ export async function parseIdParam(params: Promise<{ id: string }>): Promise<num
 /**
  * Create GET (list) and POST (create) handlers for a named entity.
  * Includes search, sort, and relation filtering.
+ * Mutations include automatic audit logging.
  */
 export function makeListCreateHandlers(entityName: string) {
   if (isSensitive(entityName)) {
@@ -49,29 +49,29 @@ export function makeListCreateHandlers(entityName: string) {
     return { GET: blocked, POST: blocked };
   }
 
-  async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
-    const search = searchParams.get("search") || undefined;
-    const sortBy = searchParams.get("sortBy") || undefined;
-    const sortOrder = (searchParams.get("sortOrder") as "asc" | "desc") || undefined;
-    const pageParam = searchParams.get("page");
-    const pageSizeParam = searchParams.get("pageSize");
+  const GET = adminRoute()
+    .named(`GET /api/${entityName}`)
+    .handle(async (ctx) => {
+      const { searchParams } = new URL(ctx.request.url);
+      const search = searchParams.get("search") || undefined;
+      const sortBy = searchParams.get("sortBy") || undefined;
+      const sortOrder = (searchParams.get("sortOrder") as "asc" | "desc") || undefined;
+      const pageParam = searchParams.get("page");
+      const pageSizeParam = searchParams.get("pageSize");
 
-    // Build filter from query params (e.g. ?patientId=5)
-    // Uses relation names as filterBy keys — the repository resolves to FK names.
-    const filterBy: Record<string, unknown> = {};
-    const schema = getSchema();
-    const entityConfig = schema.entities[entityName];
-    if (entityConfig?.relations) {
-      for (const relName of Object.keys(entityConfig.relations)) {
-        const fkParam = searchParams.get(foreignKeyName(relName));
-        if (fkParam) {
-          filterBy[relName] = parseInt(fkParam, 10);
+      // Build filter from query params (e.g. ?patientId=5)
+      const filterBy: Record<string, unknown> = {};
+      const schema = getSchema();
+      const entityConfig = schema.entities[entityName];
+      if (entityConfig?.relations) {
+        for (const relName of Object.keys(entityConfig.relations)) {
+          const fkParam = searchParams.get(foreignKeyName(relName));
+          if (fkParam) {
+            filterBy[relName] = parseInt(fkParam, 10);
+          }
         }
       }
-    }
 
-    return withErrorHandler(`GET /api/${entityName}`, async () => {
       const result = await findAll(entityName, {
         search,
         sortBy,
@@ -79,38 +79,44 @@ export function makeListCreateHandlers(entityName: string) {
         filterBy: Object.keys(filterBy).length > 0 ? filterBy : undefined,
         page: pageParam ? parseInt(pageParam, 10) : undefined,
         pageSize: pageSizeParam ? parseInt(pageSizeParam, 10) : undefined,
-        // Paginated list views use shallow mode (no relation includes) for performance.
-        // Detail views (findById) still load full relations when the user clicks through.
         shallow: !!pageParam,
       });
       return NextResponse.json(result);
     });
-  }
 
-  async function POST(request: NextRequest) {
-    // Idempotency: key is scoped to the entity to prevent cross-endpoint collisions.
-    // These endpoints are admin-only (proxy-enforced), so per-user scoping is not needed.
-    const rawKey = request.headers.get("idempotency-key");
-    if (rawKey && rawKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
-      return NextResponse.json(
-        { error: `Idempotency-Key must be at most ${MAX_IDEMPOTENCY_KEY_LENGTH} characters` },
-        { status: 400 },
-      );
-    }
-    const idempotencyKey = rawKey ? `${entityName}:${rawKey}` : null;
-    if (idempotencyKey) {
-      const cached = getIdempotentResponse(idempotencyKey);
-      if (cached) return cached;
-    }
+  const POST = adminRoute()
+    .named(`POST /api/${entityName}`)
+    .handle(async (ctx) => {
+      // Idempotency: key is scoped to the entity to prevent cross-endpoint collisions.
+      const rawKey = ctx.request.headers.get("idempotency-key");
+      if (rawKey && rawKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+        return NextResponse.json(
+          { error: `Idempotency-Key must be at most ${MAX_IDEMPOTENCY_KEY_LENGTH} characters` },
+          { status: 400 },
+        );
+      }
+      const idempotencyKey = rawKey ? `${entityName}:${rawKey}` : null;
+      if (idempotencyKey) {
+        const cached = getIdempotentResponse(idempotencyKey);
+        if (cached) return cached;
+      }
 
-    return withErrorHandler(`POST /api/${entityName}`, async () => {
-      const body = await request.json();
+      const body = await ctx.request.json();
       const errors = validateEntity(entityName, body);
       if (errors.length > 0) {
         return NextResponse.json({ errors }, { status: 400 });
       }
 
       const item = await create(entityName, body);
+      const record = item as Record<string, unknown>;
+
+      // Audit: CRUD create — closes the compliance gap for factory-served routes
+      ctx.audit({
+        action: "create",
+        entity: entityName,
+        entityId: String(record.id ?? "unknown"),
+      });
+
       const response = NextResponse.json(item, { status: 201 });
 
       if (idempotencyKey) {
@@ -119,7 +125,6 @@ export function makeListCreateHandlers(entityName: string) {
 
       return response;
     });
-  }
 
   return { GET, POST };
 }
@@ -128,6 +133,7 @@ export function makeListCreateHandlers(entityName: string) {
 
 /**
  * Create GET, PUT, and DELETE handlers for a named entity by ID.
+ * PUT and DELETE include automatic audit logging.
  */
 export function makeGetUpdateDeleteHandlers(entityName: string) {
   if (isSensitive(entityName)) {
@@ -138,64 +144,68 @@ export function makeGetUpdateDeleteHandlers(entityName: string) {
 
   const isImmutable = getSchema().entities[entityName]?.immutable === true;
 
-  async function GET(request: NextRequest, { params }: IdRouteParams) {
-    const result = await parseIdParam(params);
-    if (result instanceof NextResponse) return result;
-    const numId = result;
-
-    return withErrorHandler(`GET /api/${entityName}/${numId}`, async () => {
-      const item = await findById(entityName, numId);
+  const GET = adminIdRoute()
+    .named(`GET /api/${entityName}/[id]`)
+    .handle(async (ctx) => {
+      const item = await findById(entityName, ctx.entityId);
       if (!item) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
       return NextResponse.json(item);
     });
-  }
 
-  async function PUT(request: NextRequest, { params }: IdRouteParams) {
-    if (isImmutable) {
-      return NextResponse.json(
-        { error: `${entityName} records are immutable and cannot be modified` },
-        { status: 405 },
-      );
-    }
+  const PUT = adminIdRoute()
+    .named(`PUT /api/${entityName}/[id]`)
+    .handle(async (ctx) => {
+      if (isImmutable) {
+        return NextResponse.json(
+          { error: `${entityName} records are immutable and cannot be modified` },
+          { status: 405 },
+        );
+      }
 
-    const result = await parseIdParam(params);
-    if (result instanceof NextResponse) return result;
-    const numId = result;
-
-    return withErrorHandler(`PUT /api/${entityName}/${numId}`, async () => {
-      const body = await request.json();
+      const body = await ctx.request.json();
       const errors = validateEntity(entityName, body);
       if (errors.length > 0) {
         return NextResponse.json({ errors }, { status: 400 });
       }
 
       const expectedUpdatedAt = body.updatedAt ?? body.updated_at;
-      const item = await update(entityName, numId, body, {
+      const item = await update(entityName, ctx.entityId, body, {
         expectedUpdatedAt: expectedUpdatedAt ? String(expectedUpdatedAt) : undefined,
       });
+
+      // Audit: CRUD update
+      ctx.audit({
+        action: "update",
+        entity: entityName,
+        entityId: String(ctx.entityId),
+      });
+
       return NextResponse.json(item);
     });
-  }
 
-  async function DELETE(request: NextRequest, { params }: IdRouteParams) {
-    if (isImmutable) {
-      return NextResponse.json(
-        { error: `${entityName} records are immutable and cannot be deleted` },
-        { status: 405 },
-      );
-    }
+  const DELETE = adminIdRoute()
+    .named(`DELETE /api/${entityName}/[id]`)
+    .handle(async (ctx) => {
+      if (isImmutable) {
+        return NextResponse.json(
+          { error: `${entityName} records are immutable and cannot be deleted` },
+          { status: 405 },
+        );
+      }
 
-    const result = await parseIdParam(params);
-    if (result instanceof NextResponse) return result;
-    const numId = result;
+      await remove(entityName, ctx.entityId);
 
-    return withErrorHandler(`DELETE /api/${entityName}/${numId}`, async () => {
-      await remove(entityName, numId);
+      // Audit: CRUD delete
+      ctx.audit({
+        action: "delete",
+        entity: entityName,
+        entityId: String(ctx.entityId),
+      });
+
       return NextResponse.json({ success: true });
     });
-  }
 
   return { GET, PUT, DELETE };
 }

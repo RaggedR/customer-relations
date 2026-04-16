@@ -11,17 +11,10 @@
  * PDF: clinical-letter-style summary for GP correspondence
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
-import { withErrorHandler } from "@/lib/api-helpers";
-import { logAuditEvent } from "@/lib/audit";
-import { extractRequestContext } from "@/lib/request-context";
-import { getSessionUser } from "@/lib/session";
-
-interface RouteParams {
-  params: Promise<{ id: string }>;
-}
+import { adminIdRoute } from "@/lib/middleware";
 
 async function loadPatient(id: number) {
   return prisma.patient.findUnique({
@@ -187,40 +180,29 @@ function fieldRow(doc: PDFKit.PDFDocument, label: string, value: string) {
   doc.fillColor("#1a1a1a").text(value);
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  const { id } = await params;
-  const numId = parseInt(id, 10);
+export const GET = adminIdRoute()
+  .named("GET /api/patient/[id]/export")
+  .handle(async (ctx) => {
+    const format =
+      ctx.request.nextUrl.searchParams.get("format")?.toLowerCase() || "json";
 
-  if (isNaN(numId)) {
-    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-  }
+    if (!["json", "pdf"].includes(format)) {
+      return NextResponse.json(
+        { error: "format must be json or pdf" },
+        { status: 400 },
+      );
+    }
 
-  const format =
-    request.nextUrl.searchParams.get("format")?.toLowerCase() || "json";
-
-  if (!["json", "pdf"].includes(format)) {
-    return NextResponse.json(
-      { error: "format must be json or pdf" },
-      { status: 400 }
-    );
-  }
-
-  return withErrorHandler(`GET /api/patient/${numId}/export`, async () => {
-    const patient = await loadPatient(numId);
-
+    const patient = await loadPatient(ctx.entityId);
     if (!patient) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
-    // Audit: log patient data export (fire-and-forget)
-    const session = await getSessionUser(request);
-    const ctx = extractRequestContext(request, session);
-    logAuditEvent({
+    ctx.audit({
       action: "export",
       entity: "patient",
-      entityId: String(numId),
+      entityId: String(ctx.entityId),
       details: `format=${format}`,
-      context: ctx,
     });
 
     const safeName = patient.name.replace(/\s+/g, "-").toLowerCase();
@@ -274,4 +256,3 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   });
-}

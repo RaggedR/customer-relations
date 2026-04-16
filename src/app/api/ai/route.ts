@@ -9,19 +9,16 @@
  * along with a natural language summary and optional chart config.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prismaReadonly } from "@/lib/prisma-readonly";
 import { validateAiSql } from "@/lib/sql-safety";
 import { generateSchemaDescription } from "@/lib/generate-schema-description";
-import { withErrorHandler } from "@/lib/api-helpers";
 import { resolveNames } from "@/lib/name-resolution";
-import { logAuditEvent } from "@/lib/audit";
-import { extractRequestContext } from "@/lib/request-context";
 import { logger } from "@/lib/logger";
-import { getSessionUser } from "@/lib/session";
-import { createRateLimiter, getRateLimitKey } from "@/lib/rate-limit";
+import { createRateLimiter } from "@/lib/rate-limit";
 import { withRetry } from "@/lib/retry";
+import { adminRoute, withRateLimit } from "@/lib/middleware";
 import {
   redactForAi,
   pseudonymiseRows,
@@ -131,10 +128,12 @@ function getGenAI() {
 /**
  * LLM call 1: send the system prompt + user question to Gemini, parse the
  * JSON response, strip code fences, and validate the generated SQL is safe.
- * Returns { sql, explanation } or throws on parse/safety failure.
+ *
+ * Safety: scans for DML/DDL, system catalog access, multi-statement attacks,
+ * and SQL comments via validateAiSql(). Throws "unsafe_sql" on violation.
  *
  * "Refused" responses (when Gemini declines to answer) are signalled by
- * returning { refused: true, message: string } — callers must handle this
+ * returning { refused: true, message } — callers must handle this
  * before using the sql field.
  */
 async function generateSql(
@@ -151,7 +150,7 @@ async function generateSql(
 
   const sqlText = sqlResponse.response.text().trim();
   const cleaned = stripCodeFences(sqlText);
-  const parsed = JSON.parse(cleaned); // throws on invalid JSON
+  const parsed = JSON.parse(cleaned);
 
   if (parsed.refused) {
     return { refused: true, message: parsed.message || "Sorry, I can't help you with that." };
@@ -159,8 +158,6 @@ async function generateSql(
 
   const sql: string = parsed.sql;
 
-  // Safety check: scan the entire query for DML/DDL, system catalog access,
-  // multi-statement attacks, and SQL comments. See src/lib/sql-safety.ts.
   const safety = validateAiSql(sql);
   if (!safety.safe) {
     logger.warn({ sql, reason: safety.reason }, "AI generated unsafe query");
@@ -171,9 +168,8 @@ async function generateSql(
 }
 
 /**
- * Execute the AI-generated SQL inside a transaction with a short statement
- * timeout. Serialises BigInt result values to numbers.
- * Returns the result rows or throws on database error.
+ * Execute the AI-generated SQL inside a read-only transaction with a 5s
+ * statement timeout. Serialises BigInt result values to numbers.
  */
 async function executeQuery(sql: string): Promise<Record<string, unknown>[]> {
   const rows = await prismaReadonly.$transaction(async (tx) => {
@@ -181,7 +177,6 @@ async function executeQuery(sql: string): Promise<Record<string, unknown>[]> {
     return await tx.$queryRawUnsafe(sql) as Record<string, unknown>[];
   });
 
-  // Serialize BigInt values to numbers
   return rows.map((row) => {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(row)) {
@@ -193,8 +188,9 @@ async function executeQuery(sql: string): Promise<Record<string, unknown>[]> {
 
 /**
  * LLM call 2: send the SQL + result rows to Gemini and ask for a natural
- * language answer and optional chart config. De-pseudonymises both the answer
- * text and any chart labels before returning.
+ * language answer and optional chart config. Redacts sensitive columns and
+ * pseudonymises patient names before sending to Gemini, then de-pseudonymises
+ * both the answer text and any chart labels before returning.
  */
 async function generateAnswer(
   model: ReturnType<ReturnType<typeof getGenAI>["getGenerativeModel"]>,
@@ -205,12 +201,9 @@ async function generateAnswer(
   inversePseudonymMap: Map<string, string>,
   resolvedName?: string,
 ): Promise<{ answer: string; chart: unknown }> {
-  // Redact sensitive columns and pseudonymise names before sending to Gemini
   const redactedRows = redactForAi(rows);
   const aiRows = pseudonymiseRows(redactedRows, pseudonymMap);
 
-  // Pseudonymise the question for LLM call 2 — replace the real name Clare typed
-  // with the pseudonym so Gemini never sees the real name in the question text either.
   let aiQuestion = question;
   if (resolvedName) {
     const pseudonym = pseudonymMap.get(resolvedName) ?? resolvedName;
@@ -239,13 +232,11 @@ async function generateAnswer(
     answerResult = { answer: resultsText, chart: null };
   }
 
-  // Re-map pseudonyms back to real names in the answer for Clare's display
   const answer = depseudonymiseAnswer(
     answerResult.answer ?? resultsText,
     inversePseudonymMap,
   );
 
-  // Depseudonymise chart labels so Clare sees real names, not "Patient #42"
   let chart = answerResult.chart;
   if (chart?.data && Array.isArray(chart.data)) {
     chart = {
@@ -265,31 +256,11 @@ async function generateAnswer(
   return { answer, chart };
 }
 
-export async function POST(request: NextRequest) {
-  // Rate limit before any expensive work
-  const rlKey = getRateLimitKey(request);
-  const rl = aiLimiter(rlKey);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests. Try again later." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil((rl.resetMs - Date.now()) / 1000)),
-        },
-      },
-    );
-  }
-
-  return withErrorHandler("POST /api/ai", async () => {
-    // Defence-in-depth: verify session AND admin role even though proxy enforces both
-    const session = await getSessionUser(request);
-    if (!session || session.role !== "admin") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const ctx = extractRequestContext(request, session);
-    const { question, model: modelName } = await request.json();
+export const POST = adminRoute()
+  .use(withRateLimit(aiLimiter))
+  .named("POST /api/ai")
+  .handle(async (ctx) => {
+    const { question, model: modelName } = await ctx.request.json();
 
     if (!question || typeof question !== "string") {
       return NextResponse.json({ error: "Question is required" }, { status: 400 });
@@ -358,28 +329,27 @@ export async function POST(request: NextRequest) {
     try {
       serializedRows = await executeQuery(sql);
     } catch (dbError) {
-      logger.error({ err: dbError, sql, correlationId: ctx.correlationId }, "AI SQL execution failed");
+      // correlationId auto-injected by logger mixin (AsyncLocalStorage)
+      logger.error({ err: dbError, sql }, "AI SQL execution failed");
       return NextResponse.json({
         error: "Query execution failed. Please try rephrasing your question.",
       }, { status: 500 });
     }
 
-    // Audit: log AI query execution (fire-and-forget)
-    logAuditEvent({
+    // Audit: log AI query execution
+    ctx.audit({
       action: "ai_query",
       entity: "sql",
       entityId: String(serializedRows.length),
       details: sql,
-      context: ctx,
     });
 
-    // Audit: log cross-border data disclosure to Google Gemini (fire-and-forget)
-    logAuditEvent({
+    // Audit: log cross-border data disclosure to Google Gemini
+    ctx.audit({
       action: "ai_external_disclosure",
       entity: "gemini",
       entityId: String(serializedRows.length),
       details: `provider=google/gemini model=${resolvedModelName} rows=${serializedRows.length}`,
-      context: ctx,
     });
 
     // Step 3: Generate natural language answer + chart
@@ -405,4 +375,3 @@ export async function POST(request: NextRequest) {
       truncated: serializedRows.length > 100,
     });
   });
-}

@@ -11,9 +11,15 @@
  */
 
 import pino from "pino";
+import { getCorrelationId } from "@/lib/middleware/async-context";
 
 export const logger = pino({
   level: process.env.LOG_LEVEL || "info",
+  // Auto-include correlationId from AsyncLocalStorage in every log line.
+  // Falls back to a fresh UUID if called outside a request context.
+  mixin() {
+    return { correlationId: getCorrelationId() };
+  },
   // Pino defaults to JSON on stdout — no transport needed.
   // For human-readable dev logs, pipe through pino-pretty:
   //   npm run dev | npx pino-pretty

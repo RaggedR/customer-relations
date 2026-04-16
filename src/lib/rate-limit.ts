@@ -9,6 +9,7 @@
 import { createHash } from "crypto";
 import type { NextRequest } from "next/server";
 import { COOKIE_NAME } from "@/lib/session";
+import { getClientIp } from "@/lib/api-helpers";
 
 interface Window {
   start: number;
@@ -72,11 +73,6 @@ export function getRateLimitKey(request: NextRequest): string {
   // Use 128-bit (32 hex chars) to prevent pre-image collision attacks on attacker-controlled input.
   if (session) return `session:${createHash("sha256").update(session).digest("hex").slice(0, 32)}`;
 
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return `ip:${forwarded.split(",")[0].trim()}`;
-
-  const realIp = request.headers.get("x-real-ip");
-  if (realIp) return `ip:${realIp}`;
-
-  return "ip:unknown";
+  const ip = getClientIp(request);
+  return ip ? `ip:${ip}` : "ip:unknown";
 }

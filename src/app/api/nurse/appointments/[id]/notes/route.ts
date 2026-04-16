@@ -9,56 +9,33 @@
  * watermarked PNG images, not selectable text.
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/session";
-import { withErrorHandler } from "@/lib/api-helpers";
-import { parseIdParam } from "@/lib/route-factory";
-import { logAuditEvent } from "@/lib/audit";
-import { extractRequestContext } from "@/lib/request-context";
+import { NextResponse } from "next/server";
+import { nurseIdRoute } from "@/lib/middleware";
 import { getIdempotentResponse, cacheIdempotentResponse } from "@/lib/idempotency";
 import { renderWatermarkedImage } from "@/lib/image-renderer";
-import { resolveNurse, requireAupAcknowledgement, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
+import { verifyAppointmentOwnership } from "@/lib/nurse-helpers";
 import { findAll, create } from "@/lib/repository";
 import { getSchema } from "@/lib/schema";
 
-interface RouteParams {
-  params: Promise<{ id: string }>;
-}
-
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  return withErrorHandler("GET /api/nurse/appointments/[id]/notes", async () => {
-    const session = await getSessionUser(request);
-    if (!session || session.role !== "nurse") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const ctx = extractRequestContext(request, session);
-    const idResult = await parseIdParam(params);
-    if (idResult instanceof NextResponse) return idResult;
-    const appointmentId = idResult;
-
-    // Verify nurse identity, AUP, and appointment ownership
-    const nurse = await resolveNurse(session.userId);
-    if (!nurse) {
-      return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
-    }
-
-    const aupError = requireAupAcknowledgement(nurse);
-    if (aupError) return aupError;
-
-    const appointment = await verifyAppointmentOwnership(appointmentId, nurse.id);
+export const GET = nurseIdRoute()
+  .named("GET /api/nurse/appointments/[id]/notes")
+  .handle(async (ctx) => {
+    const appointment = await verifyAppointmentOwnership(ctx.entityId, ctx.nurse.id);
     if (!appointment?.patientId) {
-      return NextResponse.json({ error: "Appointment not found or not assigned to you" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Appointment not found or not assigned to you" },
+        { status: 404 },
+      );
     }
 
     const patientId = appointment.patientId;
     const patientRef = `Patient #${patientId}`;
-    const nurseName = nurse.name ?? "Unknown Nurse";
+    const nurseName = ctx.nurse.name ?? "Unknown Nurse";
     const now = new Date();
 
     // Pagination params — default page 1, pageSize 20
-    const page = Math.max(1, parseInt(request.nextUrl.searchParams.get("page") ?? "1", 10) || 1);
-    const pageSize = Math.max(1, Math.min(200, parseInt(request.nextUrl.searchParams.get("pageSize") ?? "20", 10) || 20));
+    const page = Math.max(1, parseInt(ctx.request.nextUrl.searchParams.get("page") ?? "1", 10) || 1);
+    const pageSize = Math.max(1, Math.min(200, parseInt(ctx.request.nextUrl.searchParams.get("pageSize") ?? "20", 10) || 20));
 
     // Load clinical and personal notes for this patient (paginated)
     const [clinicalResult, personalResult] = await Promise.all([
@@ -107,13 +84,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       })),
     ].sort((a, b) => new Date(b.date as string).getTime() - new Date(a.date as string).getTime());
 
-    // 3D: Audit log — nurse viewed patient notes
-    logAuditEvent({
+    ctx.audit({
       action: "view",
       entity: "clinical_note",
       entityId: String(patientId),
       details: `nurse viewed ${notes.length} notes for ${patientRef}`,
-      context: ctx,
     });
 
     return NextResponse.json({
@@ -128,47 +103,28 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   });
-}
 
-export async function POST(request: NextRequest, { params }: RouteParams) {
-  return withErrorHandler("POST /api/nurse/appointments/[id]/notes", async () => {
-    // Auth FIRST — idempotency check comes after to prevent cross-user key collisions
-    const session = await getSessionUser(request);
-    if (!session || session.role !== "nurse") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const ctx = extractRequestContext(request, session);
-
+export const POST = nurseIdRoute()
+  .named("POST /api/nurse/appointments/[id]/notes")
+  .handle(async (ctx) => {
     // Idempotency: key scoped to user — prevents Nurse B from retrieving Nurse A's cached response.
     // Clinical notes are immutable, so duplicate creation is a medico-legal hazard.
-    const rawKey = request.headers.get("idempotency-key");
-    const idempotencyKey = rawKey ? `nurse:${session.userId}:${rawKey}` : null;
+    const rawKey = ctx.request.headers.get("idempotency-key");
+    const idempotencyKey = rawKey ? `nurse:${ctx.userId}:${rawKey}` : null;
     if (idempotencyKey) {
       const cached = getIdempotentResponse(idempotencyKey);
       if (cached) return cached;
     }
 
-    const idResult = await parseIdParam(params);
-    if (idResult instanceof NextResponse) return idResult;
-    const appointmentId = idResult;
-
-    // Auth-before-body: resolve nurse identity, AUP, and appointment ownership
-    // before parsing the body, so unauthenticated callers cannot probe content validators.
-    const nurse = await resolveNurse(session.userId);
-    if (!nurse) {
-      return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
-    }
-
-    const aupError = requireAupAcknowledgement(nurse);
-    if (aupError) return aupError;
-
-    const appointment = await verifyAppointmentOwnership(appointmentId, nurse.id);
+    const appointment = await verifyAppointmentOwnership(ctx.entityId, ctx.nurse.id);
     if (!appointment?.patientId) {
-      return NextResponse.json({ error: "Appointment not found or not assigned to you" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Appointment not found or not assigned to you" },
+        { status: 404 },
+      );
     }
 
-    const body = await request.json();
+    const body = await ctx.request.json();
     const { content, noteType } = body;
 
     if (!content || typeof content !== "string") {
@@ -176,7 +132,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (content.length > 50_000) {
-      return NextResponse.json({ error: "Note content too long (max 50,000 characters)" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Note content too long (max 50,000 characters)" },
+        { status: 400 },
+      );
     }
 
     // Read valid note types from schema instead of hardcoding
@@ -191,7 +150,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const patientId = appointment.patientId;
-    const nurseName = nurse.name ?? "Unknown Nurse";
+    const nurseName = ctx.nurse.name ?? "Unknown Nurse";
     const now = new Date();
 
     let created: Record<string, unknown>;
@@ -211,14 +170,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }) as Record<string, unknown>;
     }
 
-    // 3D: Audit log — nurse created note
     const entity = noteType === "personal" ? "personal_note" : "clinical_note";
-    logAuditEvent({
+    ctx.audit({
       action: "create",
       entity,
       entityId: String(patientId),
       details: `nurse created ${entity} for Patient #${patientId}`,
-      context: ctx,
     });
 
     // Return pseudonymised — no patient name
@@ -235,4 +192,3 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return response;
   });
-}

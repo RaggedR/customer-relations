@@ -9,28 +9,30 @@
  * PUT and DELETE delegate to the route factory unchanged.
  */
 
-import { NextRequest } from "next/server";
-import { extractRequestContext } from "@/lib/request-context";
+import { NextResponse } from "next/server";
+import { adminIdRoute } from "@/lib/middleware";
 import { makeGetUpdateDeleteHandlers } from "@/lib/route-factory";
-import { logAuditEvent } from "@/lib/audit";
-import { getSessionUser } from "@/lib/session";
+import { findById } from "@/lib/repository";
 
 const handlers = makeGetUpdateDeleteHandlers("patient");
 
-export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params;
+// Custom GET with patient-specific view audit (the factory GET doesn't
+// audit reads — too noisy for generic entities, but required for patient data).
+export const GET = adminIdRoute()
+  .named("GET /api/patient/[id]")
+  .handle(async (ctx) => {
+    const item = await findById("patient", ctx.entityId);
+    if (!item) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
 
-  // Audit: log access to patient record (fire-and-forget)
-  const session = await getSessionUser(request);
-  const ctx = extractRequestContext(request, session);
-  logAuditEvent({
-    action: "view",
-    entity: "patient",
-    entityId: id,
-    context: ctx,
+    ctx.audit({
+      action: "view",
+      entity: "patient",
+      entityId: String(ctx.entityId),
+    });
+
+    return NextResponse.json(item);
   });
-
-  return handlers.GET(request, context);
-}
 
 export const { PUT, DELETE } = handlers;

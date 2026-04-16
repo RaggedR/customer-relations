@@ -7,70 +7,44 @@
  * Only the assigned nurse can cancel their own appointments.
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/session";
-import { withErrorHandler } from "@/lib/api-helpers";
-import { parseIdParam } from "@/lib/route-factory";
-import { logAuditEvent } from "@/lib/audit";
-import { extractRequestContext } from "@/lib/request-context";
-import { resolveNurse, requireAupAcknowledgement, verifyAppointmentOwnership } from "@/lib/nurse-helpers";
+import { NextResponse } from "next/server";
+import { nurseIdRoute } from "@/lib/middleware";
+import { verifyAppointmentOwnership } from "@/lib/nurse-helpers";
 import { prisma } from "@/lib/prisma";
 
 const MAX_REASON_LENGTH = 2000;
 
-interface RouteParams {
-  params: Promise<{ id: string }>;
-}
-
-export async function POST(request: NextRequest, { params }: RouteParams) {
-  return withErrorHandler("POST /api/nurse/appointments/[id]/cancel", async () => {
-    const session = await getSessionUser(request);
-    if (!session || session.role !== "nurse") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const ctx = extractRequestContext(request, session);
-    const idResult = await parseIdParam(params);
-    if (idResult instanceof NextResponse) return idResult;
-    const appointmentId = idResult;
-
-    // Verify nurse identity, AUP, and appointment ownership
-    const nurse = await resolveNurse(session.userId);
-    if (!nurse) {
-      return NextResponse.json({ error: "No nurse profile linked to this account" }, { status: 403 });
-    }
-
-    const aupError = requireAupAcknowledgement(nurse);
-    if (aupError) return aupError;
-
-    const appointment = await verifyAppointmentOwnership(appointmentId, nurse.id);
+export const POST = nurseIdRoute()
+  .named("POST /api/nurse/appointments/[id]/cancel")
+  .handle(async (ctx) => {
+    const appointment = await verifyAppointmentOwnership(ctx.entityId, ctx.nurse.id);
     if (!appointment) {
-      return NextResponse.json({ error: "Appointment not found or not assigned to you" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Appointment not found or not assigned to you" },
+        { status: 404 },
+      );
     }
 
-    const body = await request.json();
+    const body = await ctx.request.json();
     const reason = typeof body.reason === "string"
       ? body.reason.slice(0, MAX_REASON_LENGTH)
       : "";
 
     // Direct Prisma: atomic ownership check prevents TOCTOU — repository.update() cannot express WHERE { id, nurseId }
     await prisma.appointment.update({
-      where: { id: appointmentId },
+      where: { id: ctx.entityId },
       data: {
         status: "cancelled",
         notes: reason || null,
       },
     });
 
-    // Audit log — nurse cancelled appointment
-    logAuditEvent({
+    ctx.audit({
       action: "cancel",
       entity: "appointment",
-      entityId: String(appointmentId),
-      details: `nurse ${nurse.name} cancelled appointment #${appointmentId}${reason ? ` reason: ${reason.slice(0, 200)}` : ""}`,
-      context: ctx,
+      entityId: String(ctx.entityId),
+      details: `nurse ${ctx.nurse.name} cancelled appointment #${ctx.entityId}${reason ? ` reason: ${reason.slice(0, 200)}` : ""}`,
     });
 
     return NextResponse.json({ success: true });
   });
-}
