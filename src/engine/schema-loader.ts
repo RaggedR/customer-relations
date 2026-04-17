@@ -55,6 +55,10 @@ export function getSchema(): SchemaConfig {
 /**
  * Extract all {field} and {relation.field} tokens from a template string.
  * Used to cross-check templates against declared fields and relations at load time.
+ *
+ * NOTE: This is a duplicate of the same function in lib/template.ts.
+ * The engine cannot import from lib/ (dependency flows lib → engine, not reverse).
+ * If you change the regex here, update lib/template.ts to match.
  */
 function extractTemplateTokens(
   template: string,

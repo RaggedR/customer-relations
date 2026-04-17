@@ -25,6 +25,11 @@ export async function GET(request: Request) {
   // Schema-driven: discover address books from entities with carddav: true.
   // Previously hardcoded to ["patients", "nurses"]. Now adding carddav: true
   // to a new entity in schema.yaml automatically exposes it here.
+  //
+  // URL convention: /api/carddav/{entity}s/ — naive pluralization (appends 's').
+  // Must match addressBookToEntity() in carddav-auth.ts which does the reverse lookup.
+  // Works for regular plurals (patient→patients, nurse→nurses). Irregular plurals
+  // (company→companys) would need a carddav_path field in schema.yaml.
   const schema = getSchema();
   const addressBooks = Object.entries(schema.entities)
     .filter(([, entity]) => entity.carddav === true)

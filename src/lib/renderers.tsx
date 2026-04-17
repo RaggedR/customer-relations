@@ -21,6 +21,7 @@
 import React from "react";
 import { Linkify } from "@/components/linkify";
 import type { FieldConfig, EntityConfig } from "@/lib/schema-client";
+import { interpolateTemplate } from "@/lib/template";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -193,9 +194,6 @@ export function formatDatetimeForInput(val: unknown): string {
 
 // ─── Interpreter Pattern: Entity Summary Rendering ────────────
 
-// Template interpolation is now unified in template.ts.
-// Re-import here for local use — supports both {field} and {relation.field}.
-import { interpolateTemplate } from "@/lib/template";
 
 /**
  * Resolve a display spec to a React node.

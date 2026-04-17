@@ -49,7 +49,7 @@ Key files:
 - `migrate.ts` — safe auto-migration with destructive operation blocking
 - `startup.ts` — orchestration entry point
 
-**No code outside `src/engine/` imports from `@/engine/` directly.** The Schema Facade (`src/lib/schema.ts`) is the sole bridge — see below.
+**No code outside `src/engine/` imports from `@/engine/` directly** except the Schema Facade modules (`src/lib/schema.ts` and `src/lib/schema-client.ts`) — they are the sole bridge. See below.
 
 ### Schema Facade (`src/lib/schema.ts`) — GoF Facade pattern
 
@@ -433,7 +433,7 @@ Upsert keys (which fields uniquely identify a record for update-vs-create decisi
 
 ### Why no code outside `src/engine/` imports from `@/engine/` directly
 
-The engine (`src/engine/`) is an internal subsystem — it loads YAML, generates Prisma schemas, and runs migrations. All non-engine code imports from the Schema Facade (`src/lib/schema.ts`) instead. This enforces the architectural layering: `components → lib → engine`, with `schema.ts` as the sole bridge. See "Why `schema.ts` is the Schema Facade" above.
+The engine (`src/engine/`) is an internal subsystem — it loads YAML, generates Prisma schemas, and runs migrations. All non-engine code imports from the Schema Facade (`src/lib/schema.ts` or `src/lib/schema-client.ts`) instead. This enforces the architectural layering: `components → lib → engine`, with the two Facade modules as the sole bridge. See "Why the Schema Facade is split into two modules" above.
 
 ### Why `engine/naming.ts` exists
 

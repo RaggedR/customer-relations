@@ -52,10 +52,11 @@ export function interpolateTemplate(
 /**
  * Extract all token references from a template string.
  *
- * Used by the schema validator to cross-check templates against
- * declared fields and relations at load time.
- *
  * @returns Array of { field, relation? } — relation is present for dot-notation tokens.
+ *
+ * NOTE: A duplicate of this function exists in engine/schema-loader.ts for
+ * build-time validation (the engine cannot import from lib/).
+ * If you change the regex here, update schema-loader.ts to match.
  */
 export function extractTemplateTokens(
   template: string,

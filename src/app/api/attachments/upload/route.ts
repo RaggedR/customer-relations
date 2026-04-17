@@ -78,6 +78,12 @@ export const POST = adminRoute()
     // Previously hardcoded as VALID_CATEGORIES, which could drift from schema.yaml.
     const categoryField = schema.entities.attachment.fields.category;
     const validCategories = categoryField?.values ?? [];
+    if (validCategories.length === 0) {
+      return NextResponse.json(
+        { error: "Attachment category field is misconfigured in schema (no enum values)" },
+        { status: 500 },
+      );
+    }
     if (!validCategories.includes(category)) {
       return NextResponse.json(
         { error: `category must be one of: ${validCategories.join(", ")}` },
