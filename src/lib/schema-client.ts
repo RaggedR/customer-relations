@@ -49,7 +49,7 @@ export { toPascalCase, toSnakeCase } from "@/engine/naming";
 // ─── Schema Hierarchy (coKleisli: extend) ───────────────
 
 import type { SchemaConfig } from "@/engine/schema-types";
-import { foreignKeyName } from "@/engine/naming";
+import { foreignKeyName, reverseRelationKey } from "@/engine/naming";
 
 export interface SchemaHierarchy {
   /** Entity names with no belongs_to (e.g. ["patient", "nurse"]) */
@@ -149,8 +149,6 @@ export function reverseMapping(
 }
 
 // ─── Reverse Relation Key Resolution ────────────────────
-
-import { reverseRelationKey } from "@/engine/naming";
 
 /**
  * coKleisli arrow: (record, propertyEntity) → key name | null
