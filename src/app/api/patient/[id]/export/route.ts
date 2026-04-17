@@ -9,6 +9,15 @@
  *
  * JSON: full structured data
  * PDF: clinical-letter-style summary for GP correspondence
+ *
+ * DSL-ESCAPE: Entire file is patient-specific. The Prisma include tree,
+ *   PDF section ordering, field selection, and formatting are all hardcoded.
+ *   Reason: a patient clinical summary is a domain-specific document with
+ *   fixed layout requirements (GP correspondence format). Making this
+ *   schema-driven would require a report DSL (section ordering, field
+ *   selection per section, page layout) — essentially a second DSL.
+ *   Cost to promote: very high. Leave as entity-specific code.
+ *   Trigger to promote: a second entity needs PDF export with similar structure.
  */
 
 import { NextResponse } from "next/server";

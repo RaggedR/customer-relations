@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import type { EntityConfig } from "@/lib/schema";
-import { toSnakeCase } from "@/lib/schema";
+import { toSnakeCase, type EntityConfig } from "@/lib/schema-client";
 import { renderFieldValue, renderEntitySummary } from "@/lib/renderers";
 
 interface PropertyPanelProps {

@@ -9,6 +9,13 @@
  * Extracted from the AI route to separate name-matching concerns
  * from LLM orchestration. Uses the repository (not direct Prisma)
  * to respect the architectural boundary.
+ *
+ * DSL-ESCAPE: Only resolves "patient" and "nurse" entities (hardcoded in
+ *   resolvedType type and in the resolveNames function body).
+ *   Reason: these are the only person-type entities in the system today.
+ *   Cost to promote: low — add a schema flag (e.g. name_resolvable: true),
+ *   filter entities by it, and generalise the resolvedType union.
+ *   Trigger to promote: a third person-type entity is added (e.g. gp, audiometrist).
  */
 
 import { findAll } from "./repository";

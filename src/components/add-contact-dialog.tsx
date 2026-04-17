@@ -12,8 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { EntityConfig, FieldConfig } from "@/lib/schema";
-import { fieldTypes } from "@/lib/schema";
+import { fieldTypes, type EntityConfig, type FieldConfig } from "@/lib/schema-client";
 
 const QUICK_ADD_FIELDS = ["name", "email", "phone"];
 const QUICK_ADD_RELATIONS = ["company"];

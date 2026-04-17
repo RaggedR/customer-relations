@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import type { EntityConfig } from "@/lib/schema";
-import { foreignKeyName, toSnakeCase } from "@/lib/schema";
+import { foreignKeyName, toSnakeCase, type EntityConfig } from "@/lib/schema-client";
 import { renderFieldValue, renderEntitySummary, recordDisplayName } from "@/lib/renderers";
 
 interface EntitySearchPanelProps {

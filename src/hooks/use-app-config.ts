@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useMemo } from "react";
-import { deriveHierarchy, type SchemaConfig, type SchemaHierarchy } from "@/lib/schema";
+import { deriveHierarchy, type SchemaConfig, type SchemaHierarchy } from "@/lib/schema-client";
 import type { NavigationConfig } from "@/lib/navigation";
 
 export interface AppConfig {

@@ -11,6 +11,8 @@
 
 import { NextResponse } from "next/server";
 import { checkAuth } from "@/lib/carddav-auth";
+import { getSchema } from "@/lib/schema";
+import { entityLabel } from "@/lib/schema-client";
 
 export async function GET(request: Request) {
   if (!checkAuth(request)) {
@@ -20,19 +22,22 @@ export async function GET(request: Request) {
     });
   }
 
-  // Return a simple JSON listing of address books
-  const addressBooks = [
-    {
-      name: "Patients",
-      url: "/api/carddav/patients/",
-      description: "Patient contacts",
-    },
-    {
-      name: "Nurses",
-      url: "/api/carddav/nurses/",
-      description: "Nurse contacts",
-    },
-  ];
+  // Schema-driven: discover address books from entities with carddav: true.
+  // Previously hardcoded to ["patients", "nurses"]. Now adding carddav: true
+  // to a new entity in schema.yaml automatically exposes it here.
+  //
+  // URL convention: /api/carddav/{entity}s/ — naive pluralization (appends 's').
+  // Must match addressBookToEntity() in carddav-auth.ts which does the reverse lookup.
+  // Works for regular plurals (patient→patients, nurse→nurses). Irregular plurals
+  // (company→companys) would need a carddav_path field in schema.yaml.
+  const schema = getSchema();
+  const addressBooks = Object.entries(schema.entities)
+    .filter(([, entity]) => entity.carddav === true)
+    .map(([name, entity]) => ({
+      name: entity.label ?? entityLabel(name, schema),
+      url: `/api/carddav/${name}s/`,
+      description: `${entity.label_singular ?? name} contacts`,
+    }));
 
   return NextResponse.json(addressBooks);
 }

@@ -49,7 +49,7 @@ Key files:
 - `migrate.ts` — safe auto-migration with destructive operation blocking
 - `startup.ts` — orchestration entry point
 
-**No code outside `src/engine/` imports from `@/engine/` directly.** The Schema Facade (`src/lib/schema.ts`) is the sole bridge — see below.
+**No code outside `src/engine/` imports from `@/engine/` directly** except the Schema Facade modules (`src/lib/schema.ts` and `src/lib/schema-client.ts`) — they are the sole bridge. See below.
 
 ### Schema Facade (`src/lib/schema.ts`) — GoF Facade pattern
 
@@ -61,40 +61,36 @@ The engine is an internal subsystem with three modules. The rest of the codebase
 │   schema-loader.ts    field-types.ts    naming.ts         │
 │   prisma-generator.ts    migrate.ts    startup.ts         │
 │                                                           │
-└─────────────────────────┬─────────────────────────────────┘
-                          │
-                          │  (single entry point)
-                          ▼
-    ╔═════════════════════════════════════════════════════╗
-    ║                                                     ║
-    ║   src/lib/schema.ts  (THE Facade)                   ║
-    ║                                                     ║
-    ║   Re-exports:     getSchema, loadSchema             ║
-    ║                   types (EntityConfig, etc.)        ║
-    ║                   fieldTypes, validateFieldValue    ║
-    ║                   toPascalCase, toSnakeCase         ║
-    ║                   reverseRelationKey, foreignKeyName║
-    ║                                                     ║
-    ║   Own logic:      deriveHierarchy (UI structure)    ║
-    ║                   entityLabel, entityLabelSingular  ║
-    ║                   get{Csv,VCard,ICal,Json}Rep...    ║
-    ║                   reverseMapping                    ║
-    ║                                                     ║
-    ╚════════════════════════╤════════════════════════════╝
-                             │
-              ┌──────────────┼──────────────┐
-              ▼              ▼              ▼
-         src/lib/       src/app/api/   src/components/
-    (repository,       (route handlers) (React UI)
-     import, parsers,
-     navigation, etc.)
+└──────────┬──────────────────────────────┬─────────────────┘
+           │                              │
+           │  (L — synthesis,             │  (types, naming,
+           │   server-only)               │   field-types)
+           ▼                              ▼
+    ╔══════════════════════╗    ╔══════════════════════════╗
+    ║ lib/schema.ts        ║    ║ lib/schema-client.ts     ║
+    ║ Left Adjoint (L)     ║───▶║ Right Adjoint (R)        ║
+    ║                      ║    ║                          ║
+    ║ getSchema (extract)  ║    ║ types (EntityConfig etc) ║
+    ║ isSensitive          ║    ║ fieldTypes, naming utils ║
+    ║ get*Representation   ║    ║ deriveHierarchy (extend) ║
+    ║                      ║    ║ entityLabel, entityLabel… ║
+    ║ + re-exports all of R║    ║ findReverseRelationKey   ║
+    ╚══════════╤═══════════╝    ║ reverseMapping           ║
+               │                ╚════════════╤═════════════╝
+               │                             │
+        ┌──────┴──────┐              ┌───────┴────────┐
+        ▼             ▼              ▼                ▼
+   src/lib/      src/app/api/   src/components/   src/hooks/
+  (repository,  (route handlers) (React UI)      (app-config)
+   import, etc.)
+  SERVER-ONLY                    CLIENT-SAFE
 ```
 
-The Facade provides three categories of exports:
+The Facade (across both modules) provides three categories of exports:
 
-1. **Re-exports** from engine internals — `getSchema`, types, field-type registry, naming conventions. Consumers get what they need without knowing which engine file it lives in.
-2. **Derived logic** — hierarchy derivation (which entities are first-order vs properties), display labels. These compute over the schema but aren't part of the engine's core responsibility.
-3. **Representation getters** — `getCsvRepresentation`, `getVCardRepresentation`, etc. These adapt internal schema structure to external format expectations (an element of the GoF Adapter pattern within the Facade).
+1. **Pure analysis (schema-client.ts)** — types, field-type registry, naming conventions, `deriveHierarchy`, label helpers, `findReverseRelationKey`, `reverseMapping`. These are coKleisli arrows: pure functions that project schema context into derived views. Client-safe.
+2. **Schema access (schema.ts)** — `getSchema()` (comonadic extract), plus re-exports of everything from schema-client.ts. Server-only.
+3. **Effectful projections (schema.ts)** — `isSensitive()`, `get*Representation()`. These call `getSchema()` internally — coKleisli arrows that depend on the extract operation. Server-only.
 
 ### Navigation model
 
@@ -325,28 +321,34 @@ Module-level dependency graph. Arrows point from consumer → dependency.
                     ┌───────────── src/engine/ (internal) ────────────┐
                     │  schema-loader   field-types   naming           │
                     │  prisma-generator   migrate     startup         │
-                    └────────────────────┬───────────────────────────┘
-                                         │ (sole bridge)
-                                         ▼
-                            src/lib/schema.ts (Facade)
-                    ┌────────────┬───────┼────────┬──────────────┐
-                    ▼            ▼       ▼        ▼              ▼
-              repository    navigation  import  parsers   generate-schema-
-                 │               │        │ ↘      ↗       description
-                 │               ▼        ▼  ▼   ▼
-                 │            layout   repository
-                 │
-                 │          renderers.tsx (Strategy + Interpreter patterns)
-                 │               ↑ imports types from schema.ts
-                 ▼
-          route-factory ──→ api-helpers
-                 ↑
-    ┌────────────┼────────────────────────────┐
-    ▼            ▼                            ▼
+                    └────────┬──────────────────────┬────────────────┘
+                             │                      │
+                             ▼                      ▼
+              lib/schema.ts (L)        lib/schema-client.ts (R)
+              (server-only)            (client-safe, no fs)
+              getSchema, isSensitive   types, deriveHierarchy,
+              get*Representation       entityLabel, naming,
+              + re-exports R           fieldTypes, reverseMapping
+                    │                           │
+         ┌─────────┼──────────┐       ┌────────┼──────────────┐
+         ▼         ▼          ▼       ▼        ▼              ▼
+    repository  import   route-    navigation  components/  hooks/
+         │        │      factory   renderers   sidebar,     use-app-
+         │        │         │                  detail,      config
+         │        │         ▼                  form, etc.
+         │        │    api-helpers
+         │        │         ↑
+    ┌────┼────────┼─────────┼────────────────────────────┐
+    ▼    ▼        ▼         ▼                            ▼
 [entity]/    patient/route.ts            appointment/route.ts
 route.ts     nurse/route.ts              calendar/route.ts
              (shadow routes)             carddav/route.ts
                                          (specialized routes)
+
+  ── Middleware stack (Kleisli composition) ──
+
+  route() → withTrace → withSession → withRole → withNurse/Patient → handler
+  (see "Category Theory Foundations" below)
 
   ── Security stack (independent) ──
 
@@ -357,9 +359,10 @@ route.ts     nurse/route.ts              calendar/route.ts
 
 Key properties:
 - **No circular dependencies.** The graph is a clean DAG.
-- **Single entry to engine.** Only `schema.ts` imports from `@/engine/`.
+- **Single entry to engine.** Only `schema.ts` and `schema-client.ts` import from `@/engine/`. No other module touches engine internals.
+- **Adjunction split.** Client components import from `schema-client.ts` (R — no fs). Server code imports from `schema.ts` (L — re-exports R plus adds effectful operations). This eliminates the Turbopack bundling issue.
 - **Security stack is independent.** Auth, audit, and SQL safety have no dependency on the schema or navigation layers.
-- **High fan-in modules** (schema: 21 importers, repository: 13) are expected — both have stable interfaces.
+- **Middleware is Kleisli composition.** The `with*` functions are Kleisli arrows composed via `RouteBuilder`. See "Category Theory Foundations" below.
 
 ---
 
@@ -383,13 +386,24 @@ Next.js App Router routing precedence: a static directory (`patient/`) always be
 
 The generic catch-all (`[entity]/route.ts`, `[entity]/[id]/route.ts`) also delegates to the same route factory. It handles entities that need only standard CRUD and have no specialized sub-routes. Both paths produce identical behaviour — the factory is the single source of truth for CRUD logic.
 
-### Why `schema.ts` is the Schema Facade (GoF Facade pattern)
+### Why the Schema Facade is split into two modules (adjunction factoring)
 
-`src/lib/schema.ts` is the single public interface for all schema-related functionality outside `src/engine/`. No file in `lib/`, `app/api/`, or `components/` should import directly from `@/engine/` — everything goes through the Facade.
+The Schema Facade is split along the **adjunction boundary** into two modules:
 
-The engine is an internal subsystem (YAML loading, Prisma generation, migrations) with three modules (`schema-loader.ts`, `field-types.ts`, `naming.ts`). The Facade re-exports what consumers need and adds its own logic (hierarchy derivation, label helpers, representation getters). This means the engine's internal file structure can change without affecting any consumer code.
+| Module | Categorical role | fs dependency | Importers |
+|--------|-----------------|---------------|-----------|
+| `lib/schema-client.ts` | **R** — Right adjoint (analysis/projection) | None — client-safe | Client components, hooks, navigation |
+| `lib/schema.ts` | **L** — Left adjoint (synthesis) + bridge | Yes — `require("@/engine/schema-loader")` | Server utilities, API routes |
 
-Previously this responsibility was split across two partial facades (`schema-hierarchy.ts` and `representations.ts`), and multiple API routes bypassed them by importing from `@/engine/` directly. The consolidation into one module seals the boundary: `@/engine/` imports appear only inside `schema.ts`.
+`schema.ts` re-exports everything from `schema-client.ts`, so server-side code imports from `@/lib/schema` and gets both L and R. Client-side code imports from `@/lib/schema-client` and gets only R — pure functions with zero Node.js dependencies.
+
+This split resolves the Turbopack bundling issue: previously, client components importing from `schema.ts` would pull in the `require("@/engine/schema-loader")` fallback path, which traces to `fs`. Now client components import from `schema-client.ts`, which has no path to `fs` at all.
+
+The split follows the categorical structure naturally:
+- **R (schema-client.ts)**: coKleisli arrows — `deriveHierarchy`, `entityLabel`, `findReverseRelationKey`, etc. Pure functions that project schema context into derived views
+- **L (schema.ts)**: comonadic extract (`getSchema()`) plus effectful coKleisli arrows that call extract internally (`isSensitive()`, `get*Representation()`)
+
+No file in `lib/`, `app/api/`, or `components/` imports directly from `@/engine/` — everything goes through the Facade (either module). The engine's internal file structure can change without affecting any consumer code.
 
 The five representation getters (`getCsvRepresentation`, `getVCardRepresentation`, etc.) are intentionally one-liners. They trade function count for call-site clarity: callers name exactly which representation they need rather than navigating a generic accessor and optional-chaining through the result.
 
@@ -419,7 +433,7 @@ Upsert keys (which fields uniquely identify a record for update-vs-create decisi
 
 ### Why no code outside `src/engine/` imports from `@/engine/` directly
 
-The engine (`src/engine/`) is an internal subsystem — it loads YAML, generates Prisma schemas, and runs migrations. All non-engine code imports from the Schema Facade (`src/lib/schema.ts`) instead. This enforces the architectural layering: `components → lib → engine`, with `schema.ts` as the sole bridge. See "Why `schema.ts` is the Schema Facade" above.
+The engine (`src/engine/`) is an internal subsystem — it loads YAML, generates Prisma schemas, and runs migrations. All non-engine code imports from the Schema Facade (`src/lib/schema.ts` or `src/lib/schema-client.ts`) instead. This enforces the architectural layering: `components → lib → engine`, with the two Facade modules as the sole bridge. See "Why the Schema Facade is split into two modules" above.
 
 ### Why `engine/naming.ts` exists
 
@@ -496,6 +510,135 @@ Entities without a `display` block get auto-derived summaries (first field as ti
 ### Facade Pattern — `src/lib/schema.ts` (extended)
 
 The Schema Facade was already the sole bridge to the engine. It now also exposes `DisplayConfig` types and `findReverseRelationKey` (the naming-convention heuristic for locating child arrays on API responses, previously duplicated in components).
+
+---
+
+## Category Theory Foundations
+
+The system has three categorical structures that emerged from the architecture. They were not designed top-down from theory — the architecture was built organically, and the category theory describes what was already there. The value of naming these structures is diagnostic: when something goes wrong, the categorical framing tells you where to look.
+
+### The Adjunction: Schema Declarations ⊣ Database Operations
+
+The system has a fundamental adjunction **L ⊣ R** between two operations:
+
+- **L (synthesis)** — `schema.ts`: takes raw YAML declarations and lifts them into rich, hydrated schema objects. Reads from disk, populates the cache.
+- **R (analysis)** — `schema-client.ts`: takes hydrated schema objects and projects them into derived views (labels, hierarchy, representations, field types).
+
+These are **adjoints, not inverses**. L∘R (synthesise then analyse) gives you more than you started with — the full schema context with all derived views. R∘L (analyse then synthesise) is lossy — you can't reconstruct the YAML from the derived labels. The adjunction property says: if you modify your domain objects in a way that respects the schema rules, the derived views are the "best possible representation" of those objects in their target domain (UI labels, CSV headers, iCal properties, etc.).
+
+When something leaks — an N+1 query, a missing field in a CSV export, a broken iCal summary — it's usually because code is treating R as if it were L's inverse. The fix is to ask: "what context does R need that I'm not providing?"
+
+```
+L ⊣ R  (the adjunction)
+
+L (schema.ts):          fs → YAML → SchemaConfig       (server-only)
+R (schema-client.ts):   SchemaConfig → derived views    (client-safe)
+```
+
+The module split (`schema.ts` / `schema-client.ts`) follows this boundary exactly. This is why the split resolves the Turbopack issue — the bundler can now distinguish L from R and exclude L from client bundles.
+
+### The Monad: Middleware as Kleisli Composition
+
+The middleware stack (`src/lib/middleware/`) is the monad **R∘L** — analyse (what does this request need?) then synthesise (build an enriched context). Each middleware function is a **Kleisli arrow**:
+
+```
+Middleware<In, Out> = (ctx: In) → Promise<NextResponse | Out>
+```
+
+This is the Either monad: `NextResponse` is Left (short-circuit with 401/403/429), enriched context `Out` is Right (continue to the next layer). The `RouteBuilder.handle()` method is Kleisli composition (`>=>`) — it sequences the arrows and short-circuits on the first Left.
+
+#### The composition chain
+
+```
+route()                          → { request }
+  .use(withTrace)                → + { correlationId, ip, userAgent }
+  .use(withSession)              → + { userId, role, audit() }
+  .use(withRole("nurse"))        → (403 if wrong role, no new fields)
+  .use(withNurseContext)         → + { nurse }
+  .handle(handler)               → NextResponse
+```
+
+Each `.use()` call adds a Kleisli arrow. TypeScript intersection types track the accumulating context: `Ctx & TraceContext & SessionContext & NurseContext`. The type system enforces that you can't access `nurse` in a handler that hasn't passed through `withNurseContext`.
+
+#### Pre-composed stacks
+
+Six canonical stacks are pre-assembled in `stacks.ts`:
+
+| Stack | Composition | Guarantee |
+|-------|------------|-----------|
+| `adminRoute()` | trace → session → role("admin") | Only Clare can reach the handler |
+| `nurseRoute()` | trace → session → role("nurse") → nurseContext | AUP acknowledgement verified structurally |
+| `patientRoute()` | trace → session → role("patient") → patientContext | Patient record resolved before handler runs |
+| `publicRoute()` | trace only | No auth — login and public endpoints |
+
+The AUP guarantee is structural, not conventional: `withNurseContext` bundles both nurse resolution and AUP verification into a single Kleisli arrow. You cannot obtain a `NurseContext` without passing the AUP gate — this is the totality property of morphism composition in the Kleisli category.
+
+#### Why this matters
+
+The Kleisli structure gives two practical guarantees:
+
+1. **Coverage by construction.** If a route uses `nurseRoute()`, it has trace, session, role check, nurse resolution, and AUP verification. You can't accidentally skip a layer because the type system won't let the handler access `ctx.nurse` without the preceding arrows.
+
+2. **Composability.** New middleware can be added without modifying existing layers. A rate limiter, IP allowlist, or feature flag is just another `.use()` call — another Kleisli arrow in the chain.
+
+### The Comonad: Schema DSL as coKleisli Arrows
+
+The schema DSL (`schema-client.ts` + `schema.yaml`) is the comonad **L∘R** — synthesise (load the full schema) then analyse (project into derived views). The comonadic operations are:
+
+| Comonadic operation | CRM equivalent | Module |
+|---|---|---|
+| **extract** | `getSchema()` — get the current schema from cache | `schema.ts` |
+| **extend** | `deriveHierarchy(schema)` — compute all navigation paths from the full context | `schema-client.ts` |
+| **coKleisli arrows** | `entityLabel(name, schema)`, `entityLabelSingular(name, schema)`, `findReverseRelationKey(record, entity)` — context-dependent computations | `schema-client.ts` |
+
+Every function in `schema-client.ts` is a coKleisli arrow: it computes a result from schema context without side effects. The `schema?` parameter on `entityLabel` is the comonadic context — when provided, the function reads the entity's configured label; when absent, it degrades to a pure string transform.
+
+The `representations` block in `schema.yaml` is the clearest coKleisli structure:
+
+```yaml
+appointment:
+  representations:
+    ical:
+      mapping:
+        date: DTSTART_DATE
+        start_time: DTSTART_TIME
+      summary_template: "{patient.name} — {specialty}"
+```
+
+The `summary_template` is a coKleisli arrow — it cannot be evaluated without the surrounding context (the patient relation, the specialty field). `extract` alone gives you the appointment record; `extend` with the template gives you the iCal summary by reaching into the relational context.
+
+### The Distributive Law: Route Factory
+
+The route factory (`src/lib/route-factory.ts`) is the **distributive law** λ: W → T — the bridge between the comonad (schema context) and the monad (middleware effects).
+
+```
+makeListCreateHandlers(entityName):
+  1. coKleisli: reads schema context → discovers fields, relations, validation rules
+  2. Kleisli: produces handlers wrapped in adminRoute() → middleware effects
+```
+
+The factory consumes context (comonadic) and produces effects (monadic). It's the function that lets the two categorical structures compose:
+
+```
+                  L ⊣ R  (the adjunction)
+                 ╱       ╲
+                ╱         ╲
+        L∘R (comonad)   R∘L (monad)
+        schema DSL      middleware stack
+            │               │
+            │  distributive │
+            │     law       │
+            └───────────────┘
+                    │
+             route factory
+        makeListCreateHandlers
+```
+
+### Design principle
+
+When adding a new feature, ask: **does it belong to L (synthesis — server, effectful, loads data) or R (analysis ��� pure, projects structure)?** If you mix them in one module, you'll hit the same bundling issue that the original `schema.ts` had. The adjunction boundary is the natural place to cut.
+
+When the architecture leaks — a component that can't render without a server call, an API route that recomputes derived data on every request — the categorical framing tells you what went wrong: you're treating a projection (R) as if it were an isomorphism, or you're calling extract (L) where you should be threading context (R).
 
 ---
 
@@ -615,3 +758,45 @@ Accept the TypeScript escape when:
 The DSL exists to solve one half of the expression problem: adding new entities is easy (write YAML, everything works). The other half — adding new behavioral dimensions — requires growing the grammar (new production rules, new type-checking, new interpreter logic). Each grammar extension should be driven by a concrete need, not anticipated future requirements.
 
 The DSL's lifecycle stage is "mini-language" — it has template interpolation and structured declarations but no control flow. This is the right level of expressiveness for a domain-specific CRM configuration language. Resist the temptation to add conditionals.
+
+### Template engine
+
+The DSL has a unified template engine (`src/lib/template.ts`) that handles all `{field}` interpolation in schema-driven contexts. The grammar:
+
+```
+{field}           → record[field]           (flat field lookup)
+{relation.field}  → record[relation][field] (dot notation for hydrated relations)
+```
+
+Used by:
+- `display.title`, `display.subtitle`, `display.actions[].href` — via `renderers.tsx`
+- `representations.ical.summary_template` — via `ical.ts`
+
+Template tokens are **validated at schema load time** by `validateSchema` in `schema-loader.ts`. A template referencing `{nonexistent}` will fail at startup with a structured error, not silently at runtime.
+
+Navigation templates (`navigation.yaml` title templates) use a separate closed-vocabulary interpolation in `navigation.ts` — these are UI-derived tokens (`{entity}`, `{id}`, `{name}`), not database field references.
+
+### DSL coverage map
+
+Not everything is schema-driven. Some entity-specific behavior is hardcoded in TypeScript. Each escape hatch is documented in the source code with a `DSL-ESCAPE` marker that includes the reason, cost to promote, and trigger condition.
+
+To find all escape hatches: `grep -r "DSL-ESCAPE" src/`
+
+| Behavior | Schema-driven? | File | Escape reason |
+|----------|---------------|------|---------------|
+| CRUD operations | Yes | `route-factory.ts` | — |
+| Field types & validation | Yes | `field-types.ts` | — |
+| Entity hierarchy (sidebar) | Yes | `schema-client.ts` | — |
+| Display rendering | Yes | `renderers.tsx` | — |
+| CSV/vCard representations | Yes | `schema.ts` | — |
+| CardDAV discovery | Yes | `carddav/route.ts` | — |
+| Attachment categories | Yes | `upload/route.ts` | — |
+| iCal summary template | Yes | `ical.ts` | — |
+| iCal field extraction/formatting | **No** | `ical.ts` | Date/time formatting needs format specifiers the DSL doesn't express |
+| CalDAV push lifecycle | **No** | `caldav-client.ts` | Coupled to appointment entity + ical.ts |
+| Name resolution (AI) | **No** | `name-resolution.ts` | Only 2 person entities; add flag if a 3rd appears |
+| Patient PDF export | **No** | `patient/[id]/export/` | Domain-specific layout; would need a report sub-DSL |
+| Nurse notes (clinical/personal) | **No** | `nurse/.../notes/route.ts` | Privacy design: personal notes are a separate entity |
+| Auth roles | **No** | `auth.ts` | Structural: maps to route groups, proxy, middleware |
+
+The decision rule for promoting an escape hatch: **promote when the cost of drift between schema and code exceeds the cost of growing the DSL grammar.** Concretely: promote when a second entity needs the same behavior, not before.

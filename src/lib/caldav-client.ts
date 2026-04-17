@@ -6,6 +6,14 @@
  *
  * All operations are fire-and-forget — failures are logged but
  * never block the HTTP response.
+ *
+ * DSL-ESCAPE: Hardcodes "appointment" entity name and "nurseId" FK in
+ *   makeUid(), withCalendar(), pushAppointment(), updateAppointment(), etc.
+ *   Reason: CalDAV push is tightly coupled to the appointment lifecycle
+ *   (status transitions, nurse calendar connections, iCal formatting).
+ *   The coupling is with ical.ts (also appointment-specific, see its DSL-ESCAPE).
+ *   Cost to promote: medium — would follow if ical.ts were generalised.
+ *   Trigger to promote: same as ical.ts — a second entity needs CalDAV sync.
  */
 
 import { DAVClient, type DAVCalendar } from "tsdav";

@@ -1,22 +1,24 @@
 /**
- * Schema Facade (GoF Facade pattern)
+ * Schema Facade — Left Adjoint (L) + Bridge
  *
- * The single public interface for all schema-related functionality
- * outside src/engine/. Files in lib/, app/api/, and components/
- * should import schema types, functions, and representations from
- * here — never directly from @/engine/.
+ * The synthesis side of the schema adjunction. This module provides:
+ * 1. getSchema() — the comonadic extract: loads schema from cache (or disk as fallback)
+ * 2. Effectful projections — isSensitive(), get*Representation() — coKleisli arrows
+ *    that call extract internally
+ * 3. Re-exports of everything from schema-client.ts (the Right adjoint, R)
  *
- * The engine is an internal subsystem (YAML loading, Prisma generation,
- * migrations). This module exposes only what consumers need, hiding
- * the engine's internal structure.
+ * The adjunction L ⊣ R:
+ *   L (this file):       fs → YAML → SchemaConfig  (synthesis, server-only)
+ *   R (schema-client.ts): SchemaConfig → derived views (analysis, client-safe)
  *
- * Consolidates the former schema-hierarchy.ts and representations.ts.
+ * Server-side code imports from here (gets both L and R).
+ * Client-side code imports from schema-client.ts (gets only R — no fs).
+ *
+ * This is the GoF Facade pattern: the single public interface for all
+ * schema-related functionality outside src/engine/. No file in lib/,
+ * app/api/, or components/ should import directly from @/engine/.
  */
 
-// Import from schema-types (client-safe, no fs dependency).
-// NOT from schema-loader (which imports fs for file reading).
-// This is critical: client components import from this facade, so the
-// entire import chain must be free of Node.js-only modules.
 import {
   getSchema as getSchemaFromCache,
   type SchemaConfig,
@@ -26,53 +28,64 @@ import {
   type CsvRepresentation,
   type JsonRepresentation,
 } from "@/engine/schema-types";
-import { reverseRelationKey, foreignKeyName } from "@/engine/naming";
 
-// ─── Re-exports: Schema access & types ─────────────────────────
+// ─── Re-export everything from the Right adjoint (client-safe) ──
+
+export {
+  // Types
+  type SchemaConfig,
+  type EntityConfig,
+  type FieldConfig,
+  type RelationConfig,
+  type DisplayConfig,
+  type DisplayAction,
+  type RepresentationsConfig,
+  type VCardRepresentation,
+  type ICalRepresentation,
+  type CsvRepresentation,
+  type JsonRepresentation,
+  type FieldTypeDefinition,
+  // Field types
+  fieldTypes,
+  getFieldType,
+  validateFieldValue,
+  // Naming conventions
+  reverseRelationKey,
+  foreignKeyName,
+  toPascalCase,
+  toSnakeCase,
+  // coKleisli arrows (pure analysis)
+  type SchemaHierarchy,
+  deriveHierarchy,
+  entityLabel,
+  entityLabelSingular,
+  reverseMapping,
+  findReverseRelationKey,
+} from "./schema-client";
+
+// ─── Left Adjoint: Schema Access (extract) ──────────────
 
 /**
- * Get the loaded schema. Falls through to loadSchema() if the cache
- * is empty (build time, first request, or tests).
+ * Comonadic extract: get the loaded schema.
  *
- * Uses a dynamic import() for schema-loader to avoid pulling fs into
- * client bundles statically. Turbopack still traces it (known issue),
- * but the build continues via continue-on-error in CI.
+ * Falls through to loadSchema() if the cache is empty (build time,
+ * first request, or tests). Uses dynamic require() to avoid pulling
+ * fs into client bundles statically.
+ *
+ * Server-only — client code should never call this directly.
+ * Client components receive the schema via fetch("/api/schema").
  */
 export function getSchema(): SchemaConfig {
   try {
     return getSchemaFromCache();
   } catch {
     // Cache empty — lazy-load from disk (server-only path).
-    // Static import would pull fs into the client bundle.
     const loader = require("@/engine/schema-loader") as { loadSchema: () => SchemaConfig };
     return loader.loadSchema();
   }
 }
-export type {
-  SchemaConfig,
-  EntityConfig,
-  FieldConfig,
-  RelationConfig,
-  DisplayConfig,
-  DisplayAction,
-  RepresentationsConfig,
-  VCardRepresentation,
-  ICalRepresentation,
-  CsvRepresentation,
-  JsonRepresentation,
-} from "@/engine/schema-types";
 
-// ─── Re-exports: Field types ───────────────────────────────────
-
-export { fieldTypes, getFieldType, validateFieldValue } from "@/engine/field-types";
-export type { FieldTypeDefinition } from "@/engine/field-types";
-
-// ─── Re-exports: Naming conventions ────────────────────────────
-
-export { reverseRelationKey, foreignKeyName };
-export { toPascalCase, toSnakeCase } from "@/engine/naming";
-
-// ─── Sensitive Entity Check ────────────────────────────────────
+// ─── Effectful coKleisli Arrows (call extract internally) ───
 
 /**
  * Check whether an entity is marked as sensitive in the schema.
@@ -84,77 +97,7 @@ export function isSensitive(entityName: string): boolean {
   return schema.entities[entityName]?.sensitive === true;
 }
 
-// ─── Schema Hierarchy ──────────────────────────────────────────
-
-export interface SchemaHierarchy {
-  /** Entity names with no belongs_to (e.g. ["patient", "nurse"]) */
-  firstOrder: string[];
-  /** Map from first-order entity → its property entity names */
-  propertiesOf: Record<string, string[]>;
-  /** Map from property entity → all parents [{ parentEntity, foreignKey }] */
-  parentOf: Record<string, { entity: string; foreignKey: string }[]>;
-}
-
-export function deriveHierarchy(schema: SchemaConfig): SchemaHierarchy {
-  const allEntities = Object.keys(schema.entities);
-
-  const firstOrder = allEntities.filter((name) => {
-    const entity = schema.entities[name];
-    return !entity.relations || Object.keys(entity.relations).length === 0;
-  });
-
-  const propertiesOf: Record<string, string[]> = {};
-  const parentOf: Record<string, { entity: string; foreignKey: string }[]> = {};
-
-  for (const fo of firstOrder) {
-    propertiesOf[fo] = [];
-  }
-
-  for (const name of allEntities) {
-    if (firstOrder.includes(name)) continue;
-    const entity = schema.entities[name];
-    if (!entity.relations) continue;
-
-    if (!parentOf[name]) parentOf[name] = [];
-
-    for (const [relName, rel] of Object.entries(entity.relations)) {
-      if (rel.type === "belongs_to" && firstOrder.includes(rel.entity)) {
-        if (!propertiesOf[rel.entity].includes(name)) {
-          propertiesOf[rel.entity].push(name);
-        }
-        parentOf[name].push({
-          entity: rel.entity,
-          foreignKey: foreignKeyName(relName),
-        });
-      }
-    }
-  }
-
-  return { firstOrder, propertiesOf, parentOf };
-}
-
-// ─── Label Helpers ─────────────────────────────────────────────
-
-/**
- * Convert snake_case entity name to plural display label.
- * Reads the label from the schema when provided; falls back to auto-generation.
- */
-export function entityLabel(name: string, schema?: SchemaConfig): string {
-  const entity = schema?.entities[name];
-  if (entity?.label) return entity.label;
-  const label = name.replace(/_/g, " ");
-  return label.charAt(0).toUpperCase() + label.slice(1) + "s";
-}
-
-/** Singular display label */
-export function entityLabelSingular(name: string, schema?: SchemaConfig): string {
-  const entity = schema?.entities[name];
-  if (entity?.label_singular) return entity.label_singular;
-  const label = name.replace(/_/g, " ");
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-// ─── Representations ───────────────────────────────────────────
+// ─── Representations (effectful coKleisli arrows) ───────
 
 /**
  * Get the full representations config for an entity.
@@ -222,59 +165,4 @@ export function getJsonRepresentation(
   entityName: string
 ): JsonRepresentation | undefined {
   return getRepresentations(entityName)?.json;
-}
-
-/**
- * Build a reverse lookup: external property → our field name.
- * e.g. { "FN": "name", "TEL": "phone", "EMAIL": "email" }
- */
-export function reverseMapping(
-  mapping: Record<string, string>
-): Record<string, string> {
-  const reversed: Record<string, string> = {};
-  for (const [field, prop] of Object.entries(mapping)) {
-    reversed[prop] = field;
-  }
-  return reversed;
-}
-
-// ─── Reverse Relation Key Resolution ──────────────────────────
-
-/**
- * Find the key on an API response record that holds the child entity array.
- *
- * Prisma may return the reverse relation under different key conventions
- * (snake_case, camelCase, with/without trailing 's'). This function tries
- * deterministic candidates first, then falls back to a substring scan.
- *
- * Previously duplicated in entity-detail-panel.tsx — centralised here
- * because it's fundamentally about the naming conventions that this
- * Facade owns.
- */
-export function findReverseRelationKey(
-  record: Record<string, unknown>,
-  propertyEntity: string
-): string | null {
-  // Deterministic candidates
-  const candidates = [
-    reverseRelationKey(propertyEntity),
-    propertyEntity.replace(/_/g, "") + "s",
-    propertyEntity,
-  ];
-  for (const key of candidates) {
-    if (Array.isArray(record[key])) return key;
-  }
-
-  // Substring fallback — defensive code that never triggers for current entities
-  // because prisma-generator.ts uses the same reverseRelationKey() function.
-  // It would activate if a Prisma field name diverged from `${entityName}s`
-  // (e.g., if someone hand-corrected "nurse_specialtys" to "nurse_specialties").
-  const normalised = propertyEntity.replace(/_/g, "").toLowerCase();
-  for (const [key, val] of Object.entries(record)) {
-    if (Array.isArray(val) && key.toLowerCase().includes(normalised)) {
-      return key;
-    }
-  }
-
-  return null;
 }

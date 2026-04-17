@@ -17,7 +17,7 @@ import { EntityFormPanel } from "@/components/entity-form-panel";
 import { PropertyPanel } from "@/components/patient-property-panel";
 import { AiChatPanel, type ChartConfig } from "@/components/ai-chat-panel";
 import { transition, type NavigationConfig, type WindowState } from "@/lib/navigation";
-import { foreignKeyName, type SchemaConfig, type SchemaHierarchy } from "@/lib/schema";
+import { foreignKeyName, type SchemaConfig, type SchemaHierarchy } from "@/lib/schema-client";
 
 export interface WindowContentProps {
   win: WindowState;

@@ -7,7 +7,7 @@
  * Fields:
  *   file: File (required)
  *   patientId: number (required)
- *   category: "referral_letter" | "test_result" | "clinical_document" | "other"
+ *   category: enum values from schema.yaml attachment.fields.category
  *   description: string (optional)
  *
  * Stores the file on disk under uploads/<patientId>/<uuid>-<filename>
@@ -21,13 +21,6 @@ import { adminRoute } from "@/lib/middleware";
 import { storeFile } from "@/lib/attachment-store";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
-
-const VALID_CATEGORIES = [
-  "referral_letter",
-  "test_result",
-  "clinical_document",
-  "other",
-] as const;
 
 export const POST = adminRoute()
   .named("POST /api/attachments/upload")
@@ -81,9 +74,19 @@ export const POST = adminRoute()
       );
     }
 
-    if (!VALID_CATEGORIES.includes(category as (typeof VALID_CATEGORIES)[number])) {
+    // Read valid categories from schema — single source of truth for enum values.
+    // Previously hardcoded as VALID_CATEGORIES, which could drift from schema.yaml.
+    const categoryField = schema.entities.attachment.fields.category;
+    const validCategories = categoryField?.values ?? [];
+    if (validCategories.length === 0) {
       return NextResponse.json(
-        { error: `category must be one of: ${VALID_CATEGORIES.join(", ")}` },
+        { error: "Attachment category field is misconfigured in schema (no enum values)" },
+        { status: 500 },
+      );
+    }
+    if (!validCategories.includes(category)) {
+      return NextResponse.json(
+        { error: `category must be one of: ${validCategories.join(", ")}` },
         { status: 400 },
       );
     }

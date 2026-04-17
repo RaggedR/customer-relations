@@ -12,7 +12,7 @@
  */
 
 import type { WindowRole } from "@/lib/layout";
-import { entityLabel, entityLabelSingular, type SchemaConfig } from "@/lib/schema";
+import { entityLabel, entityLabelSingular, type SchemaConfig } from "@/lib/schema-client";
 
 // --- Types ---
 
@@ -63,7 +63,14 @@ interface TransitionContext {
   mode?: string;
 }
 
-/** Resolve template tokens: {entity}, {entitySingular}, {id}, {name}, {label}, {mode} */
+/**
+ * Resolve navigation template tokens: {entity}, {entitySingular}, {id}, {name}, {label}, {mode}.
+ *
+ * This is intentionally NOT the unified template engine (lib/template.ts).
+ * Navigation templates use a closed vocabulary of UI-derived tokens (entity labels,
+ * window IDs), not open-ended database field references. The two grammars share
+ * syntax ({...}) but have different semantics and different token sources.
+ */
 function interpolate(template: string, ctx: TransitionContext, schema?: SchemaConfig): string {
   return template
     .replace(/\{entity\}/g, entityLabel(ctx.entity ?? "", schema))
