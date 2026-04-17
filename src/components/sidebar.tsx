@@ -1,9 +1,8 @@
 "use client";
 
 import { Separator } from "@/components/ui/separator";
-import { entityLabel, entityLabelSingular } from "@/lib/schema";
+import { entityLabel, entityLabelSingular, type SchemaConfig } from "@/lib/schema-client";
 import { layout } from "@/lib/layout";
-import type { SchemaConfig } from "@/lib/schema";
 
 interface SidebarProps {
   firstOrderEntities: string[];

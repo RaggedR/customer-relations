@@ -20,7 +20,7 @@
 
 import React from "react";
 import { Linkify } from "@/components/linkify";
-import type { FieldConfig, EntityConfig } from "@/lib/schema";
+import type { FieldConfig, EntityConfig } from "@/lib/schema-client";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -193,22 +193,9 @@ export function formatDatetimeForInput(val: unknown): string {
 
 // ─── Interpreter Pattern: Entity Summary Rendering ────────────
 
-/**
- * Interpolate a template string with record field values.
- * e.g. "{ear} — {make} {model}" → "LEFT — Phonak Audeo"
- *
- * Follows the same convention as navigation.ts:interpolate().
- */
-function interpolateTemplate(
-  template: string,
-  record: Record<string, unknown>
-): string {
-  return template.replace(/\{(\w+)\}/g, (_, key) => {
-    const val = record[key];
-    if (val == null || val === "") return "";
-    return String(val);
-  });
-}
+// Template interpolation is now unified in template.ts.
+// Re-import here for local use — supports both {field} and {relation.field}.
+import { interpolateTemplate } from "@/lib/template";
 
 /**
  * Resolve a display spec to a React node.

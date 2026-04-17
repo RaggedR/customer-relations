@@ -7,6 +7,16 @@
  * PRIVACY BOUNDARY: These endpoints identify patients by number only
  * ("Patient #42"), never by name. Clinical note content is rendered as
  * watermarked PNG images, not selectable text.
+ *
+ * DSL-ESCAPE: Hardcodes "clinical_note" and "personal_note" entity names,
+ *   accesses schema.entities.clinical_note.fields.note_type.values directly,
+ *   and appends "personal" as a synthetic type not in the schema.
+ *   Reason: the clinical/personal note split is a privacy design decision —
+ *   personal notes have no note_type and are stored separately for compliance.
+ *   The "personal" type is a UI convenience, not a schema concept.
+ *   Cost to promote: medium — would need a schema-level concept for "note categories"
+ *   that spans multiple entities with different privacy levels.
+ *   Trigger to promote: a third note type is added with its own privacy rules.
  */
 
 import { NextResponse } from "next/server";

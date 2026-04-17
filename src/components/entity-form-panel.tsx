@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { SchemaConfig, FieldConfig } from "@/lib/schema";
-import { entityLabelSingular, fieldTypes, toSnakeCase } from "@/lib/schema";
+import { entityLabelSingular, fieldTypes, toSnakeCase, type SchemaConfig, type FieldConfig } from "@/lib/schema-client";
 import { recordDisplayName, formatDateForInput, formatDatetimeForInput } from "@/lib/renderers";
 
 interface EntityFormPanelProps {

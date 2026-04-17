@@ -1,11 +1,22 @@
 /**
  * iCal (VEVENT) Generation and Parsing
  *
- * Schema-driven: reads the representations.ical mapping from schema.yaml
- * to build VEVENT strings and parse them back.
+ * Partially schema-driven: reads summary_template from schema.yaml via the
+ * unified template engine (lib/template.ts), but field extraction and iCal
+ * property formatting are hardcoded to the appointment entity.
+ *
+ * DSL-ESCAPE: Field names (date, start_time, end_time, location) are accessed
+ *   by hardcoded name at lines 28-31 instead of reading from ical.mapping.
+ *   The status→STATUS mapping (confirmed/cancelled/completed) is also hardcoded.
+ *   Reason: iCal properties need specific date/time formatting (YYYYMMDD, HHMMSS)
+ *   that the schema's field→property mapping doesn't express. Making this fully
+ *   schema-driven would require a formatter registry keyed by iCal property type.
+ *   Cost to promote: medium — add format specifiers to ical.mapping in schema.yaml.
+ *   Trigger to promote: a second entity needs iCal representation.
  */
 
 import { getICalRepresentation } from "@/lib/schema";
+import { interpolateTemplate } from "@/lib/template";
 import { escapeText, unescapeText, unfoldLines } from "@/lib/text-codec";
 import type { Row } from "@/lib/parsers";
 
@@ -30,15 +41,8 @@ export function generateVEvent(record: Row, entityName = "appointment"): string 
   const endTime = record.end_time as string;
   const location = record.location as string || "";
 
-  // Build summary from template
-  let summary = ical?.summary_template ?? "{specialty}";
-  summary = summary.replace(/\{(\w+)\.(\w+)\}/g, (_match, rel, field) => {
-    const parent = record[rel] as Row | null;
-    return parent ? String(parent[field] ?? "") : "";
-  });
-  summary = summary.replace(/\{(\w+)\}/g, (_match, field) => {
-    return String(record[field] ?? "");
-  });
+  // Build summary from template (unified template engine handles both {field} and {relation.field})
+  const summary = interpolateTemplate(ical?.summary_template ?? "{specialty}", record);
 
   const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
 

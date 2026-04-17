@@ -50,6 +50,80 @@ export function getSchema(): SchemaConfig {
   return cachedSchema;
 }
 
+// --- Template Token Validation ---
+
+/**
+ * Extract all {field} and {relation.field} tokens from a template string.
+ * Used to cross-check templates against declared fields and relations at load time.
+ */
+function extractTemplateTokens(
+  template: string,
+): Array<{ field: string; relation?: string }> {
+  const tokens: Array<{ field: string; relation?: string }> = [];
+  const regex = /\{(\w+)(?:\.(\w+))?\}/g;
+  let match;
+  while ((match = regex.exec(template)) !== null) {
+    if (match[2]) {
+      tokens.push({ field: match[2], relation: match[1] });
+    } else {
+      tokens.push({ field: match[1] });
+    }
+  }
+  return tokens;
+}
+
+/**
+ * Validate that all tokens in a template reference real fields/relations.
+ * Throws on first error with a structured diagnostic message.
+ */
+function validateTemplateTokens(
+  entityName: string,
+  context: string,
+  template: string,
+  entity: EntityConfig,
+  allEntities: Record<string, EntityConfig>,
+): void {
+  const tokens = extractTemplateTokens(template);
+  for (const token of tokens) {
+    if (token.relation) {
+      // {relation.field} — check relation exists and target entity has the field
+      if (!entity.relations?.[token.relation]) {
+        throw new Error(
+          `Entity "${entityName}" ${context} references unknown relation "${token.relation}" in "{${token.relation}.${token.field}}"`
+        );
+      }
+      const targetEntityName = entity.relations[token.relation].entity;
+      const targetConfig = allEntities[targetEntityName];
+      if (targetConfig && !targetConfig.fields[token.field]) {
+        throw new Error(
+          `Entity "${entityName}" ${context} references unknown field "${token.field}" on "${targetEntityName}" in "{${token.relation}.${token.field}}"`
+        );
+      }
+    } else {
+      // {field} — check field, relation, or built-in (id) exists on this entity
+      const isBuiltin = token.field === "id"; // Prisma auto-generated PK
+      if (!isBuiltin && !entity.fields[token.field] && !entity.relations?.[token.field]) {
+        throw new Error(
+          `Entity "${entityName}" ${context} references unknown field "${token.field}" in "{${token.field}}"`
+        );
+      }
+    }
+  }
+}
+
+/** Validate that a value is boolean if present, for schema flags. */
+function validateBooleanFlag(
+  entityName: string,
+  flagName: string,
+  value: unknown,
+): void {
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error(
+      `Entity "${entityName}" property "${flagName}" must be boolean, got ${typeof value}`
+    );
+  }
+}
+
 // --- Validation ---
 
 function validateSchema(schema: SchemaConfig): void {
@@ -129,6 +203,31 @@ function validateSchema(schema: SchemaConfig): void {
             `Relation "${entityName}.${relName}" references unknown entity "${rel.entity}"`
           );
         }
+        // Validate on_delete enum
+        if (rel.on_delete !== undefined) {
+          const validOnDelete = ["cascade", "restrict", "set_null"];
+          if (!validOnDelete.includes(rel.on_delete)) {
+            throw new Error(
+              `Relation "${entityName}.${relName}" on_delete must be one of: ${validOnDelete.join(", ")}. Got "${rel.on_delete}"`
+            );
+          }
+        }
+      }
+    }
+
+    // Validate boolean flags
+    validateBooleanFlag(entityName, "sensitive", entity.sensitive);
+    validateBooleanFlag(entityName, "immutable", entity.immutable);
+    validateBooleanFlag(entityName, "exportable", entity.exportable);
+    validateBooleanFlag(entityName, "sidebar_addable", entity.sidebar_addable);
+    validateBooleanFlag(entityName, "carddav", entity.carddav);
+
+    // Validate ai_visible on fields
+    for (const [fieldName, field] of Object.entries(entity.fields)) {
+      if (field.ai_visible !== undefined && typeof field.ai_visible !== "boolean") {
+        throw new Error(
+          `Field "${entityName}.${fieldName}" property "ai_visible" must be boolean, got ${typeof field.ai_visible}`
+        );
       }
     }
 
@@ -180,6 +279,16 @@ function validateSchema(schema: SchemaConfig): void {
             );
           }
         }
+      }
+      // Validate ical summary_template tokens
+      if (reps.ical?.summary_template) {
+        validateTemplateTokens(
+          entityName,
+          "representations.ical.summary_template",
+          reps.ical.summary_template,
+          entity,
+          schema.entities,
+        );
       }
 
       // Validate csv headers reference real fields
@@ -233,16 +342,22 @@ function validateSchema(schema: SchemaConfig): void {
     if (entity.display) {
       const d = entity.display;
       // Validate title field reference (plain field or template)
-      if (d.title && !d.title.includes("{") && !entity.fields[d.title]) {
-        throw new Error(
-          `Entity "${entityName}" display.title references unknown field "${d.title}"`
-        );
+      if (d.title) {
+        if (d.title.includes("{")) {
+          validateTemplateTokens(entityName, "display.title", d.title, entity, schema.entities);
+        } else if (!entity.fields[d.title]) {
+          throw new Error(
+            `Entity "${entityName}" display.title references unknown field "${d.title}"`
+          );
+        }
       }
       // Validate subtitle field references
       if (d.subtitle) {
         const subs = Array.isArray(d.subtitle) ? d.subtitle : [d.subtitle];
         for (const s of subs) {
-          if (!s.includes("{") && !entity.fields[s]) {
+          if (s.includes("{")) {
+            validateTemplateTokens(entityName, "display.subtitle", s, entity, schema.entities);
+          } else if (!entity.fields[s]) {
             throw new Error(
               `Entity "${entityName}" display.subtitle references unknown field "${s}"`
             );
@@ -278,6 +393,10 @@ function validateSchema(schema: SchemaConfig): void {
             throw new Error(
               `Entity "${entityName}" display.actions entries must have an "href" string`
             );
+          }
+          // Validate template tokens in href (e.g. "/api/attachments/{id}/download")
+          if (action.href.includes("{")) {
+            validateTemplateTokens(entityName, "display.actions.href", action.href, entity, schema.entities);
           }
         }
       }

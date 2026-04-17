@@ -2,6 +2,16 @@ import { SignJWT, jwtVerify } from "jose";
 
 // --- Types ---
 
+/**
+ * DSL-ESCAPE: Roles are hardcoded as a three-value union, not schema-driven.
+ *   Reason: roles are structural — they map 1:1 to Next.js route groups
+ *   ((admin)/, nurse/, portal/), proxy rules, middleware stacks, and portal
+ *   layouts. Making roles data-driven would mean dynamic route generation,
+ *   dynamic middleware composition, and dynamic proxy rules — a fundamental
+ *   architectural change with no clear benefit for a single-practitioner practice.
+ *   Cost to promote: very high. Leave as code.
+ *   Trigger to promote: the system serves multiple practices with different role models.
+ */
 export type Role = "admin" | "nurse" | "patient";
 
 export interface SessionPayload {

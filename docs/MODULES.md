@@ -22,11 +22,12 @@ For architecture rationale (the *why*), see [ARCHITECTURE.md](./ARCHITECTURE.md)
 | `engine/migrate` | Safe auto-migration (blocks `DROP TABLE`/`DROP COLUMN`) | `runMigration`, `generatePrismaClient` |
 | `engine/startup` | Orchestration: load → generate → migrate → client | `startupSchemaEngine` |
 
-### Schema Facade (sole bridge to engine)
+### Schema Facade (sole bridge to engine — adjunction split)
 
-| Module | Purpose | Exports |
-|--------|---------|---------|
-| `lib/schema` | Single public interface for all schema functionality | ~20 re-exports + 7 own functions |
+| Module | Categorical role | Exports |
+|--------|-----------------|---------|
+| `lib/schema-client` | **R** (analysis) — client-safe, no fs | Types, `deriveHierarchy`, `entityLabel`, naming utils, `fieldTypes`, `reverseMapping`, `findReverseRelationKey` |
+| `lib/schema` | **L** (synthesis) + bridge — server-only | `getSchema`, `isSensitive`, `get*Representation` + re-exports all of R |
 
 ### Business Logic
 
