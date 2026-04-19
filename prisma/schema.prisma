@@ -170,7 +170,7 @@ model NurseAvailability {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   date DateTime
-  day_of_week Int?
+  day_of_week Float?
   start_time String
   end_time String
   recurring Boolean?

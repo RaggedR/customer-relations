@@ -45,8 +45,8 @@ windows:
     features:
       - two_week_view        # default: 14-day grid
       - nurse_highlight_dropdown  # dropdown to select a nurse; their appointments are highlighted, others dimmed
-      - stacked_pills             # overlapping appointments stack vertically as pills
-      - slot_popup_menu            # clicking a cell with appointments shows popup: list of appointments + "New appointment"
+      - count_badge                 # each slot shows a count ("1", "2", "3") of how many appointments exist in that time slot
+      - slot_popup_menu            # clicking a cell with appointments shows popup: list of appointments + "New appointment" — this is how you drill into detail
       - click_to_create            # click empty slot → new appointment form; also available from popup menu
 
   search:
@@ -312,6 +312,10 @@ nurse:
           note: "patientRef is 'Patient #N' — no name (clinical context). Images are watermarked PNGs."
           on_demand: true                    # NOT loaded on page open — requires "Show Notes" click
           anti_cache: "Cache-Control: no-store, no-cache, must-revalidate"
+        - source: GET /api/nurse/appointments/{id}/hearing-aids
+          fields: [id, ear, make, model, serial_number, battery_type, wax_filter, dome, warranty_end_date]
+          note: "patient's hearing aids — loaded on page open. Nurse must be assigned to this patient."
+          audit_logged: true                 # access logged (nurse ID, patient number, timestamp)
       writes:
         - target: POST /api/nurse/appointments/{id}/notes
           form_fields:
@@ -328,6 +332,7 @@ nurse:
         - auto_close_5min                    # notes automatically close after 5 minutes
         - countdown_timer                    # visible amber timer showing remaining seconds
         - add_note                           # append-only clinical/personal notes (form always visible)
+        - hearing_aids_section               # patient's hearing aids shown on page (read-only, audit logged)
         - no_copy_paste                      # user-select: none on notes section
         - audit_logged                       # view logged (nurse ID, patient number, timestamp)
 
@@ -342,9 +347,14 @@ nurse:
           fields: [patientRef, "notes[].id", "notes[].date", "notes[].noteType", "notes[].clinician", "notes[].imageDataUri"]
           note: "watermarked PNGs with nurse name + timestamp baked into pixels"
           anti_cache: "Cache-Control: no-store, no-cache, must-revalidate"
+        - source: GET /api/nurse/records/{patientId}/hearing-aids
+          fields: [id, ear, make, model, serial_number, battery_type, wax_filter, dome, warranty_end_date]
+          note: "patient's hearing aids — nurse must be assigned to this patient"
+          audit_logged: true                 # access logged (nurse ID, patient number, timestamp)
       writes: []  # read-only — notes are added via the appointment detail page
       features:
         - patient_list_by_number             # pseudonymised — patient number only, no names
+        - hearing_aids_section               # patient's hearing aids shown per-patient (read-only, audit logged)
         - show_notes_button                  # notes hidden by default, must click to reveal
         - auto_close_5min                    # notes automatically close after 5 minutes
         - countdown_timer                    # visible amber timer showing remaining seconds
@@ -396,6 +406,8 @@ portal:
         path: /portal
       - label: Book
         path: /portal/book
+      - label: My Hearing Aids
+        path: /portal/hearing-aids
       - label: My Profile
         path: /portal/profile
       - label: Privacy
@@ -484,7 +496,7 @@ portal:
       scope: self                            # verify appointment belongs to patient
       reads:
         - source: GET /api/portal/appointments/{id}
-          fields: [id, date, startTime, endTime, location, specialty, status, notes]
+          fields: [id, date, startTime, endTime, location, specialty, status, nurseName, notes]
           note: "notes here are appointment-level scheduling notes, NOT clinical notes"
       writes: []  # read-only view
       visible_fields:
@@ -493,6 +505,7 @@ portal:
         - end_time
         - location
         - specialty
+        - nurse_name                         # patient should know which clinician they're seeing
         - status
         - notes                              # appointment-level notes (not clinical)
 
@@ -524,6 +537,20 @@ portal:
       features:
         - request_correction                 # for fields patient can't self-edit (name, DOB, Medicare)
 
+    hearing_aids:
+      path: /portal/hearing-aids
+      scope: self                            # only this patient's hearing aids
+      reads:
+        - source: GET /api/portal/hearing-aids
+          fields: [id, ear, make, model, serial_number, battery_type, wax_filter, dome, warranty_end_date]
+          note: "practical device info only — excludes programming_cable, programming_software, hsp_code, repair internals"
+      writes: []  # read-only — hearing aids managed by admin
+      features:
+        - privacy_banner                     # top-of-page warning: "This page contains private health information about your hearing devices. Please do not share this information publicly."
+        - grouped_by_ear                     # left ear / right ear sections
+        - warranty_highlight                 # visual indicator if warranty_end_date is past
+        - audit_logged                       # access logged (patient ID, timestamp)
+
     privacy:
       path: /portal/privacy
       reads: []  # static content, no database queries
@@ -536,7 +563,7 @@ portal:
         - how_we_use_and_disclose_it
         - ai_assisted_queries
         - data_storage_and_security
-        - your_rights                        # APP 6 (access), APP 13 (correction)
+        - your_rights                        # APP 12 (access), APP 13 (correction)
         - contact
 
     error:

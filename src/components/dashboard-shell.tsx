@@ -38,7 +38,7 @@ export function DashboardShell({ children }: { children?: React.ReactNode }) {
     (date: string, time: string) => {
       if (!nav) return;
       navigate({
-        id: `form-appointment-new-${date}-${time}`,
+        id: "form-appointment-new",
         type: "form",
         entityName: "appointment",
         initialValues: {
@@ -126,10 +126,10 @@ export function DashboardShell({ children }: { children?: React.ReactNode }) {
   );
 }
 
-/** Compute a default end time 30 minutes after start */
+/** Compute a default end time 45 minutes after start */
 function slotEndTime(start: string): string {
   const [h, m] = start.split(":").map(Number);
-  const totalMinutes = h * 60 + m + 30;
+  const totalMinutes = h * 60 + m + 45;
   const eh = Math.floor(totalMinutes / 60);
   const em = totalMinutes % 60;
   return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;

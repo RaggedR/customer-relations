@@ -32,6 +32,9 @@ export function EntitySearchPanel({ entityName, entity, onItemSelect }: EntitySe
     if (search) params.set("search", search);
     params.set("page", String(page));
     params.set("pageSize", String(pageSize));
+    for (const [field, value] of Object.entries(filters)) {
+      if (value) params.set(field, value);
+    }
 
     fetch(`/api/${entityName}?${params}`)
       .then((res) => res.json())
@@ -47,20 +50,13 @@ export function EntitySearchPanel({ entityName, entity, onItemSelect }: EntitySe
       })
       .catch((err) => console.error(`Failed to load ${entityName}:`, err))
       .finally(() => setLoading(false));
-  }, [entityName, search, page]);
+  }, [entityName, search, page, filters]);
 
   useEffect(() => {
     const timeout = setTimeout(fetchItems, 200);
     return () => clearTimeout(timeout);
   }, [fetchItems]);
 
-  // Client-side enum filtering
-  const filtered = items.filter((item) => {
-    for (const [field, value] of Object.entries(filters)) {
-      if (value && item[field] !== value) return false;
-    }
-    return true;
-  });
 
   if (selectedItem) {
     return (
@@ -111,13 +107,13 @@ export function EntitySearchPanel({ entityName, entity, onItemSelect }: EntitySe
       <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>
-        ) : filtered.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="p-4 text-center text-sm text-muted-foreground">
             No {entityName}s found
           </div>
         ) : (
           <div className="divide-y divide-floating-border">
-            {filtered.map((item) => (
+            {items.map((item) => (
               <ResultRow
                 key={item.id as number}
                 entityName={entityName}

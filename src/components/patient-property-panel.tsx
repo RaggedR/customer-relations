@@ -130,14 +130,14 @@ export function PropertyPanel({
           <span className="text-xs text-muted-foreground">Patient #{parentId}</span>
           <div className="flex items-center gap-3">
             {notesVisible && remainingSeconds > 0 && (
-              <span className="text-xs text-amber-400 font-mono">{formatCountdown(remainingSeconds)}</span>
+              <span className="text-xs text-amber-600 font-mono">{formatCountdown(remainingSeconds)}</span>
             )}
             <button
               onClick={handleShowNotes}
               disabled={notesLoading}
               className={`text-[10px] font-medium px-2 py-1 rounded transition-colors ${
                 notesVisible
-                  ? "bg-red-600/20 text-red-400 hover:bg-red-600/30"
+                  ? "bg-red-100 text-red-700 hover:bg-red-200"
                   : "bg-primary/10 text-primary hover:bg-primary/20"
               } disabled:opacity-50`}
             >
@@ -320,7 +320,7 @@ function PropertyRow({
         <a
           key={i}
           href={action.href}
-          className="text-[10px] px-2 py-1 rounded bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 shrink-0"
+          className="text-[10px] px-2 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 shrink-0"
           onClick={(e) => e.stopPropagation()}
         >
           {action.label}

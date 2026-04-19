@@ -159,7 +159,7 @@ entities:
   appointment:
     sidebar_addable: true
     display:
-      title: "{specialty}"
+      title: "{patient.name} — {nurse.name}"
       subtitle: [date, start_time]
       badge: status
     upsert_keys: [date, start_time, patient_name]

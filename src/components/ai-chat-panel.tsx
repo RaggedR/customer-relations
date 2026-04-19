@@ -114,8 +114,8 @@ export function AiChatPanel({ onChartGenerated }: AiChatPanelProps) {
         )}
 
         {!disclosureAcked && (
-          <div className="mx-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 text-xs text-muted-foreground space-y-2">
-            <p className="font-medium text-amber-400/90">AI Privacy Notice</p>
+          <div className="mx-2 p-3 rounded-lg border border-amber-300 bg-amber-50 text-xs text-muted-foreground space-y-2">
+            <p className="font-medium text-amber-700">AI Privacy Notice</p>
             <p>
               Queries are processed by Google Gemini. Patient names are
               pseudonymised and contact details are excluded, but clinical
@@ -127,7 +127,7 @@ export function AiChatPanel({ onChartGenerated }: AiChatPanelProps) {
                 localStorage.setItem("ai_disclosure_ack", String(thirtyDays));
                 setDisclosureAcked(true);
               }}
-              className="text-[10px] font-medium text-amber-400 hover:text-amber-300 transition-colors"
+              className="text-[10px] font-medium text-amber-700 hover:text-amber-600 transition-colors"
             >
               I understand
             </button>
@@ -169,7 +169,7 @@ export function AiChatPanel({ onChartGenerated }: AiChatPanelProps) {
               {msg.role === "assistant" && msg.chart && (
                 <button
                   onClick={() => onChartGenerated(msg.chart!)}
-                  className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors block"
+                  className="text-[10px] text-primary hover:text-primary/80 transition-colors block"
                 >
                   Show chart again
                 </button>

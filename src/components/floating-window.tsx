@@ -114,7 +114,7 @@ export function FloatingWindow({
 
   return createPortal(
     <div
-      className="fixed rounded-lg border border-floating-border bg-floating text-floating-foreground shadow-xl flex flex-col overflow-hidden"
+      className="fixed rounded-lg border border-floating-border bg-floating text-floating-foreground shadow-xl ring-1 ring-black/5 flex flex-col overflow-hidden"
       style={{
         left: position.x,
         top: position.y,

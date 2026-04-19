@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 
@@ -7,6 +8,8 @@ interface NavItem { href: string; label: string; icon: string }
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/nurse", label: "Appointments", icon: "📋" },
+  { href: "/nurse/availability", label: "Availability", icon: "🗓️" },
+  { href: "/nurse/records", label: "Patient Records", icon: "📁" },
 ];
 
 /** Match exact path or prefix (with trailing slash guard to prevent /nurse matching /nursery). */
@@ -18,6 +21,18 @@ function isActive(pathname: string, item: NavItem, basePath: string): boolean {
 export default function NurseLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [nurseName, setNurseName] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/nurse/me")
+      .then((res) => {
+        if (res.status === 401) { router.push("/login"); return null; }
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then((data) => { if (data?.name) setNurseName(data.name); })
+      .catch(() => {});
+  }, [router]);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -32,7 +47,8 @@ export default function NurseLayout({ children }: { children: React.ReactNode })
       <aside className="w-60 shrink-0 border-r border-border bg-sidebar text-sidebar-foreground flex flex-col">
         <div className="px-5 py-5 border-b border-sidebar-border">
           <h1 className="text-base font-semibold text-sidebar-foreground">Nurse Portal</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Clinical data is watermarked</p>
+          {nurseName && <p className="text-sm text-sidebar-foreground mt-0.5">{nurseName}</p>}
+          <p className="text-xs text-muted-foreground mt-0.5">Clinical data is watermarked and access-logged</p>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">

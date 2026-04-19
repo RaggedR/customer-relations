@@ -31,6 +31,9 @@ export default function NurseRecordsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Hearing aids per patient — auto-loaded
+  const [hearingAids, setHearingAids] = useState<Record<number, Array<Record<string, unknown>>>>({});
+
   // Which patient's notes are currently visible (null = none)
   const [visiblePatientId, setVisiblePatientId] = useState<number | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -45,7 +48,16 @@ export default function NurseRecordsPage() {
         if (!res.ok) throw new Error("Failed to load patient records");
         return res.json();
       })
-      .then((data) => setPatients(data.patients))
+      .then((data) => {
+        setPatients(data.patients);
+        // Auto-load hearing aids for each patient
+        for (const p of data.patients) {
+          fetch(`/api/nurse/records/${p.patientId}/hearing-aids`)
+            .then((r) => r.ok ? r.json() : [])
+            .then((aids) => setHearingAids((prev) => ({ ...prev, [p.patientId]: aids })))
+            .catch(() => {});
+        }
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
@@ -159,6 +171,21 @@ export default function NurseRecordsPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Hearing aids — auto-loaded */}
+              {(hearingAids[patient.patientId] ?? []).length > 0 && (
+                <div className="border-t border-border px-4 py-2">
+                  <p className="text-[10px] font-medium text-muted-foreground mb-1">Hearing Aids</p>
+                  {(hearingAids[patient.patientId] ?? []).map((aid) => (
+                    <p key={aid.id as number} className="text-xs">
+                      <span className="capitalize">{(aid.ear as string) ?? "—"}</span>
+                      {" — "}
+                      {(aid.make as string) ?? ""} {(aid.model as string) ?? ""}
+                      {aid.serial_number ? ` (S/N: ${aid.serial_number})` : ""}
+                    </p>
+                  ))}
+                </div>
+              )}
 
               {/* Notes panel — only visible when active */}
               {isVisible && notes.length > 0 && (

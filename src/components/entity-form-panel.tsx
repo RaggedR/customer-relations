@@ -141,7 +141,7 @@ export function EntityFormPanel({
         <div
           className={`px-3 py-2 text-xs ${
             message.type === "success"
-              ? "bg-emerald-500/10 text-emerald-400"
+              ? "bg-emerald-50 text-emerald-700"
               : "bg-destructive/10 text-destructive"
           }`}
         >

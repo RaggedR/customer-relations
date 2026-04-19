@@ -18,7 +18,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { getSchema, foreignKeyName, isSensitive } from "@/lib/schema";
+import { getSchema, foreignKeyName, isSensitive, toSnakeCase } from "@/lib/schema";
 import { findAll, findById, create, update, remove, validateEntity } from "@/lib/repository";
 import { getIdempotentResponse, cacheIdempotentResponse, MAX_IDEMPOTENCY_KEY_LENGTH } from "@/lib/idempotency";
 import { adminRoute, adminIdRoute } from "@/lib/middleware";
@@ -59,7 +59,7 @@ export function makeListCreateHandlers(entityName: string) {
       const pageParam = searchParams.get("page");
       const pageSizeParam = searchParams.get("pageSize");
 
-      // Build filter from query params (e.g. ?patientId=5)
+      // Build filter from query params (e.g. ?patientId=5 or ?status=active)
       const filterBy: Record<string, unknown> = {};
       const schema = getSchema();
       const entityConfig = schema.entities[entityName];
@@ -68,6 +68,17 @@ export function makeListCreateHandlers(entityName: string) {
           const fkParam = searchParams.get(foreignKeyName(relName));
           if (fkParam) {
             filterBy[relName] = parseInt(fkParam, 10);
+          }
+        }
+      }
+      // Enum field filters (e.g. ?status=active)
+      if (entityConfig?.fields) {
+        for (const [fieldName, field] of Object.entries(entityConfig.fields)) {
+          if (field.type === "enum" && field.values) {
+            const param = searchParams.get(fieldName);
+            if (param && field.values.includes(param)) {
+              filterBy[toSnakeCase(fieldName)] = param;
+            }
           }
         }
       }

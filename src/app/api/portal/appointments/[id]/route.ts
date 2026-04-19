@@ -17,6 +17,7 @@ export const GET = patientIdRoute()
   .handle(async (ctx) => {
     const appointment = await prisma.appointment.findUnique({
       where: { id: ctx.entityId },
+      include: { nurse: { select: { name: true } } },
     });
 
     if (!appointment || appointment.patientId !== ctx.patient.id) {
@@ -31,6 +32,7 @@ export const GET = patientIdRoute()
       location: appointment.location,
       specialty: appointment.specialty,
       status: appointment.status,
+      nurseName: appointment.nurse?.name ?? null,
       notes: appointment.notes,
     });
   });

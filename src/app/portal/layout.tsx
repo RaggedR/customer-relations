@@ -8,6 +8,8 @@ interface NavItem { href: string; label: string; icon: string }
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/portal", label: "Appointments", icon: "📅" },
+  { href: "/portal/book", label: "Book", icon: "➕" },
+  { href: "/portal/hearing-aids", label: "My Hearing Aids", icon: "🦻" },
   { href: "/portal/profile", label: "My Profile", icon: "👤" },
   { href: "/portal/privacy", label: "Privacy", icon: "🔒" },
 ];
