@@ -26,16 +26,16 @@ interface CalendarPanelProps {
   onSlotClick: (date: string, time: string) => void;
 }
 
-/** 8 distinct colours for nurse colour-coding */
+/** 8 distinct colours for nurse colour-coding (light-mode optimised) */
 const NURSE_COLOURS = [
-  { bg: "bg-blue-500/20", text: "text-blue-300", border: "border-blue-500/40" },
-  { bg: "bg-emerald-500/20", text: "text-emerald-300", border: "border-emerald-500/40" },
-  { bg: "bg-violet-500/20", text: "text-violet-300", border: "border-violet-500/40" },
-  { bg: "bg-amber-500/20", text: "text-amber-300", border: "border-amber-500/40" },
-  { bg: "bg-rose-500/20", text: "text-rose-300", border: "border-rose-500/40" },
-  { bg: "bg-cyan-500/20", text: "text-cyan-300", border: "border-cyan-500/40" },
-  { bg: "bg-orange-500/20", text: "text-orange-300", border: "border-orange-500/40" },
-  { bg: "bg-pink-500/20", text: "text-pink-300", border: "border-pink-500/40" },
+  { bg: "bg-blue-100", text: "text-blue-800", border: "border-blue-200" },
+  { bg: "bg-emerald-100", text: "text-emerald-800", border: "border-emerald-200" },
+  { bg: "bg-violet-100", text: "text-violet-800", border: "border-violet-200" },
+  { bg: "bg-amber-100", text: "text-amber-800", border: "border-amber-200" },
+  { bg: "bg-rose-100", text: "text-rose-800", border: "border-rose-200" },
+  { bg: "bg-cyan-100", text: "text-cyan-800", border: "border-cyan-200" },
+  { bg: "bg-orange-100", text: "text-orange-800", border: "border-orange-200" },
+  { bg: "bg-pink-100", text: "text-pink-800", border: "border-pink-200" },
 ];
 
 const HOURS_START = 7;
@@ -232,7 +232,7 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
                 <div
                   key={i}
                   className={`sticky top-0 z-10 bg-background border-b border-border px-1 py-1.5 text-center text-[10px] font-medium ${
-                    isToday ? "text-blue-400 bg-blue-500/5" : "text-muted-foreground"
+                    isToday ? "text-blue-700 bg-blue-50" : "text-muted-foreground"
                   } ${d.getDay() === 0 || d.getDay() === 6 ? "opacity-50" : ""}`}
                 >
                   {label}
@@ -267,7 +267,7 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
                     <div
                       key={`${slotIdx}-${dayIdx}`}
                       className={`relative border-b border-r border-border/20 cursor-pointer hover:bg-accent/30 transition-colors ${
-                        isToday ? "bg-blue-500/5" : ""
+                        isToday ? "bg-blue-50" : ""
                       } ${isWeekend ? "bg-muted/30" : ""}`}
                       style={{ height: 32 }}
                       onClick={(e) => {
@@ -300,7 +300,7 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
                         const hasHighlightedNurse = highlightNurseId === null ||
                           startingHere.some((a) => a.nurse?.id === highlightNurseId);
                         const pillClass = hasHighlightedNurse
-                          ? "bg-blue-500/30 border-blue-500/50 text-blue-200"
+                          ? "bg-blue-100 border-blue-200 text-blue-800"
                           : "bg-muted/30 border-border text-muted-foreground";
 
                         return (
@@ -353,7 +353,7 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
             ))}
             <div className="border-t border-border mt-0.5">
               <button
-                className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent/50 transition-colors text-blue-400"
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent/50 transition-colors text-primary"
                 onClick={() => {
                   onSlotClick(popup.dateKey, popup.time);
                   setPopup(null);

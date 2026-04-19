@@ -109,7 +109,7 @@ export default function NurseRecordsPage() {
   }
 
   if (loading) return <p className="text-sm text-muted-foreground py-8">Loading patient records...</p>;
-  if (error) return <p className="text-sm text-red-400 py-8">{error}</p>;
+  if (error) return <p className="text-sm text-red-600 py-8">{error}</p>;
 
   return (
     <div className="space-y-6">
@@ -138,7 +138,7 @@ export default function NurseRecordsPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   {isVisible && remainingSeconds > 0 && (
-                    <span className="text-xs text-amber-400 font-mono">
+                    <span className="text-xs text-amber-600 font-mono">
                       {formatCountdown(remainingSeconds)}
                     </span>
                   )}
@@ -147,7 +147,7 @@ export default function NurseRecordsPage() {
                     disabled={notesLoading}
                     className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${
                       isVisible
-                        ? "bg-red-600/20 text-red-400 hover:bg-red-600/30"
+                        ? "bg-red-100 text-red-700 hover:bg-red-200"
                         : "bg-primary/10 text-primary hover:bg-primary/20"
                     } disabled:opacity-50`}
                   >
