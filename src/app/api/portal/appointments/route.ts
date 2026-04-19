@@ -62,33 +62,30 @@ export const POST = patientRoute()
   .named("POST /api/portal/appointments")
   .handle(async (ctx) => {
     const body = await ctx.request.json();
-    const { date, start_time, nurse_id, specialty } = body;
+    const { date, start_time, specialty } = body;
+    const nurse_id = parseInt(body.nurse_id, 10);
 
-    if (!date || !start_time || !nurse_id || !specialty) {
+    if (!date || !start_time || !specialty || isNaN(nurse_id)) {
       return NextResponse.json(
         { error: "date, start_time, nurse_id, and specialty are required" },
         { status: 400 },
       );
     }
 
-    const dateObj = new Date(date);
-
-    // Validate the slot is still available (no existing non-cancelled appointment)
-    const conflict = await prisma.appointment.findFirst({
-      where: {
-        nurseId: nurse_id,
-        date: dateObj,
-        start_time,
-        status: { notIn: ["cancelled"] },
-      },
+    // Validate nurse exists and offers the requested specialty
+    const nurseSpecialty = await prisma.nurseSpecialty.findFirst({
+      where: { nurseId: nurse_id, specialty },
+      include: { nurse: { select: { name: true } } },
     });
 
-    if (conflict) {
+    if (!nurseSpecialty) {
       return NextResponse.json(
-        { error: "This slot is no longer available. Please choose another." },
-        { status: 409 },
+        { error: "Invalid nurse or specialty" },
+        { status: 400 },
       );
     }
+
+    const dateObj = new Date(date);
 
     // Calculate end_time
     const [hours, minutes] = start_time.split(":").map(Number);
@@ -97,24 +94,48 @@ export const POST = patientRoute()
     const endMins = endMinutes % 60;
     const end_time = `${String(endHours).padStart(2, "0")}:${String(endMins).padStart(2, "0")}`;
 
-    // Get nurse name for audit
-    const nurse = await prisma.nurse.findUnique({
-      where: { id: nurse_id },
-      select: { name: true },
-    });
+    // Wrap conflict check + create in a serializable transaction to prevent double-booking
+    let appointment;
+    try {
+      appointment = await prisma.$transaction(async (tx) => {
+        const conflict = await tx.appointment.findFirst({
+          where: {
+            nurseId: nurse_id,
+            date: dateObj,
+            start_time,
+            status: { notIn: ["cancelled"] },
+          },
+        });
 
-    const appointment = await prisma.appointment.create({
-      data: {
-        date: dateObj,
-        start_time,
-        end_time,
-        location: "TBC",
-        specialty,
-        status: "requested",
-        patientId: ctx.patient.id,
-        nurseId: nurse_id,
-      },
-    });
+        if (conflict) {
+          throw Object.assign(new Error("SLOT_UNAVAILABLE"), { code: "SLOT_UNAVAILABLE" });
+        }
+
+        return tx.appointment.create({
+          data: {
+            date: dateObj,
+            start_time,
+            end_time,
+            location: "TBC",
+            specialty,
+            status: "requested",
+            patientId: ctx.patient.id,
+            nurseId: nurse_id,
+          },
+        });
+      }, { isolationLevel: "Serializable" });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === "SLOT_UNAVAILABLE" || code === "P2034") {
+        return NextResponse.json(
+          { error: "This slot is no longer available. Please choose another." },
+          { status: 409 },
+        );
+      }
+      throw err;
+    }
+
+    const nurse = nurseSpecialty.nurse;
 
     ctx.audit({
       action: "book_appointment",

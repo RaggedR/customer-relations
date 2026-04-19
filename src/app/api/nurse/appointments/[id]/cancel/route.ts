@@ -41,14 +41,31 @@ export const POST = nurseIdRoute()
         })
       : null;
 
-    // Direct Prisma: atomic ownership check prevents TOCTOU — repository.update() cannot express WHERE { id, nurseId }
-    await prisma.appointment.update({
-      where: { id: ctx.entityId },
-      data: {
-        status: "cancelled",
-        notes: reason || null,
-      },
-    });
+    // Include nurseId in the WHERE clause so the UPDATE itself is atomic — no
+    // separate ownership check can race with this write.
+    try {
+      await prisma.appointment.update({
+        where: { id: ctx.entityId, nurseId: ctx.nurse.id },
+        data: {
+          status: "cancelled",
+          notes: reason || null,
+        },
+      });
+    } catch (err) {
+      // P2025: record not found (either deleted or reassigned between read and write)
+      if (
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        (err as { code: string }).code === "P2025"
+      ) {
+        return NextResponse.json(
+          { error: "Appointment not found or not assigned to you" },
+          { status: 404 },
+        );
+      }
+      throw err;
+    }
 
     ctx.audit({
       action: "cancel",

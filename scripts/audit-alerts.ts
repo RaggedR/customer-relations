@@ -149,7 +149,7 @@ async function sendAlertEmail(alerts: Alert[]): Promise<void> {
 
 async function main() {
   if (!ALERT_EMAIL) {
-    // No recipient configured — exit silently (don't log every 10 min)
+    console.warn("ALERT_EMAIL not set — audit alerting disabled");
     process.exit(0);
   }
 

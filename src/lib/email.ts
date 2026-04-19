@@ -10,6 +10,22 @@
 
 import { logger } from "@/lib/logger";
 
+// ── HTML escaping ───────────────────────────────────────
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/** Strip CR/LF to prevent SMTP header injection in email subject lines. */
+function sanitiseSubject(str: string): string {
+  return str.replace(/[\r\n]/g, "");
+}
+
 // ── Shared Resend client ────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Resend is an optional dep, dynamically imported
@@ -61,11 +77,11 @@ export async function sendClaimEmail({ to, claimUrl, patientName }: ClaimEmailPa
       to,
       subject: "Set your password — Customer Relations",
       html: `
-        <p>Hi ${patientName},</p>
+        <p>Hi ${escapeHtml(patientName)},</p>
         <p>Your practice has invited you to set up your patient portal account.</p>
-        <p><a href="${claimUrl}">Click here to set your password</a></p>
+        <p><a href="${encodeURI(claimUrl)}">Click here to set your password</a></p>
         <p>This link expires in 24 hours.</p>
-        <p>— ${getPracticeName()}</p>
+        <p>— ${escapeHtml(getPracticeName())}</p>
       `,
     });
     logger.info({ to }, "Claim email sent via Resend");
@@ -96,18 +112,18 @@ export async function sendAppointmentConfirmation(params: AppointmentConfirmatio
     await resend.emails.send({
       from: getFrom(),
       to: params.to,
-      subject: `Appointment confirmed: ${params.specialty} on ${params.date}`,
+      subject: sanitiseSubject(`Appointment confirmed: ${params.specialty} on ${params.date}`),
       html: `
-        <p>Hi ${params.patientName},</p>
+        <p>Hi ${escapeHtml(params.patientName)},</p>
         <p>Your appointment has been confirmed:</p>
         <table style="border-collapse:collapse;margin:16px 0">
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Date</td><td>${params.date}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Time</td><td>${params.startTime}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Type</td><td>${params.specialty}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Location</td><td>${params.location}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Date</td><td>${escapeHtml(params.date)}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Time</td><td>${escapeHtml(params.startTime)}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Type</td><td>${escapeHtml(params.specialty)}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Location</td><td>${escapeHtml(params.location)}</td></tr>
         </table>
-        <p>If you need to change or cancel this appointment, please contact ${getPracticeName()}.</p>
-        <p>— ${getPracticeName()}</p>
+        <p>If you need to change or cancel this appointment, please contact ${escapeHtml(getPracticeName())}.</p>
+        <p>— ${escapeHtml(getPracticeName())}</p>
       `,
     });
     logger.info({ to: params.to }, "Appointment confirmation email sent");
@@ -137,26 +153,26 @@ export async function sendCancellationToPatient(params: CancellationToPatientPar
 
   const portalUrl = params.portalUrl || process.env.PORTAL_URL;
   const rebookLine = portalUrl
-    ? `<p><a href="${portalUrl}/book">Click here to book a new appointment</a></p>`
-    : `<p>Please contact ${getPracticeName()} to reschedule.</p>`;
+    ? `<p><a href="${encodeURI(portalUrl)}/book">Click here to book a new appointment</a></p>`
+    : `<p>Please contact ${escapeHtml(getPracticeName())} to reschedule.</p>`;
 
   try {
     await resend.emails.send({
       from: getFrom(),
       to: params.to,
-      subject: `Appointment cancelled: ${params.specialty} on ${params.date}`,
+      subject: sanitiseSubject(`Appointment cancelled: ${params.specialty} on ${params.date}`),
       html: `
-        <p>Hi ${params.patientName},</p>
+        <p>Hi ${escapeHtml(params.patientName)},</p>
         <p>Unfortunately, your appointment has been cancelled:</p>
         <table style="border-collapse:collapse;margin:16px 0">
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Date</td><td>${params.date}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Time</td><td>${params.startTime}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Type</td><td>${params.specialty}</td></tr>
-          ${params.reason ? `<tr><td style="padding:4px 16px 4px 0;font-weight:bold">Reason</td><td>${params.reason}</td></tr>` : ""}
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Date</td><td>${escapeHtml(params.date)}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Time</td><td>${escapeHtml(params.startTime)}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Type</td><td>${escapeHtml(params.specialty)}</td></tr>
+          ${params.reason ? `<tr><td style="padding:4px 16px 4px 0;font-weight:bold">Reason</td><td>${escapeHtml(params.reason)}</td></tr>` : ""}
         </table>
         ${rebookLine}
         <p>We apologise for the inconvenience.</p>
-        <p>— ${getPracticeName()}</p>
+        <p>— ${escapeHtml(getPracticeName())}</p>
       `,
     });
     logger.info({ to: params.to }, "Cancellation email sent to patient");
@@ -194,16 +210,16 @@ export async function sendCancellationToAdmin(params: CancellationToAdminParams)
     await resend.emails.send({
       from: getFrom(),
       to: adminEmail,
-      subject: `Appointment #${params.appointmentId} cancelled by ${params.nurseName}`,
+      subject: sanitiseSubject(`Appointment #${params.appointmentId} cancelled by ${params.nurseName}`),
       html: `
-        <p>${params.nurseName} has cancelled an appointment:</p>
+        <p>${escapeHtml(params.nurseName)} has cancelled an appointment:</p>
         <table style="border-collapse:collapse;margin:16px 0">
           <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Appointment</td><td>#${params.appointmentId}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Patient</td><td>${params.patientName}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Date</td><td>${params.date}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Time</td><td>${params.startTime}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Type</td><td>${params.specialty}</td></tr>
-          ${params.reason ? `<tr><td style="padding:4px 16px 4px 0;font-weight:bold">Reason</td><td>${params.reason}</td></tr>` : ""}
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Patient</td><td>${escapeHtml(params.patientName)}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Date</td><td>${escapeHtml(params.date)}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Time</td><td>${escapeHtml(params.startTime)}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Type</td><td>${escapeHtml(params.specialty)}</td></tr>
+          ${params.reason ? `<tr><td style="padding:4px 16px 4px 0;font-weight:bold">Reason</td><td>${escapeHtml(params.reason)}</td></tr>` : ""}
         </table>
         <p>The patient has been emailed to reschedule.</p>
       `,
@@ -236,18 +252,18 @@ export async function sendAppointmentReminder(params: ReminderParams): Promise<v
     await resend.emails.send({
       from: getFrom(),
       to: params.to,
-      subject: `Reminder: ${params.specialty} appointment on ${params.date}`,
+      subject: sanitiseSubject(`Reminder: ${params.specialty} appointment on ${params.date}`),
       html: `
-        <p>Hi ${params.patientName},</p>
+        <p>Hi ${escapeHtml(params.patientName)},</p>
         <p>This is a reminder about your upcoming appointment:</p>
         <table style="border-collapse:collapse;margin:16px 0">
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Date</td><td>${params.date}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Time</td><td>${params.startTime}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Type</td><td>${params.specialty}</td></tr>
-          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Location</td><td>${params.location}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Date</td><td>${escapeHtml(params.date)}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Time</td><td>${escapeHtml(params.startTime)}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Type</td><td>${escapeHtml(params.specialty)}</td></tr>
+          <tr><td style="padding:4px 16px 4px 0;font-weight:bold">Location</td><td>${escapeHtml(params.location)}</td></tr>
         </table>
-        <p>If you need to change or cancel, please contact ${getPracticeName()}.</p>
-        <p>— ${getPracticeName()}</p>
+        <p>If you need to change or cancel, please contact ${escapeHtml(getPracticeName())}.</p>
+        <p>— ${escapeHtml(getPracticeName())}</p>
       `,
     });
     logger.info({ to: params.to }, "Appointment reminder email sent");
