@@ -64,11 +64,23 @@ export default function NurseAppointmentDetailPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
 
+  // Hearing aids — auto-loaded on page open
+  const [hearingAids, setHearingAids] = useState<Array<Record<string, unknown>>>([]);
+
   // Load appointment details only (NOT notes — those are on-demand)
   useEffect(() => {
     fetch(`/api/nurse/appointments/${id}`)
       .then((r) => r.ok ? r.json() : null)
-      .then(setAppointment)
+      .then((data) => {
+        setAppointment(data);
+        // Auto-load hearing aids once we have the appointment
+        if (data) {
+          fetch(`/api/nurse/appointments/${id}/hearing-aids`)
+            .then((r) => r.ok ? r.json() : [])
+            .then(setHearingAids)
+            .catch(() => {});
+        }
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [id]);
@@ -236,6 +248,27 @@ export default function NurseAppointmentDetailPage() {
               </div>
             </form>
           )}
+        </div>
+      )}
+
+      {/* Hearing aids — auto-loaded, read-only */}
+      {hearingAids.length > 0 && (
+        <div className="rounded-lg border border-border p-4">
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">Hearing Aids</h3>
+          <div className="space-y-2">
+            {hearingAids.map((aid) => (
+              <div key={aid.id as number} className="text-sm flex items-center justify-between">
+                <span>
+                  <span className="font-medium capitalize">{(aid.ear as string) ?? "—"}</span>
+                  {" — "}
+                  {(aid.make as string) ?? ""} {(aid.model as string) ?? ""}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {aid.serial_number ? `S/N: ${aid.serial_number}` : ""}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

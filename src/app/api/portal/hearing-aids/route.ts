@@ -33,6 +33,7 @@ export const GET = patientRoute()
     ctx.audit({
       action: "view_hearing_aids",
       entity: "hearing_aid",
+      entityId: String(ctx.patient.id),
       details: `Patient viewed ${aids.length} hearing aid(s)`,
     });
 

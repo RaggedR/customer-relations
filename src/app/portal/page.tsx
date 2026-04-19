@@ -107,7 +107,7 @@ function AppointmentCard({ appointment: appt, muted }: { appointment: Appointmen
           </p>
         </div>
         <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full border ${STATUS_STYLES[appt.status] ?? STATUS_FALLBACK}`}>
-          {appt.status?.replace("_", " ")}
+          {appt.status?.replaceAll("_", " ")}
         </span>
       </div>
       <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">

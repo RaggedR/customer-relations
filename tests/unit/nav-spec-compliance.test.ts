@@ -12,6 +12,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+// @ts-expect-error — js-yaml has no type declarations
 import { load } from "js-yaml";
 
 const ROOT = resolve(__dirname, "../..");
@@ -111,6 +112,37 @@ describe("patient portal visible fields", () => {
     for (const field of visibleFields) {
       expect(profilePage, `Missing visible field: ${field}`).toContain(field);
     }
+  });
+});
+
+// ── Nurse Portal Features ─────────────────────────────────────────
+
+describe("nurse portal features", () => {
+  it("appointment detail page fetches hearing aids", () => {
+    const apptPage = readSrc("src/app/nurse/appointments/[id]/page.tsx");
+    expect(apptPage).toContain("/hearing-aids");
+  });
+
+  it("records page fetches hearing aids per patient", () => {
+    const recordsPage = readSrc("src/app/nurse/records/page.tsx");
+    expect(recordsPage).toContain("/hearing-aids");
+  });
+
+  it("hearing aids API route exists for nurse appointments", () => {
+    expect(() => readSrc("src/app/api/nurse/appointments/[id]/hearing-aids/route.ts")).not.toThrow();
+  });
+
+  it("hearing aids API route exists for nurse records", () => {
+    expect(() => readSrc("src/app/api/nurse/records/[id]/hearing-aids/route.ts")).not.toThrow();
+  });
+});
+
+// ── Patient Portal Features ───────────────────────────────────────
+
+describe("patient portal features", () => {
+  it("hearing aids page has privacy banner", () => {
+    const page = readSrc("src/app/portal/hearing-aids/page.tsx");
+    expect(page).toContain("private health information");
   });
 });
 
