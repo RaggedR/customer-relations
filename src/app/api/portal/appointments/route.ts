@@ -65,15 +65,11 @@ export const POST = patientRoute()
     const { date, start_time, specialty } = body;
     const nurse_id = parseInt(body.nurse_id, 10);
 
-    if (!date || !start_time || !nurse_id || !specialty) {
+    if (!date || !start_time || !specialty || isNaN(nurse_id)) {
       return NextResponse.json(
         { error: "date, start_time, nurse_id, and specialty are required" },
         { status: 400 },
       );
-    }
-
-    if (isNaN(nurse_id)) {
-      return NextResponse.json({ error: "nurse_id must be a valid integer" }, { status: 400 });
     }
 
     // Validate nurse exists and offers the requested specialty
@@ -129,7 +125,8 @@ export const POST = patientRoute()
         });
       }, { isolationLevel: "Serializable" });
     } catch (err) {
-      if (err instanceof Error && (err as NodeJS.ErrnoException).code === "SLOT_UNAVAILABLE") {
+      const code = (err as { code?: string }).code;
+      if (code === "SLOT_UNAVAILABLE" || code === "P2034") {
         return NextResponse.json(
           { error: "This slot is no longer available. Please choose another." },
           { status: 409 },

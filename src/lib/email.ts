@@ -21,6 +21,11 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
+/** Strip CR/LF to prevent SMTP header injection in email subject lines. */
+function sanitiseSubject(str: string): string {
+  return str.replace(/[\r\n]/g, "");
+}
+
 // ── Shared Resend client ────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Resend is an optional dep, dynamically imported
@@ -107,7 +112,7 @@ export async function sendAppointmentConfirmation(params: AppointmentConfirmatio
     await resend.emails.send({
       from: getFrom(),
       to: params.to,
-      subject: `Appointment confirmed: ${params.specialty} on ${params.date}`,
+      subject: sanitiseSubject(`Appointment confirmed: ${params.specialty} on ${params.date}`),
       html: `
         <p>Hi ${escapeHtml(params.patientName)},</p>
         <p>Your appointment has been confirmed:</p>
@@ -155,7 +160,7 @@ export async function sendCancellationToPatient(params: CancellationToPatientPar
     await resend.emails.send({
       from: getFrom(),
       to: params.to,
-      subject: `Appointment cancelled: ${params.specialty} on ${params.date}`,
+      subject: sanitiseSubject(`Appointment cancelled: ${params.specialty} on ${params.date}`),
       html: `
         <p>Hi ${escapeHtml(params.patientName)},</p>
         <p>Unfortunately, your appointment has been cancelled:</p>
@@ -205,7 +210,7 @@ export async function sendCancellationToAdmin(params: CancellationToAdminParams)
     await resend.emails.send({
       from: getFrom(),
       to: adminEmail,
-      subject: `Appointment #${params.appointmentId} cancelled by ${params.nurseName}`,
+      subject: sanitiseSubject(`Appointment #${params.appointmentId} cancelled by ${params.nurseName}`),
       html: `
         <p>${escapeHtml(params.nurseName)} has cancelled an appointment:</p>
         <table style="border-collapse:collapse;margin:16px 0">
@@ -247,7 +252,7 @@ export async function sendAppointmentReminder(params: ReminderParams): Promise<v
     await resend.emails.send({
       from: getFrom(),
       to: params.to,
-      subject: `Reminder: ${params.specialty} appointment on ${params.date}`,
+      subject: sanitiseSubject(`Reminder: ${params.specialty} appointment on ${params.date}`),
       html: `
         <p>Hi ${escapeHtml(params.patientName)},</p>
         <p>This is a reminder about your upcoming appointment:</p>
