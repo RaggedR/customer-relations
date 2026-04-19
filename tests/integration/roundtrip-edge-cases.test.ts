@@ -100,11 +100,8 @@ describe("Edge Case Roundtrip", () => {
     expect(importRes.ok).toBe(true);
     const summary = await importRes.json();
 
-    // All our edge-case records should survive
-    const edgeErrors = summary.errors.filter((e: string) =>
-      e.includes("RT-EDGE")
-    );
-    expect(edgeErrors).toHaveLength(0);
+    // No rows should be skipped — catches name-resolution failures too
+    expect(summary.skipped).toBe(0);
 
     // Verify the quotes survived
     const reimported = (await findAll("hearing_aid", {

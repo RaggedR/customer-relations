@@ -33,6 +33,13 @@ function buildColumns(entityName: string) {
     for (const [relName, rel] of Object.entries(entity.relations)) {
       const parentEntity = schema.entities[rel.entity];
       if (parentEntity?.fields.name) {
+        // FK ID column — enables exact roundtrip (same-database reimport)
+        const idLabel = rel.entity.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + " ID";
+        columns.push({
+          key: `${relName}_id`,
+          header: idLabel,
+        });
+        // Name column — human-readable, used as fallback for cross-database import
         const headerLabel = headers[relName] ??
           rel.entity.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + " Name";
         columns.push({
@@ -68,6 +75,16 @@ function flattenRow(
   const row: Record<string, string> = {};
 
   for (const col of columns) {
+    // Handle parent relation ID columns
+    if (col.key.endsWith("_id") && entity.relations) {
+      const relName = col.key.replace(/_id$/, "");
+      if (entity.relations[relName]) {
+        const parent = item[relName] as Row | null;
+        row[col.key] = parent ? String(parent.id ?? "") : "";
+        continue;
+      }
+    }
+
     // Handle parent relation name columns
     if (col.key.endsWith("_name") && entity.relations) {
       const relName = col.key.replace(/_name$/, "");

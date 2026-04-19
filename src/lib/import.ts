@@ -54,6 +54,8 @@ function buildHeaderMap(entityName: string): Record<string, string> {
       map[relName.toLowerCase()] = relName;
       map[`${relName} name`] = `${relName}_name`;
       map[`${relName}_name`] = `${relName}_name`;
+      map[`${relName} id`] = `${relName}_id`;
+      map[`${relName}_id`] = `${relName}_id`;
     }
   }
 
@@ -332,13 +334,20 @@ function resolveRelations(
   if (!entity.relations) return data;
 
   for (const [relName, rel] of Object.entries(entity.relations)) {
+    const idKey = `${relName}_id`;
     const nameKey = `${relName}_name`;
+    const rawId = data[idKey];
     const rawName = data[nameKey] ?? data[relName];
 
-    // Remove the name field — it's not a real schema field
+    // Remove synthetic fields — they're not real schema fields
+    delete data[idKey];
     delete data[nameKey];
 
-    if (rawName && typeof rawName === "string") {
+    // Prefer FK ID (exact pointer — same-database roundtrip)
+    if (rawId && !isNaN(Number(rawId))) {
+      data[relName] = Number(rawId);
+    } else if (rawName && typeof rawName === "string") {
+      // Fall back to name resolution (cross-database import)
       const map = relationMaps[relName];
       const name = rawName.toLowerCase().trim();
       const id = map?.get(name);
