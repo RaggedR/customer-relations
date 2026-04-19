@@ -26,15 +26,6 @@ export default function PortalBookPage() {
 
   // Load available specialties
   useEffect(() => {
-    fetch("/api/slots?specialty=_list")
-      .then(() => {
-        // Use a dedicated endpoint or parse from schema
-        // For now, fetch specialties from the nurse_specialty table via a simple approach
-        return fetch("/api/schema?entity=nurse_specialty");
-      })
-      .catch(() => {});
-
-    // Simpler approach: fetch all specialties from a lightweight API
     fetch("/api/nurse-specialties")
       .then((r) => r.ok ? r.json() : { specialties: [] })
       .then((data) => setSpecialties(data.specialties ?? []))

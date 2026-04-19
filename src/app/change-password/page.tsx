@@ -5,14 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-const PASSWORD_RULES = [
-  { label: "At least 8 characters", test: (p: string) => p.length >= 8 },
-  { label: "At least one uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
-  { label: "At least one lowercase letter", test: (p: string) => /[a-z]/.test(p) },
-  { label: "At least one digit", test: (p: string) => /[0-9]/.test(p) },
-  { label: "At least one special character", test: (p: string) => /[^A-Za-z0-9]/.test(p) },
-];
+import { PASSWORD_STRENGTH_RULES } from "@/lib/password-rules";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -22,8 +15,8 @@ export default function ChangePasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const ruleResults = PASSWORD_RULES.map((r) => ({
-    label: r.label,
+  const ruleResults = PASSWORD_STRENGTH_RULES.map((r) => ({
+    label: r.message,
     met: r.test(newPassword),
   }));
   const allRulesMet = ruleResults.every((r) => r.met);
@@ -54,19 +47,14 @@ export default function ChangePasswordPage() {
         return;
       }
 
-      // Fetch user info to determine role-based redirect
-      // The session cookie is still valid, just the password changed
-      const meRes = await fetch("/api/nurse/me").catch(() => null);
-      if (meRes?.ok) {
+      // Role-based redirect using the role returned by the API
+      const role = data.role;
+      if (role === "nurse") {
         router.push("/nurse");
+      } else if (role === "patient") {
+        router.push("/portal");
       } else {
-        // Fallback: try portal, then admin
-        const portalRes = await fetch("/api/portal/profile").catch(() => null);
-        if (portalRes?.ok) {
-          router.push("/portal");
-        } else {
-          router.push("/");
-        }
+        router.push("/");
       }
     } catch {
       setError("Network error — please try again");

@@ -71,49 +71,13 @@ export function PropertyPanel({
     };
   }, []);
 
-  // Load data on mount: notes auto-show, other entities fetch list
-  useEffect(() => {
-    if (isNoteEntity) {
-      // Load notes directly — don't go through handleShowNotes (which toggles)
-      let cancelled = false;
-      setNotesLoading(true);
-      fetch(`/api/admin/notes/${parentId}`)
-        .then((r) => { if (!r.ok) throw new Error("Failed to load notes"); return r.json(); })
-        .then((data) => {
-          if (cancelled) return;
-          const filtered = entityName === "clinical_note"
-            ? data.notes.filter((n: WatermarkedNote) => n.noteType !== "personal_note")
-            : data.notes.filter((n: WatermarkedNote) => n.noteType === "personal_note");
-          setNotes(filtered);
-          setNotesVisible(true);
-          setRemainingSeconds(AUTO_CLOSE_MS / 1000);
-          closeTimerRef.current = setTimeout(closeNotes, AUTO_CLOSE_MS);
-          countdownRef.current = setInterval(() => {
-            setRemainingSeconds((prev) => prev <= 1 ? 0 : prev - 1);
-          }, 1000);
-        })
-        .catch((err) => console.error("Failed to load notes:", err))
-        .finally(() => { if (!cancelled) setNotesLoading(false); });
-      return () => { cancelled = true; };
-    }
-    setLoading(true);
-    fetch(`/api/${entityName}?${parentKey}=${parentId}`)
-      .then((r) => r.json())
-      .then((data: Record<string, unknown>[]) => {
-        setItems(Array.isArray(data) ? data : []);
-      })
-      .catch((err) => console.error(`Failed to load ${entityName}:`, err))
-      .finally(() => setLoading(false));
-  }, [entityName, parentId, parentKey, isNoteEntity]);
-
-  async function handleShowNotes() {
-    if (notesVisible) { closeNotes(); return; }
+  /** Fetch, filter, and display notes — shared by auto-load and toggle. */
+  async function loadNotes() {
     setNotesLoading(true);
     try {
       const res = await fetch(`/api/admin/notes/${parentId}`);
       if (!res.ok) throw new Error("Failed to load notes");
       const data = await res.json();
-      // Filter to only the note type matching this entity
       const filtered = entityName === "clinical_note"
         ? data.notes.filter((n: WatermarkedNote) => n.noteType !== "personal_note")
         : data.notes.filter((n: WatermarkedNote) => n.noteType === "personal_note");
@@ -129,6 +93,27 @@ export function PropertyPanel({
     } finally {
       setNotesLoading(false);
     }
+  }
+
+  // Auto-load notes on mount; other entities fetch their list
+  useEffect(() => {
+    if (isNoteEntity) {
+      loadNotes();
+      return;
+    }
+    setLoading(true);
+    fetch(`/api/${entityName}?${parentKey}=${parentId}`)
+      .then((r) => r.json())
+      .then((data: Record<string, unknown>[]) => {
+        setItems(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => console.error(`Failed to load ${entityName}:`, err))
+      .finally(() => setLoading(false));
+  }, [entityName, parentId, parentKey, isNoteEntity]);
+
+  function handleShowNotes() {
+    if (notesVisible) { closeNotes(); return; }
+    loadNotes();
   }
 
   function formatCountdown(seconds: number): string {

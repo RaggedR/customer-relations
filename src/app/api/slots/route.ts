@@ -41,6 +41,18 @@ export const GET = publicRoute()
     toDefault.setDate(toDefault.getDate() + 30);
     const to = toStr ? new Date(toStr) : toDefault;
 
+    // Validate dates and clamp range (public endpoint — prevent resource exhaustion)
+    if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+      return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
+    }
+    const MAX_RANGE_DAYS = 60;
+    if ((to.getTime() - from.getTime()) / 86_400_000 > MAX_RANGE_DAYS) {
+      return NextResponse.json(
+        { error: `Date range cannot exceed ${MAX_RANGE_DAYS} days` },
+        { status: 400 },
+      );
+    }
+
     // 1. Find nurses with the requested specialty
     const nurseSpecialties = await prisma.nurseSpecialty.findMany({
       where: { specialty: { equals: specialty, mode: "insensitive" } },

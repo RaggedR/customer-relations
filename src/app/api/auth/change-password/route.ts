@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
       context: { ...ctx, userId: user.id },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, role: session.role });
   } catch (error) {
     logger.error({ err: error, correlationId: ctx.correlationId }, "Change password error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

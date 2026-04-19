@@ -56,25 +56,10 @@ export async function verifyPassword(
 }
 
 // ── Password strength ────────────────────────────────────
+// Rules and validation live in password-rules.ts (no node:crypto dependency)
+// so they can be imported by both server and client code.
 
-const STRENGTH_RULES: { test: (p: string) => boolean; message: string }[] = [
-  { test: (p) => p.length >= 8, message: "At least 8 characters" },
-  { test: (p) => /[A-Z]/.test(p), message: "At least one uppercase letter" },
-  { test: (p) => /[a-z]/.test(p), message: "At least one lowercase letter" },
-  { test: (p) => /[0-9]/.test(p), message: "At least one digit" },
-  { test: (p) => /[^A-Za-z0-9]/.test(p), message: "At least one special character" },
-];
-
-/**
- * Validate password strength. Returns an array of unmet rule messages.
- * Empty array = password is strong enough.
- */
-export function validatePasswordStrength(password: string): string[] {
-  return STRENGTH_RULES.filter((r) => !r.test(password)).map((r) => r.message);
-}
-
-/** The rules as plain strings — used by the frontend for live feedback. */
-export const PASSWORD_RULES = STRENGTH_RULES.map((r) => r.message);
+export { validatePasswordStrength, PASSWORD_STRENGTH_RULES } from "./password-rules";
 
 // ── Password generation ─────────────────────────────────
 
@@ -117,8 +102,15 @@ export function generateStrongPassword(): string {
   return chars.join("");
 }
 
-/** Crypto-safe random int in [0, max). */
+/**
+ * Crypto-safe random int in [0, max) using rejection sampling.
+ * Avoids modulo bias by discarding values >= the largest multiple of max.
+ */
 function randomInt(max: number): number {
-  const bytes = randomBytes(4);
-  return bytes.readUInt32BE(0) % max;
+  const limit = Math.floor(0x100000000 / max) * max;
+  let val: number;
+  do {
+    val = randomBytes(4).readUInt32BE(0);
+  } while (val >= limit);
+  return val % max;
 }
