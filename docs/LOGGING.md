@@ -168,14 +168,20 @@ system boundary. The `details` field records what was sent.
 | Action          | Trigger                                          | Logged By                  |
 |-----------------|--------------------------------------------------|----------------------------|
 | `access_denied` | Authenticated user lacks the required role        | `withRole` middleware      |
+| `access_denied` | Nurse attempts to view a non-assigned patient's notes | `api/nurse/records/[id]/notes` |
+| `access_denied` | Nurse attempts to view another nurse's appointment | `api/nurse/appointments/[id]` |
 
-The `details` field includes: user ID, their actual role, the required role,
-the HTTP method, and the URL path. Example: `"user #7 (role=nurse) denied
-access requiring admin role — GET /api/patient"`.
+**Role-level failures** (via `withRole`): the `details` field includes user ID,
+their actual role, the required role, the HTTP method, and the URL path.
+Example: `"user #7 (role=nurse) denied access requiring admin role — GET /api/patient"`.
 
-This covers all role-escalation attempts across the entire application. A
-nurse trying to access admin endpoints, or a patient trying to access nurse
-endpoints, will always produce an audit entry.
+**Cross-patient access** (nurse records): the `details` field identifies the
+nurse and the patient they attempted to access. Example: `"nurse Sarah
+(nurse #3) attempted to view notes for non-assigned patient #42"`. This is
+logged as a HIGH severity event in the audit alert scanner.
+
+This covers all role-escalation attempts and cross-patient snooping across
+the application.
 
 ### Generic Entity CRUD
 
@@ -323,6 +329,34 @@ False positives are rare:
 detection (e.g. "nurse viewed 10x more records than usual") requires baseline
 data, tuning, and generates false positives during busy clinic days. The
 rule-based approach is transparent, predictable, and auditable.
+
+## Weekly Access Report
+
+A weekly summary is emailed to the practice owner (`ADMIN_EMAIL`) every Monday
+morning via `scripts/weekly-access-report.ts`. This report is **always sent**,
+even when there is no suspicious activity — a "no suspicious activity" message
+provides positive confirmation that the system is being monitored.
+
+**Setup:**
+
+```bash
+# Run every Monday at 7am
+0 7 * * 1 cd /path/to/customer-relations && npx tsx scripts/weekly-access-report.ts
+```
+
+**Report contents:**
+
+| Section | Description |
+|---------|-------------|
+| Suspicious activity summary | Count of `access_denied`, `login_failed`, `carddav_auth_failed` events — or a green "no suspicious activity" banner |
+| Patient record access table | Who accessed which patient records (user, role, record type, patient ID, view count) |
+| Data exports & disclosures | Any `export` or `ai_external_disclosure` events with timestamps |
+
+The report covers the preceding 7 days. It aggregates access events by user,
+entity type, and patient — so Clare sees "Nurse Sarah viewed clinical_note
+for Patient #42: 5 times" rather than 5 individual rows.
+
+See [EMAIL.md](EMAIL.md) for full email documentation and crontab summary.
 
 ## Architecture
 
