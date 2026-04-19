@@ -89,7 +89,7 @@ describe("vCard Round-Trip: patient", () => {
     // We expect this to be lossy. If it ever becomes lossless (bug fixed),
     // this assertion will still pass.
     expect(typeof roundTripped).toBe("string");
-    expect(roundTripped!.length).toBeGreaterThan(0);
+    expect((roundTripped as string).length).toBeGreaterThan(0);
   });
 });
 
