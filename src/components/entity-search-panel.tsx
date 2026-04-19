@@ -57,8 +57,6 @@ export function EntitySearchPanel({ entityName, entity, onItemSelect }: EntitySe
     return () => clearTimeout(timeout);
   }, [fetchItems]);
 
-  // Items are filtered server-side via query params
-  const filtered = items;
 
   if (selectedItem) {
     return (
@@ -109,13 +107,13 @@ export function EntitySearchPanel({ entityName, entity, onItemSelect }: EntitySe
       <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>
-        ) : filtered.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="p-4 text-center text-sm text-muted-foreground">
             No {entityName}s found
           </div>
         ) : (
           <div className="divide-y divide-floating-border">
-            {filtered.map((item) => (
+            {items.map((item) => (
               <ResultRow
                 key={item.id as number}
                 entityName={entityName}

@@ -34,7 +34,7 @@ const NOTE_TYPE_LABELS: Record<string, string> = {
   progress_note: "Progress Note",
   discharge_summary: "Discharge Summary",
   treatment_plan: "Treatment Plan",
-  personal_note: "Personal Note",
+  personal: "Personal Note",
 };
 
 const AUTO_CLOSE_MS = 5 * 60 * 1000; // 5 minutes
@@ -352,7 +352,7 @@ export default function NurseAppointmentDetailPage() {
           <option value="initial_assessment">Initial Assessment</option>
           <option value="discharge_summary">Discharge Summary</option>
           <option value="treatment_plan">Treatment Plan</option>
-          <option value="personal_note">Personal Note</option>
+          <option value="personal">Personal Note</option>
         </select>
         <textarea
           value={noteContent}

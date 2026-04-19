@@ -20,6 +20,14 @@ export const GET = nurseIdRoute()
     });
 
     if (!appointment || appointment.nurseId !== ctx.nurse.id) {
+      if (appointment) {
+        ctx.audit({
+          action: "access_denied",
+          entity: "hearing_aid",
+          entityId: String(ctx.entityId),
+          details: `Nurse ${ctx.nurse.name} attempted to view hearing aids for non-assigned appointment #${ctx.entityId}`,
+        });
+      }
       return NextResponse.json(
         { error: "Appointment not found or not assigned to you" },
         { status: 404 },
