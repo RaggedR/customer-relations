@@ -100,7 +100,7 @@ export default function PortalBookPage() {
   if (success) {
     return (
       <div className="space-y-4 py-8 text-center">
-        <h2 className="text-xl font-semibold text-green-400">Appointment Requested</h2>
+        <h2 className="text-xl font-semibold text-emerald-700">Appointment Requested</h2>
         <p className="text-sm text-muted-foreground">
           Your appointment has been submitted. You&apos;ll be redirected to your appointments shortly.
         </p>
@@ -127,7 +127,7 @@ export default function PortalBookPage() {
         </select>
       </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
       {/* Step 2: Available slots */}
       {loading && <p className="text-sm text-muted-foreground">Loading available slots...</p>}
@@ -160,7 +160,7 @@ export default function PortalBookPage() {
                         onClick={() => setSelectedSlot(slot)}
                         className={`rounded border px-3 py-2 text-sm transition-colors ${
                           isSelected
-                            ? "border-green-500 bg-green-500/20 text-green-400"
+                            ? "border-emerald-500 bg-emerald-100 text-emerald-800"
                             : "border-border hover:border-foreground/30"
                         }`}
                       >
@@ -205,7 +205,7 @@ export default function PortalBookPage() {
                 <span>{selectedSlot.nurse_name}</span>
               </div>
             </div>
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex gap-3">
               <button
                 onClick={handleBook}

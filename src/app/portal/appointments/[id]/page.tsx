@@ -15,14 +15,7 @@ interface AppointmentDetail {
   notes: string | null;
 }
 
-const STATUS_COLOURS: Record<string, string> = {
-  confirmed: "bg-green-500/20 text-green-400",
-  requested: "bg-amber-500/20 text-amber-400",
-  completed: "bg-blue-500/20 text-blue-400",
-  cancelled: "bg-red-500/20 text-red-400",
-  no_show: "bg-gray-500/20 text-gray-400",
-  scheduled: "bg-purple-500/20 text-purple-400",
-};
+import { STATUS_STYLES, STATUS_FALLBACK } from "@/lib/status-styles";
 
 export default function PortalAppointmentDetailPage({
   params,
@@ -49,7 +42,7 @@ export default function PortalAppointmentDetailPage({
   }, [id]);
 
   if (loading) return <p className="text-sm text-muted-foreground py-8">Loading appointment...</p>;
-  if (error) return <p className="text-sm text-red-400 py-8">{error}</p>;
+  if (error) return <p className="text-sm text-red-600 py-8">{error}</p>;
   if (!appointment) return null;
 
   const dateStr = new Date(appointment.date).toLocaleDateString("en-AU", {
@@ -70,7 +63,7 @@ export default function PortalAppointmentDetailPage({
 
       <div className="flex items-center gap-3">
         <h2 className="text-xl font-semibold">{dateStr}</h2>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLOURS[appointment.status] ?? "bg-gray-500/20 text-gray-400"}`}>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[appointment.status] ?? STATUS_FALLBACK}`}>
           {appointment.status?.replace("_", " ")}
         </span>
       </div>

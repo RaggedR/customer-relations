@@ -116,7 +116,7 @@ export default function ChangePasswordPage() {
                     key={r.label}
                     className={
                       r.met
-                        ? "text-emerald-400"
+                        ? "text-emerald-700"
                         : "text-muted-foreground"
                     }
                   >

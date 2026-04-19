@@ -181,7 +181,7 @@ export default function NurseAppointmentDetailPage() {
   }
 
   if (loading) return <p className="text-sm text-muted-foreground py-8">Loading...</p>;
-  if (error) return <p className="text-sm text-red-400 py-8">{error}</p>;
+  if (error) return <p className="text-sm text-red-600 py-8">{error}</p>;
 
   return (
     <div className="space-y-6">
@@ -203,7 +203,7 @@ export default function NurseAppointmentDetailPage() {
           {appointment.status !== "cancelled" && !showCancelForm && (
             <button
               onClick={() => setShowCancelForm(true)}
-              className="text-xs text-red-400 hover:text-red-300 mt-2"
+              className="text-xs text-red-600 hover:text-red-700 mt-2"
             >
               Cancel appointment
             </button>
@@ -253,7 +253,7 @@ export default function NurseAppointmentDetailPage() {
           </h3>
           <div className="flex items-center gap-3">
             {notesVisible && remainingSeconds > 0 && (
-              <span className="text-xs text-amber-400 font-mono">
+              <span className="text-xs text-amber-600 font-mono">
                 {formatCountdown(remainingSeconds)}
               </span>
             )}
@@ -262,7 +262,7 @@ export default function NurseAppointmentDetailPage() {
               disabled={notesLoading}
               className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${
                 notesVisible
-                  ? "bg-red-600/20 text-red-400 hover:bg-red-600/30"
+                  ? "bg-red-100 text-red-700 hover:bg-red-200"
                   : "bg-primary/10 text-primary hover:bg-primary/20"
               } disabled:opacity-50`}
             >
