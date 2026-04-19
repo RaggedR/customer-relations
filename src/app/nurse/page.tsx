@@ -15,12 +15,13 @@ interface Appointment {
   patientId: number;
 }
 
-const STATUS_COLOURS: Record<string, string> = {
-  confirmed: "bg-green-500/20 text-green-400",
-  requested: "bg-amber-500/20 text-amber-400",
-  completed: "bg-blue-500/20 text-blue-400",
-  cancelled: "bg-red-500/20 text-red-400",
-  no_show: "bg-gray-500/20 text-gray-400",
+const STATUS_STYLES: Record<string, string> = {
+  confirmed: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  requested: "bg-amber-100 text-amber-800 border-amber-200",
+  completed: "bg-sky-100 text-sky-800 border-sky-200",
+  cancelled: "bg-red-100 text-red-800 border-red-200",
+  no_show: "bg-gray-100 text-gray-700 border-gray-200",
+  scheduled: "bg-violet-100 text-violet-800 border-violet-200",
 };
 
 export default function NurseAppointmentsPage() {
@@ -40,7 +41,7 @@ export default function NurseAppointmentsPage() {
   }, []);
 
   if (loading) return <p className="text-sm text-muted-foreground py-8">Loading appointments...</p>;
-  if (error) return <p className="text-sm text-red-400 py-8">{error}</p>;
+  if (error) return <p className="text-sm text-red-600 py-8">{error}</p>;
 
   // Group by date
   const grouped = appointments.reduce<Record<string, Appointment[]>>((acc, appt) => {
@@ -54,38 +55,48 @@ export default function NurseAppointmentsPage() {
   }, {});
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Upcoming Appointments</h2>
+    <div className="space-y-8 max-w-5xl">
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight">Appointments</h2>
+        <p className="text-sm text-muted-foreground mt-1">Upcoming patient appointments</p>
+      </div>
 
       {Object.keys(grouped).length === 0 && (
-        <p className="text-sm text-muted-foreground">No appointments in the next 7 days.</p>
+        <div className="rounded-lg border border-border bg-card p-8 text-center">
+          <p className="text-sm text-muted-foreground">No appointments in the next 7 days.</p>
+        </div>
       )}
 
       {Object.entries(grouped).map(([date, appts]) => (
-        <div key={date}>
-          <h3 className="text-sm font-medium text-muted-foreground mb-2">{date}</h3>
-          <div className="space-y-2">
+        <section key={date}>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">{date}</h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {appts.map((appt) => (
               <Link
                 key={appt.id}
                 href={`/nurse/appointments/${appt.id}`}
-                className="block rounded-lg border border-border p-3 hover:border-ring transition-colors"
+                className="group rounded-lg border border-border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/30 transition-all"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{appt.patientName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {appt.startTime}–{appt.endTime} &middot; {appt.location} &middot; {appt.specialty}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-card-foreground truncate">{appt.patientName}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {appt.startTime} – {appt.endTime}
                     </p>
                   </div>
-                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_COLOURS[appt.status] ?? "bg-gray-500/20 text-gray-400"}`}>
+                  <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full border ${STATUS_STYLES[appt.status] ?? "bg-gray-100 text-gray-700 border-gray-200"}`}>
                     {appt.status?.replace("_", " ")}
                   </span>
+                </div>
+                <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>{appt.location}</span>
+                  <span className="text-border">|</span>
+                  <span>{appt.specialty}</span>
                 </div>
               </Link>
             ))}
           </div>
-        </div>
+        </section>
       ))}
     </div>
   );
