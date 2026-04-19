@@ -14,7 +14,9 @@ entities:
       # Multiple NULLs are allowed by PostgreSQL — only non-null values must be unique.
       medicare_number: { type: string, ai_visible: false, unique: true }
       phone: { type: phone, ai_visible: false }
-      email: { type: email, ai_visible: false }
+      # Nullable unique: patients without email (elderly, children) are allowed.
+      # Multiple NULLs are allowed by PostgreSQL — only non-null values must be unique.
+      email: { type: email, ai_visible: false, unique: true }
       address: { type: text, ai_visible: false }
       status: { type: enum, values: [active, inactive, discharged] }
       maintenance_plan_expiry: { type: date }
@@ -60,6 +62,7 @@ entities:
     label: "Clinical Notes"
     label_singular: "Clinical Note"
     immutable: true
+    sensitive: true
     display:
       title: date
       badge: note_type
@@ -78,6 +81,7 @@ entities:
     label: "Personal Notes"
     label_singular: "Personal Note"
     immutable: true
+    sensitive: true
     display:
       title: date
       summary: content
@@ -202,8 +206,8 @@ entities:
       phone: { type: phone, ai_visible: false }
       email: { type: email, ai_visible: false, unique: true }
       registration_number: { type: string, ai_visible: false }
-      caldav_url: { type: string }
-      google_calendar_id: { type: string }
+      caldav_url: { type: string, ai_visible: false }
+      google_calendar_id: { type: string, ai_visible: false }
       feed_token: { type: string, ai_visible: false }
       notes: { type: text }
       aup_acknowledged_at: { type: datetime }
@@ -234,6 +238,23 @@ entities:
     relations:
       nurse: { type: belongs_to, entity: nurse, on_delete: cascade }
 
+  nurse_availability:
+    label: "Availability Slots"
+    label_singular: "Availability Slot"
+    display:
+      title: start_time
+      subtitle: [date, day_of_week]
+    fields:
+      date: { type: date, required: true }
+      day_of_week: { type: number }            # 0=Monday..6=Sunday, set for recurring slots
+      start_time: { type: time, required: true }
+      end_time: { type: time, required: true }
+      recurring: { type: boolean }            # true = repeats every week on day_of_week
+    relations:
+      nurse: { type: belongs_to, entity: nurse, required: true, on_delete: cascade }
+    indexes:
+      - [nurseId, date]
+
   calendar_connection:
     sensitive: true
     label: "Calendar Connections"
@@ -256,7 +277,7 @@ entities:
           href: "/api/attachments/{id}/download"
     fields:
       filename: { type: string, required: true }
-      storage_path: { type: string, required: true }
+      storage_path: { type: string, required: true, ai_visible: false }
       mime_type: { type: string }
       size_bytes: { type: number }
       category: { type: enum, values: [referral_letter, test_result, clinical_document, other] }
@@ -275,6 +296,7 @@ entities:
       password_hash: { type: string, required: true }
       role: { type: enum, values: [admin, nurse, patient], required: true }
       active: { type: boolean, default: true }
+      must_change_password: { type: boolean, default: false }
 
   session:
     sensitive: true

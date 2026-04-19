@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hashPassword, verifyPassword } from "@/lib/password";
+import { hashPassword, verifyPassword, validatePasswordStrength, generateStrongPassword } from "@/lib/password";
 
 describe("Password hashing — scrypt", () => {
   it("round-trips: hash then verify returns true", async () => {
@@ -43,5 +43,65 @@ describe("Password hashing — scrypt", () => {
     const hash = await hashPassword("real-password");
     const ok = await verifyPassword("", hash);
     expect(ok).toBe(false);
+  });
+});
+
+describe("Password strength validation", () => {
+  it("accepts a strong password with no errors", () => {
+    expect(validatePasswordStrength("Str0ng!pw")).toEqual([]);
+  });
+
+  it("rejects a password shorter than 8 characters", () => {
+    const errors = validatePasswordStrength("Ab1!");
+    expect(errors).toContain("At least 8 characters");
+  });
+
+  it("rejects a password without uppercase", () => {
+    const errors = validatePasswordStrength("lowercase1!");
+    expect(errors).toContain("At least one uppercase letter");
+  });
+
+  it("rejects a password without lowercase", () => {
+    const errors = validatePasswordStrength("UPPERCASE1!");
+    expect(errors).toContain("At least one lowercase letter");
+  });
+
+  it("rejects a password without digits", () => {
+    const errors = validatePasswordStrength("NoDigits!!");
+    expect(errors).toContain("At least one digit");
+  });
+
+  it("rejects a password without special characters", () => {
+    const errors = validatePasswordStrength("NoSpecial1A");
+    expect(errors).toContain("At least one special character");
+  });
+
+  it("returns multiple errors for a completely weak password", () => {
+    const errors = validatePasswordStrength("abc");
+    expect(errors.length).toBeGreaterThan(1);
+  });
+});
+
+describe("Password generation", () => {
+  it("generates a 16-character password", () => {
+    const pw = generateStrongPassword();
+    expect(pw).toHaveLength(16);
+  });
+
+  it("always passes strength validation", () => {
+    // Run 20 times to check statistical guarantee
+    for (let i = 0; i < 20; i++) {
+      const pw = generateStrongPassword();
+      const errors = validatePasswordStrength(pw);
+      expect(errors).toEqual([]);
+    }
+  });
+
+  it("generates unique passwords", () => {
+    const passwords = new Set<string>();
+    for (let i = 0; i < 10; i++) {
+      passwords.add(generateStrongPassword());
+    }
+    expect(passwords.size).toBe(10);
   });
 });

@@ -10,8 +10,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { findById, update } from "@/lib/repository";
 import { generateVCard, parseVCard } from "@/lib/vcard";
 import { checkAuth, addressBookToEntity } from "@/lib/carddav-auth";
-import { withErrorHandler } from "@/lib/api-helpers";
+import { withErrorHandler, getClientIp } from "@/lib/api-helpers";
 import { parseIdParam } from "@/lib/route-factory";
+import { logAuditEvent } from "@/lib/audit";
+import { randomUUID } from "crypto";
 import type { Row } from "@/lib/parsers";
 
 interface RouteParams {
@@ -20,6 +22,13 @@ interface RouteParams {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   if (!checkAuth(request)) {
+    logAuditEvent({
+      action: "carddav_auth_failed",
+      entity: "system",
+      entityId: "carddav",
+      details: `failed CardDAV auth — GET ${request.nextUrl.pathname}`,
+      context: { userId: null, correlationId: randomUUID(), ip: getClientIp(request), userAgent: request.headers.get("user-agent") ?? undefined },
+    });
     return new NextResponse("Unauthorized", {
       status: 401,
       headers: { "WWW-Authenticate": 'Basic realm="CardDAV"' },
@@ -55,6 +64,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   if (!checkAuth(request)) {
+    logAuditEvent({
+      action: "carddav_auth_failed",
+      entity: "system",
+      entityId: "carddav",
+      details: `failed CardDAV auth — PUT ${request.nextUrl.pathname}`,
+      context: { userId: null, correlationId: randomUUID(), ip: getClientIp(request), userAgent: request.headers.get("user-agent") ?? undefined },
+    });
     return new NextResponse("Unauthorized", {
       status: 401,
       headers: { "WWW-Authenticate": 'Basic realm="CardDAV"' },
@@ -71,6 +87,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   if (idResult instanceof NextResponse) return new NextResponse("Not found", { status: 404 });
   const id = idResult;
 
+  const context = { userId: null, correlationId: randomUUID(), ip: getClientIp(request), userAgent: request.headers.get("user-agent") ?? undefined };
+
   return withErrorHandler(`PUT /api/carddav/${addressbook}/${id}`, async () => {
     const body = await request.text();
     const parsed = parseVCard(entityName, body);
@@ -80,6 +98,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     delete parsed._entity;
 
     await update(entityName, id, parsed);
+
+    logAuditEvent({
+      action: "carddav_update",
+      entity: entityName,
+      entityId: String(id),
+      details: `${entityName} #${id} updated via CardDAV sync — fields: ${Object.keys(parsed).join(", ")}`,
+      context,
+    });
 
     return new NextResponse("", { status: 204 });
   });

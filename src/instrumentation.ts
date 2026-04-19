@@ -33,6 +33,12 @@ export async function register() {
 
     // Production startup checks
     if (process.env.NODE_ENV === "production") {
+      // CRITICAL: demo mode must never be active in production — it bypasses ALL authentication
+      if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+        logger.error("NEXT_PUBLIC_DEMO_MODE=true in production — refusing to start with authentication disabled");
+        process.exit(1);
+      }
+
       // Hard requirement: TOKEN_ENCRYPTION_KEY must be set for OAuth token security
       if (!process.env.TOKEN_ENCRYPTION_KEY) {
         logger.error("TOKEN_ENCRYPTION_KEY not set — refusing to start with plaintext OAuth tokens in production");

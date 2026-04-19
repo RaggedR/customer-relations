@@ -33,14 +33,18 @@ describe("schema.yaml — immutable flag", () => {
     expect(schema.entities.patient.immutable).toBeUndefined();
   });
 
-  it("immutable entities are not sensitive (they should be readable)", async () => {
+  it("immutable+sensitive entities are only clinical_note and personal_note", async () => {
     const { isSensitive } = await import("@/lib/schema");
     const schema = getSchema();
+    const bothFlags: string[] = [];
     for (const [name, entity] of Object.entries(schema.entities)) {
-      if ((entity as { immutable?: boolean }).immutable) {
-        expect(isSensitive(name)).toBe(false);
+      if ((entity as { immutable?: boolean }).immutable && isSensitive(name)) {
+        bothFlags.push(name);
       }
     }
+    // These entities are immutable (can't edit/delete) AND sensitive (blocked
+    // from generic CRUD — must go through dedicated audited/watermarked routes).
+    expect(bothFlags.sort()).toEqual(["clinical_note", "personal_note"]);
   });
 });
 

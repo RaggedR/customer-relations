@@ -79,6 +79,14 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [nurses, setNurses] = useState<Nurse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [highlightNurseId, setHighlightNurseId] = useState<number | null>(null);
+  const [popup, setPopup] = useState<{
+    x: number;
+    y: number;
+    dateKey: string;
+    time: string;
+    appointments: Appointment[];
+  } | null>(null);
 
   // Compute the 14-day range
   const days = useMemo(() => {
@@ -95,16 +103,22 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
   const dateTo = formatDateISO(days[13]);
   const today = formatDateISO(new Date());
 
-  // Fetch appointments and nurses
+  // Fetch appointments (extract nurse list from appointment data)
   const fetchData = useCallback(() => {
     setLoading(true);
-    Promise.all([
-      fetch(`/api/appointment?dateFrom=${dateFrom}&dateTo=${dateTo}`).then((r) => r.json()),
-      fetch("/api/nurse").then((r) => r.json()),
-    ])
-      .then(([appts, nurseList]) => {
-        setAppointments(Array.isArray(appts) ? appts : []);
-        setNurses(Array.isArray(nurseList) ? nurseList : []);
+    fetch(`/api/appointment?dateFrom=${dateFrom}&dateTo=${dateTo}`)
+      .then((r) => r.json())
+      .then((appts) => {
+        const apptList = Array.isArray(appts) ? appts : [];
+        setAppointments(apptList);
+        // Extract unique nurses from appointments
+        const nurseMap = new Map<number, string>();
+        for (const a of apptList) {
+          if (a.nurse?.id && a.nurse?.name) {
+            nurseMap.set(a.nurse.id, a.nurse.name);
+          }
+        }
+        setNurses(Array.from(nurseMap, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)));
       })
       .catch((err) => console.error("Calendar fetch error:", err))
       .finally(() => setLoading(false));
@@ -186,19 +200,19 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
           {days[13].toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}
         </span>
         <div className="flex-1" />
-        {/* Nurse legend */}
+        {/* Nurse highlight dropdown */}
         <div className="flex items-center gap-2">
-          {nurses.slice(0, 6).map((n) => {
-            const c = nurseColour(n.id);
-            return (
-              <span
-                key={n.id}
-                className={`text-[10px] px-1.5 py-0.5 rounded ${c.bg} ${c.text}`}
-              >
-                {n.name.split(" ")[0]}
-              </span>
-            );
-          })}
+          <label className="text-[10px] text-muted-foreground">Highlight:</label>
+          <select
+            value={highlightNurseId ?? ""}
+            onChange={(e) => setHighlightNurseId(e.target.value ? Number(e.target.value) : null)}
+            className="h-7 rounded border border-input bg-transparent px-2 text-[11px]"
+          >
+            <option value="">All nurses</option>
+            {nurses.map((n) => (
+              <option key={n.id} value={n.id}>{n.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -256,45 +270,48 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
                         isToday ? "bg-blue-500/5" : ""
                       } ${isWeekend ? "bg-muted/30" : ""}`}
                       style={{ height: 32 }}
-                      onClick={() => {
+                      onClick={(e) => {
                         if (startingHere.length === 0) {
                           onSlotClick(dateKey, time);
+                        } else {
+                          // Show popup menu for this cell
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          setPopup({
+                            x: rect.left,
+                            y: rect.bottom,
+                            dateKey,
+                            time,
+                            appointments: startingHere,
+                          });
                         }
                       }}
                     >
-                      {startingHere.map((appt) => {
-                        const startIdx = timeToSlotIndex(appt.start_time);
-                        const endIdx = timeToSlotIndex(appt.end_time);
+                      {(() => {
+                        const count = startingHere.length;
+                        if (count === 0) return null;
+
+                        const first = startingHere[0];
+                        const startIdx = timeToSlotIndex(first.start_time);
+                        const endIdx = timeToSlotIndex(first.end_time);
                         const spanSlots = Math.max(1, endIdx - startIdx);
-                        const c = appt.nurse
-                          ? nurseColour(appt.nurse.id)
-                          : NURSE_COLOURS[0];
+                        const fullHeight = spanSlots * 32 - 2;
+
+                        // Highlight: if a nurse is selected, check if any appointment in this slot belongs to them
+                        const hasHighlightedNurse = highlightNurseId === null ||
+                          startingHere.some((a) => a.nurse?.id === highlightNurseId);
+                        const pillClass = hasHighlightedNurse
+                          ? "bg-blue-500/30 border-blue-500/50 text-blue-200"
+                          : "bg-muted/30 border-border text-muted-foreground";
 
                         return (
                           <div
-                            key={appt.id}
-                            className={`absolute left-0 right-0 mx-0.5 rounded-sm border ${c.bg} ${c.border} ${c.text} px-1 overflow-hidden cursor-pointer hover:brightness-125 transition-all z-[1]`}
-                            style={{
-                              top: 0,
-                              height: spanSlots * 32 - 2,
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const label = appt.patient?.name ?? `Appointment #${appt.id}`;
-                              onEventClick(appt.id, label);
-                            }}
+                            className={`absolute left-0 right-0 mx-0.5 rounded-sm border ${pillClass} px-1 overflow-hidden cursor-pointer hover:brightness-125 transition-all z-[1] flex items-center justify-center`}
+                            style={{ top: 0, height: fullHeight }}
                           >
-                            <div className="text-[9px] font-medium truncate leading-tight pt-0.5">
-                              {appt.patient?.name ?? "—"}
-                            </div>
-                            {spanSlots > 1 && (
-                              <div className="text-[8px] opacity-70 truncate">
-                                {appt.start_time}–{appt.end_time} · {appt.location}
-                              </div>
-                            )}
+                            <span className="text-[9px] font-medium">{count}</span>
                           </div>
                         );
-                      })}
+                      })()}
                     </div>
                   );
                 })}
@@ -303,6 +320,51 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
           </div>
         )}
       </div>
+
+      {/* Popup menu for cells with appointments */}
+      {popup && (
+        <div
+          className="fixed inset-0 z-50"
+          onClick={() => setPopup(null)}
+        >
+          <div
+            className="absolute rounded-lg border border-border bg-card shadow-lg py-1 min-w-[200px]"
+            style={{
+              left: Math.min(popup.x, window.innerWidth - 220),
+              top: Math.min(popup.y, window.innerHeight - 200),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-3 py-1.5 text-[10px] text-muted-foreground border-b border-border">
+              {popup.appointments.length} appointment{popup.appointments.length > 1 ? "s" : ""}
+            </div>
+            {popup.appointments.map((appt) => (
+              <button
+                key={appt.id}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent/50 transition-colors"
+                onClick={() => {
+                  const label = appt.patient?.name ?? `Appointment #${appt.id}`;
+                  onEventClick(appt.id, label);
+                  setPopup(null);
+                }}
+              >
+                <span className="font-medium">{appt.nurse?.name ?? "—"}</span>
+              </button>
+            ))}
+            <div className="border-t border-border mt-0.5">
+              <button
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent/50 transition-colors text-blue-400"
+                onClick={() => {
+                  onSlotClick(popup.dateKey, popup.time);
+                  setPopup(null);
+                }}
+              >
+                + New appointment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

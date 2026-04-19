@@ -15,7 +15,7 @@ import { verifyPassword } from "@/lib/password";
 import { extractRequestContext } from "@/lib/request-context";
 import { logAuditEvent } from "@/lib/audit";
 import { logger } from "@/lib/logger";
-import { COOKIE_NAME, COOKIE_OPTIONS, SESSION_MAX_AGE, getSecret } from "@/lib/session";
+import { COOKIE_NAME, COOKIE_OPTIONS, SESSION_MAX_AGE, getSecret, hashSessionToken } from "@/lib/session";
 import { createRateLimiter } from "@/lib/rate-limit";
 const loginLimiter = createRateLimiter(5, 60_000); // 5 attempts per minute
 
@@ -90,10 +90,11 @@ export async function POST(request: NextRequest) {
       `${SESSION_MAX_AGE}s`,
     );
 
-    // Create DB session record (activates idle timeout + session revocation)
+    // Create DB session record (activates idle timeout + session revocation).
+    // Only the SHA-256 hash is stored — a DB dump cannot yield replayable JWTs.
     await prisma.session.create({
       data: {
-        token,
+        token: hashSessionToken(token),
         userId: user.id,
         last_active: new Date(),
         expires_at: new Date(Date.now() + SESSION_MAX_AGE * 1000),
@@ -105,7 +106,12 @@ export async function POST(request: NextRequest) {
     // Build response with session cookie
     const response = NextResponse.json({
       success: true,
-      user: { id: user.id, name: user.name, role: user.role },
+      user: {
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        mustChangePassword: !!user.must_change_password,
+      },
     });
 
     response.cookies.set(COOKIE_NAME, token, {

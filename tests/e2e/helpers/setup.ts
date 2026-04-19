@@ -102,23 +102,24 @@ export default async function globalSetup(config: FullConfig) {
     }
 
     // Nurse user
-    const existingNurse = await prisma.user.findFirst({
+    let nurseUser = await prisma.user.findFirst({
       where: { email: NURSE_EMAIL },
     });
-    if (!existingNurse) {
+    if (!nurseUser) {
       const nurseHash = await hashPassword(NURSE_PASSWORD);
-      await prisma.user.create({
+      nurseUser = await prisma.user.create({
         data: {
           name: `${E2E_PREFIX} Test Nurse`,
           email: NURSE_EMAIL,
           password_hash: nurseHash,
           role: "nurse",
           active: true,
+          must_change_password: false,
         },
       });
     }
 
-    // Nurse entity (for appointment relation dropdowns)
+    // Nurse entity linked to user (needed for resolveNurse in middleware)
     const existingNurseEntity = await prisma.nurse.findFirst({
       where: { name: `${E2E_PREFIX} Test Nurse` },
     });
@@ -128,7 +129,15 @@ export default async function globalSetup(config: FullConfig) {
           name: `${E2E_PREFIX} Test Nurse`,
           email: NURSE_EMAIL,
           phone: "0400000000",
+          userId: nurseUser.id,
+          aup_acknowledged_at: new Date(),
         },
+      });
+    } else if (!existingNurseEntity.userId) {
+      // Fix existing unlinked nurse entity
+      await prisma.nurse.update({
+        where: { id: existingNurseEntity.id },
+        data: { userId: nurseUser.id, aup_acknowledged_at: new Date() },
       });
     }
   } finally {

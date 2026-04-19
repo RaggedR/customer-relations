@@ -54,3 +54,63 @@ export async function verifyPassword(
     return false;
   }
 }
+
+// ── Password strength ────────────────────────────────────
+// Rules and validation live in password-rules.ts (no node:crypto dependency)
+// so they can be imported by both server and client code.
+
+export { validatePasswordStrength, PASSWORD_STRENGTH_RULES } from "./password-rules";
+
+// ── Password generation ─────────────────────────────────
+
+const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I, O (ambiguous)
+const LOWER = "abcdefghjkmnpqrstuvwxyz"; // no i, l, o (ambiguous)
+const DIGITS = "23456789"; // no 0, 1 (ambiguous)
+const SPECIALS = "!@#$%&*+-=?";
+
+/**
+ * Generate a cryptographically random 16-character password that
+ * is guaranteed to pass validatePasswordStrength().
+ *
+ * Strategy: place one char from each required class in random positions,
+ * fill the rest randomly from the full alphabet, then shuffle.
+ */
+export function generateStrongPassword(): string {
+  const allChars = UPPER + LOWER + DIGITS + SPECIALS;
+  const len = 16;
+
+  // Guarantee one from each class
+  const guaranteed = [
+    UPPER[randomInt(UPPER.length)],
+    LOWER[randomInt(LOWER.length)],
+    DIGITS[randomInt(DIGITS.length)],
+    SPECIALS[randomInt(SPECIALS.length)],
+  ];
+
+  // Fill remaining slots
+  const chars = [...guaranteed];
+  for (let i = chars.length; i < len; i++) {
+    chars.push(allChars[randomInt(allChars.length)]);
+  }
+
+  // Fisher-Yates shuffle using crypto randomness
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+
+  return chars.join("");
+}
+
+/**
+ * Crypto-safe random int in [0, max) using rejection sampling.
+ * Avoids modulo bias by discarding values >= the largest multiple of max.
+ */
+function randomInt(max: number): number {
+  const limit = Math.floor(0x100000000 / max) * max;
+  let val: number;
+  do {
+    val = randomBytes(4).readUInt32BE(0);
+  } while (val >= limit);
+  return val % max;
+}

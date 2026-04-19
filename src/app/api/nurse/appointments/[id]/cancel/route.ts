@@ -5,12 +5,15 @@
  * Body: { reason: string }
  *
  * Only the assigned nurse can cancel their own appointments.
+ * Sends cancellation notifications to the patient (to reschedule)
+ * and to the admin (Clare) for visibility.
  */
 
 import { NextResponse } from "next/server";
 import { nurseIdRoute } from "@/lib/middleware";
 import { verifyAppointmentOwnership } from "@/lib/nurse-helpers";
 import { prisma } from "@/lib/prisma";
+import { sendCancellationToPatient, sendCancellationToAdmin } from "@/lib/email";
 
 const MAX_REASON_LENGTH = 2000;
 
@@ -30,6 +33,14 @@ export const POST = nurseIdRoute()
       ? body.reason.slice(0, MAX_REASON_LENGTH)
       : "";
 
+    // Look up patient details for notification emails
+    const patient = appointment.patientId
+      ? await prisma.patient.findUnique({
+          where: { id: appointment.patientId },
+          select: { name: true, email: true },
+        })
+      : null;
+
     // Direct Prisma: atomic ownership check prevents TOCTOU — repository.update() cannot express WHERE { id, nurseId }
     await prisma.appointment.update({
       where: { id: ctx.entityId },
@@ -44,6 +55,35 @@ export const POST = nurseIdRoute()
       entity: "appointment",
       entityId: String(ctx.entityId),
       details: `nurse ${ctx.nurse.name} cancelled appointment #${ctx.entityId}${reason ? ` reason: ${reason.slice(0, 200)}` : ""}`,
+    });
+
+    // Fire-and-forget: email failures must not block the cancellation response
+    const dateStr = new Date(appointment.date).toLocaleDateString("en-AU", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+
+    if (patient?.email) {
+      sendCancellationToPatient({
+        to: patient.email,
+        patientName: patient.name ?? "Patient",
+        date: dateStr,
+        startTime: appointment.start_time ?? "",
+        specialty: appointment.specialty ?? "Appointment",
+        reason: reason || undefined,
+      });
+    }
+
+    sendCancellationToAdmin({
+      nurseName: ctx.nurse.name ?? "Unknown Nurse",
+      patientName: patient?.name ?? `Patient #${appointment.patientId}`,
+      date: dateStr,
+      startTime: appointment.start_time ?? "",
+      specialty: appointment.specialty ?? "Appointment",
+      reason: reason || undefined,
+      appointmentId: ctx.entityId,
     });
 
     return NextResponse.json({ success: true });

@@ -2,6 +2,7 @@
  * Seed Script
  *
  * Populates the database with healthcare test data covering every relationship:
+ * - Users (admin, nurse, patient) with demo password "demo"
  * - Patients at every status (active, inactive, discharged)
  * - Referrals (multiple per patient, expired and active)
  * - Clinical notes of every type
@@ -9,18 +10,38 @@
  * - Hearing aids (bilateral, single, different brands/battery types)
  * - Claim items at every status
  * - Maintenance plan expiry dates
+ * - Nurses linked to user accounts
+ * - Appointments (past, today, and future)
  */
 
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { scrypt, randomBytes } from "node:crypto";
 
 const adapter = new PrismaPg(process.env.DATABASE_URL || "");
 const prisma = new PrismaClient({ adapter });
 
+// Match the password hashing from src/lib/password.ts
+function hashPassword(password: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const salt = randomBytes(16);
+    scrypt(password, salt, 64, { N: 16384, r: 8, p: 1 }, (err, key) => {
+      if (err) reject(err);
+      else resolve(`${salt.toString("hex")}:${key.toString("hex")}`);
+    });
+  });
+}
+
 async function seed() {
+  const demoHash = await hashPassword("demo");
+
   console.log("Clearing existing data...");
+  await prisma.session.deleteMany();
+  await prisma.auditLog.deleteMany();
+  await prisma.appointment.deleteMany();
   await prisma.nurseSpecialty.deleteMany();
+  await prisma.calendarConnection.deleteMany();
   await prisma.nurse.deleteMany();
   await prisma.attachment.deleteMany();
   await prisma.claimItem.deleteMany();
@@ -29,7 +50,67 @@ async function seed() {
   await prisma.clinicalNote.deleteMany();
   await prisma.referral.deleteMany();
   await prisma.patient.deleteMany();
+  await prisma.claimToken.deleteMany();
+  await prisma.user.deleteMany();
 
+  // ── Users ──────────────────────────────────────────────────────────
+  console.log("Creating users...");
+  const adminUser = await prisma.user.create({
+    data: {
+      email: "admin@callonclare.com.au",
+      name: "Clare Wilson",
+      password_hash: demoHash,
+      role: "admin",
+      active: true,
+      must_change_password: false,
+    },
+  });
+
+  const nurseEmmaUser = await prisma.user.create({
+    data: {
+      email: "emma@callonclare.com.au",
+      name: "Emma Taylor",
+      password_hash: demoHash,
+      role: "nurse",
+      active: true,
+      must_change_password: false,
+    },
+  });
+
+  const nurseLiamUser = await prisma.user.create({
+    data: {
+      email: "liam@callonclare.com.au",
+      name: "Liam Patel",
+      password_hash: demoHash,
+      role: "nurse",
+      active: true,
+      must_change_password: false,
+    },
+  });
+
+  const patientMargaretUser = await prisma.user.create({
+    data: {
+      email: "margaret.t@example.com",
+      name: "Margaret Thompson",
+      password_hash: demoHash,
+      role: "patient",
+      active: true,
+      must_change_password: false,
+    },
+  });
+
+  const patientJamesUser = await prisma.user.create({
+    data: {
+      email: "james.chen@example.com",
+      name: "James Chen",
+      password_hash: demoHash,
+      role: "patient",
+      active: true,
+      must_change_password: false,
+    },
+  });
+
+  // ── Patients ───────────────────────────────────────────────────────
   console.log("Creating patients...");
   const patients = await Promise.all([
     prisma.patient.create({
@@ -43,6 +124,7 @@ async function seed() {
         status: "active",
         maintenance_plan_expiry: new Date("2026-09-01"),
         notes: "Prefers morning appointments. Has mobility issues — home visits preferred.",
+        userId: patientMargaretUser.id,
       },
     }),
     prisma.patient.create({
@@ -55,6 +137,7 @@ async function seed() {
         address: "15 Bourke St, Melbourne VIC 3000",
         status: "active",
         maintenance_plan_expiry: new Date("2026-07-15"),
+        userId: patientJamesUser.id,
       },
     }),
     prisma.patient.create({
@@ -95,6 +178,7 @@ async function seed() {
 
   const [margaret, james, susan, robert, priya] = patients;
 
+  // ── Referrals ──────────────────────────────────────────────────────
   console.log("Creating referrals...");
   await Promise.all([
     prisma.referral.create({
@@ -161,6 +245,7 @@ async function seed() {
     }),
   ]);
 
+  // ── Clinical Notes ─────────────────────────────────────────────────
   console.log("Creating clinical notes...");
   await Promise.all([
     prisma.clinicalNote.create({
@@ -237,6 +322,7 @@ async function seed() {
     }),
   ]);
 
+  // ── Hearing Aids ───────────────────────────────────────────────────
   console.log("Creating hearing aids...");
   await Promise.all([
     prisma.hearingAid.create({
@@ -311,6 +397,7 @@ async function seed() {
     }),
   ]);
 
+  // ── Personal Notes ─────────────────────────────────────────────────
   console.log("Creating personal notes...");
   await Promise.all([
     prisma.personalNote.create({
@@ -343,6 +430,7 @@ async function seed() {
     }),
   ]);
 
+  // ── Claim Items ────────────────────────────────────────────────────
   console.log("Creating claim items...");
   await Promise.all([
     prisma.claimItem.create({
@@ -429,6 +517,7 @@ async function seed() {
     }),
   ]);
 
+  // ── Nurses ─────────────────────────────────────────────────────────
   console.log("Creating nurses...");
   const nurses = await Promise.all([
     prisma.nurse.create({
@@ -438,6 +527,8 @@ async function seed() {
         email: "clare@callonclare.com.au",
         registration_number: "AUD0012345",
         notes: "Practice owner. Mobile audiologist servicing Melbourne metro.",
+        userId: adminUser.id,
+        aup_acknowledged_at: new Date(),
       },
     }),
     prisma.nurse.create({
@@ -446,6 +537,8 @@ async function seed() {
         phone: "+61-4-0000-2222",
         email: "emma@callonclare.com.au",
         registration_number: "AUD0067890",
+        userId: nurseEmmaUser.id,
+        aup_acknowledged_at: new Date(),
       },
     }),
     prisma.nurse.create({
@@ -455,12 +548,15 @@ async function seed() {
         email: "liam@callonclare.com.au",
         registration_number: "PHY0045678",
         notes: "Part-time. Available Mon/Wed/Fri.",
+        userId: nurseLiamUser.id,
+        aup_acknowledged_at: new Date(),
       },
     }),
   ]);
 
   const [clare, emma, liam] = nurses;
 
+  // ── Nurse Specialties ──────────────────────────────────────────────
   console.log("Creating nurse specialties...");
   await Promise.all([
     prisma.nurseSpecialty.create({
@@ -477,42 +573,242 @@ async function seed() {
     }),
   ]);
 
+  // ── Appointments ───────────────────────────────────────────────────
+  // Spread across past, today, and future dates for a realistic calendar view.
+  // Today is calculated dynamically so the seed always looks current.
+  console.log("Creating appointments...");
+  const today = new Date();
+  const day = (offset: number) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + offset);
+    return d;
+  };
+
+  await Promise.all([
+    // Past appointments (completed)
+    prisma.appointment.create({
+      data: {
+        date: day(-14),
+        start_time: "09:00",
+        end_time: "09:45",
+        location: "42 Collins St, Melbourne (home visit)",
+        specialty: "Audiology",
+        status: "completed",
+        notes: "Hearing aid check — both aids functioning well. Wax filters replaced.",
+        patientId: margaret.id,
+        nurseId: clare.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(-10),
+        start_time: "14:00",
+        end_time: "14:45",
+        location: "15 Bourke St, Melbourne",
+        specialty: "Audiology",
+        status: "completed",
+        notes: "Follow-up fitting. Fine-tuned right aid — increased gain at 2kHz.",
+        patientId: james.id,
+        nurseId: emma.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(-7),
+        start_time: "10:00",
+        end_time: "11:00",
+        location: "8 St Kilda Rd, St Kilda (home visit)",
+        specialty: "Audiology",
+        status: "completed",
+        notes: "Initial hearing assessment. Daughter present to interpret.",
+        patientId: susan.id,
+        nurseId: clare.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(-5),
+        start_time: "15:00",
+        end_time: "15:45",
+        location: "Clinic — Level 2, 100 Collins St",
+        specialty: "Physiotherapy",
+        status: "completed",
+        patientId: james.id,
+        nurseId: liam.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(-3),
+        start_time: "09:30",
+        end_time: "10:15",
+        location: "42 Collins St, Melbourne (home visit)",
+        specialty: "Audiology",
+        status: "cancelled",
+        notes: "Patient unwell — rescheduled to next week.",
+        patientId: margaret.id,
+        nurseId: clare.id,
+      },
+    }),
+
+    // Today's appointments
+    prisma.appointment.create({
+      data: {
+        date: day(0),
+        start_time: "09:00",
+        end_time: "09:45",
+        location: "42 Collins St, Melbourne (home visit)",
+        specialty: "Audiology",
+        status: "scheduled",
+        notes: "Rescheduled from last week. Hearing aid maintenance + balance check.",
+        patientId: margaret.id,
+        nurseId: clare.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(0),
+        start_time: "11:00",
+        end_time: "11:45",
+        location: "Clinic — Level 2, 100 Collins St",
+        specialty: "Audiology",
+        status: "scheduled",
+        patientId: james.id,
+        nurseId: emma.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(0),
+        start_time: "14:00",
+        end_time: "14:45",
+        location: "Clinic — Level 2, 100 Collins St",
+        specialty: "Physiotherapy",
+        status: "scheduled",
+        patientId: james.id,
+        nurseId: liam.id,
+      },
+    }),
+
+    // Future appointments
+    prisma.appointment.create({
+      data: {
+        date: day(2),
+        start_time: "10:00",
+        end_time: "10:45",
+        location: "8 St Kilda Rd, St Kilda (home visit)",
+        specialty: "Audiology",
+        status: "scheduled",
+        notes: "Hearing aid trial fitting — left ear. Daughter to be present.",
+        patientId: susan.id,
+        nurseId: clare.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(5),
+        start_time: "09:00",
+        end_time: "09:45",
+        location: "42 Collins St, Melbourne (home visit)",
+        specialty: "Audiology",
+        status: "scheduled",
+        patientId: margaret.id,
+        nurseId: clare.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(5),
+        start_time: "14:00",
+        end_time: "14:45",
+        location: "Clinic — Level 2, 100 Collins St",
+        specialty: "Physiotherapy",
+        status: "scheduled",
+        patientId: james.id,
+        nurseId: liam.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(7),
+        start_time: "11:00",
+        end_time: "12:00",
+        location: "Clinic — Level 2, 100 Collins St",
+        specialty: "Audiology",
+        status: "scheduled",
+        notes: "Initial assessment — referred for anxiety-related tinnitus evaluation.",
+        patientId: priya.id,
+        nurseId: emma.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(12),
+        start_time: "09:00",
+        end_time: "10:00",
+        location: "42 Collins St, Melbourne (home visit)",
+        specialty: "Audiology",
+        status: "scheduled",
+        notes: "Monthly maintenance visit — bilateral aids.",
+        patientId: margaret.id,
+        nurseId: clare.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(14),
+        start_time: "10:00",
+        end_time: "10:45",
+        location: "8 St Kilda Rd, St Kilda (home visit)",
+        specialty: "Audiology",
+        status: "scheduled",
+        patientId: susan.id,
+        nurseId: clare.id,
+      },
+    }),
+    prisma.appointment.create({
+      data: {
+        date: day(14),
+        start_time: "15:00",
+        end_time: "15:45",
+        location: "Clinic — Level 2, 100 Collins St",
+        specialty: "Physiotherapy",
+        status: "scheduled",
+        patientId: james.id,
+        nurseId: liam.id,
+      },
+    }),
+  ]);
+
+  // ── Summary ────────────────────────────────────────────────────────
   console.log("\nSeed complete! Summary:");
-  const patientCount = await prisma.patient.count();
-  const referralCount = await prisma.referral.count();
-  const clinicalNoteCount = await prisma.clinicalNote.count();
-  const hearingAidCount = await prisma.hearingAid.count();
-  const personalNoteCount = await prisma.personalNote.count();
-  const claimItemCount = await prisma.claimItem.count();
-  const nurseCount = await prisma.nurse.count();
-  const nurseSpecialtyCount = await prisma.nurseSpecialty.count();
-  console.log(`  Patients:           ${patientCount}`);
-  console.log(`  Referrals:          ${referralCount}`);
-  console.log(`  Clinical Notes:     ${clinicalNoteCount}`);
-  console.log(`  Hearing Aids:       ${hearingAidCount}`);
-  console.log(`  Personal Notes:     ${personalNoteCount}`);
-  console.log(`  Claim Items:        ${claimItemCount}`);
-  console.log(`  Nurses:             ${nurseCount}`);
-  console.log(`  Nurse Specialties:  ${nurseSpecialtyCount}`);
-  console.log("\nCoverage:");
-  console.log("  - Patient with multiple referrals (Margaret — re-referred)");
-  console.log("  - Patient with full note history (Margaret — assessment, progress, treatment plan)");
-  console.log("  - Discharged patient with discharge summary (Robert)");
-  console.log("  - Inactive patient on waitlist (Priya)");
-  console.log("  - Patient requiring interpreter (Susan)");
-  console.log("  - WorkCover patient (James)");
-  console.log("  - Clinical notes of every type: initial_assessment, progress_note, discharge_summary, treatment_plan");
-  console.log("  - Bilateral hearing aids (Margaret — Phonak pair, one with repair history)");
-  console.log("  - Single hearing aid (James — Oticon right ear)");
-  console.log("  - Older model with zinc-air batteries (Susan — Widex)");
-  console.log("  - Personal notes with family/scheduling context for 4 patients");
-  console.log("  - Claim items at every status: pending, claimed, paid, rejected");
-  console.log("  - Rejected claim with reason (Susan — TCA session limit)");
-  console.log("  - Maintenance plan expiry dates (Margaret Sep, James Jul, Susan May — expiring soon!)");
-  console.log("  - Nurse with multiple specialties (Clare — Audiologist + Hearing Aid Technician)");
-  console.log("  - Graduate nurse (Emma — supervised)");
-  console.log("  - Part-time nurse (Liam — Mon/Wed/Fri)");
-  console.log("  - No attachments seeded (files require actual uploads)");
+  const counts = await Promise.all([
+    prisma.user.count(),
+    prisma.patient.count(),
+    prisma.referral.count(),
+    prisma.clinicalNote.count(),
+    prisma.hearingAid.count(),
+    prisma.personalNote.count(),
+    prisma.claimItem.count(),
+    prisma.nurse.count(),
+    prisma.nurseSpecialty.count(),
+    prisma.appointment.count(),
+  ]);
+  const labels = [
+    "Users", "Patients", "Referrals", "Clinical Notes",
+    "Hearing Aids", "Personal Notes", "Claim Items",
+    "Nurses", "Nurse Specialties", "Appointments",
+  ];
+  for (let i = 0; i < labels.length; i++) {
+    console.log(`  ${labels[i].padEnd(20)} ${counts[i]}`);
+  }
+
+  console.log("\nDemo accounts (password: demo):");
+  console.log("  Admin:    admin@callonclare.com.au");
+  console.log("  Nurse:    emma@callonclare.com.au");
+  console.log("  Nurse:    liam@callonclare.com.au");
+  console.log("  Patient:  margaret.t@example.com");
+  console.log("  Patient:  james.chen@example.com");
 }
 
 seed()

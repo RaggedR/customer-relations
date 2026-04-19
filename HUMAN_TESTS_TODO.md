@@ -10,6 +10,32 @@ Items that require a human — external apps, physical waiting, admin accounts, 
 - [ ] Decide on nurse AUP acknowledgement process (paper form or portal checkbox)
 - [ ] Update SECURITY.md audit table (login/logout events are now logged)
 
+## Privacy & Compliance — Documentation / Legal (Compliance Audit 2026-04-17)
+
+These are documentation and legal tasks identified by the compliance audit. None require code changes.
+
+### Must fix before production with real patient data
+
+- [x] **Correct privacy notice AI claim** — DONE: wording updated in `portal/privacy/page.tsx` to accurately describe that names in clinical note text may reach Gemini
+- [ ] **Record patient consent timestamp** — Add `privacy_notice_accepted_at` field to patient/user entity, populated at registration. Currently no audit trail of APP 3 consent
+- [ ] **Write NDB incident response procedure** — Document: detection → internal escalation → OAIC notification (30 days) → individual notification. Required under Part IIIC for health information
+- [x] **Decide on nurse UI name/notes separation** — DECIDED: appointment card shows real name (scheduling context), notes section shows patient number only (clinical context). Both on same page. A leaked screenshot of the notes section cannot identify the patient. Comment added to `page.tsx` documenting this as deliberate.
+
+### Must fix before accepting Google integration
+
+- [ ] **Execute Google Cloud DPA for Gemini API** — SECURITY.md mentions DPAs are "available" but none is confirmed. Required under APP 8
+- [ ] **Execute Google Workspace DPA for Calendar API** — Same gap for CalDAV sync
+- [x] **Correct APP 8 legal basis in SECURITY.md** — DONE: corrected to cite APP 8.1 + reasonable steps, added DPA action item
+
+### Short-term improvements
+
+- [ ] **Make privacy notice publicly accessible** — Currently at `/portal/privacy` (behind login). Prospective patients can't access it. Add a public `/privacy` route
+- [ ] **Add practice contact details to privacy notice** — APP 1.4(d) requires contact details in the privacy policy
+- [ ] **Store AUP text as versioned document** — Currently only `aup_acknowledged_at` is recorded, not *what* the nurse agreed to. Store AUP version + text
+- [x] **Add audit logging to nurse appointment views** — DONE: audit events added to both list and detail endpoints
+- [ ] **Disclose Google Calendar transfer in privacy notice** — Appointment metadata (specialty, time, location) crosses to Google but this isn't mentioned
+- [ ] **Document justification for AI-visible free-text fields** — `patient.notes`, `referral.reason`, `appointment.notes` reach Gemini. Either mark `ai_visible: false` or document why they're needed
+
 ## CalDAV / CardDAV Sync (Section 8)
 
 Requires a real CalDAV/CardDAV client — can't be automated in Playwright.

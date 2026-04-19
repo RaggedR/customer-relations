@@ -2,6 +2,9 @@ import { describe, it, expect, beforeAll, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { signSession, type Role } from "@/lib/auth";
 
+// Ensure demo mode is disabled for proxy tests — we're testing real auth
+process.env.NEXT_PUBLIC_DEMO_MODE = "false";
+
 // Mock Prisma session table — return a valid session record for any token lookup
 vi.mock("@/lib/prisma", () => ({
   prisma: {

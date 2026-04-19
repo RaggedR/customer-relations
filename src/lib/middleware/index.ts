@@ -23,6 +23,7 @@ export {
   nurseRoute,
   nurseIdRoute,
   patientRoute,
+  patientIdRoute,
   publicRoute,
 } from "./stacks";
 

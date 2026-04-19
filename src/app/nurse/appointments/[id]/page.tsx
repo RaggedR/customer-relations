@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -37,39 +37,92 @@ const NOTE_TYPE_LABELS: Record<string, string> = {
   personal_note: "Personal Note",
 };
 
+const AUTO_CLOSE_MS = 5 * 60 * 1000; // 5 minutes
+
 export default function NurseAppointmentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
-  const [notesData, setNotesData] = useState<NotesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Notes — on-demand, hidden by default
+  const [notesData, setNotesData] = useState<NotesResponse | null>(null);
+  const [notesVisible, setNotesVisible] = useState(false);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // New note form state
   const [noteContent, setNoteContent] = useState("");
   const [noteType, setNoteType] = useState("progress_note");
   const [submitting, setSubmitting] = useState(false);
 
-  // Cancel form state (replaces window.prompt)
+  // Cancel form state
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
 
-  // Load appointment details and notes
+  // Load appointment details only (NOT notes — those are on-demand)
   useEffect(() => {
-    Promise.all([
-      fetch(`/api/nurse/appointments/${id}`).then((r) =>
-        r.ok ? r.json() : null
-      ),
-      fetch(`/api/nurse/appointments/${id}/notes`).then((r) => r.json()),
-    ])
-      .then(([appt, notes]) => {
-        setAppointment(appt);
-        setNotesData(notes);
-      })
+    fetch(`/api/nurse/appointments/${id}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then(setAppointment)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  const closeNotes = useCallback(() => {
+    setNotesVisible(false);
+    setNotesData(null);
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    closeTimerRef.current = null;
+    countdownRef.current = null;
+    setRemainingSeconds(0);
+  }, []);
+
+  // Clean up timers on unmount
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
+
+  async function handleShowNotes() {
+    if (notesVisible) {
+      closeNotes();
+      return;
+    }
+
+    setNotesLoading(true);
+    try {
+      const res = await fetch(`/api/nurse/appointments/${id}/notes`);
+      if (!res.ok) throw new Error("Failed to load notes");
+      const data = await res.json();
+      setNotesData(data);
+      setNotesVisible(true);
+
+      // Start 5-minute auto-close timer
+      setRemainingSeconds(AUTO_CLOSE_MS / 1000);
+      closeTimerRef.current = setTimeout(closeNotes, AUTO_CLOSE_MS);
+      countdownRef.current = setInterval(() => {
+        setRemainingSeconds((prev) => prev <= 1 ? 0 : prev - 1);
+      }, 1000);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setNotesLoading(false);
+    }
+  }
+
+  function formatCountdown(seconds: number): string {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
 
   async function handleAddNote(e: React.FormEvent) {
     e.preventDefault();
@@ -90,9 +143,12 @@ export default function NurseAppointmentDetailPage() {
       }
 
       setNoteContent("");
-      // Reload notes to see the new one (watermarked)
-      const updated = await fetch(`/api/nurse/appointments/${id}/notes`).then((r) => r.json());
-      setNotesData(updated);
+
+      // If notes are currently visible, refresh them to show the new one
+      if (notesVisible) {
+        const updated = await fetch(`/api/nurse/appointments/${id}/notes`).then((r) => r.json());
+        setNotesData(updated);
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -136,7 +192,7 @@ export default function NurseAppointmentDetailPage() {
       {/* Appointment info — shows patient name (scheduling context) */}
       {appointment && (
         <div className="rounded-lg border border-border p-4 space-y-1">
-          <h2 className="text-lg font-semibold">{appointment.patientName}</h2>
+          <h2 className="text-lg font-semibold">Patient #{appointment.patientId}</h2>
           <p className="text-sm text-muted-foreground">
             {new Date(appointment.date).toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" })}
             {" "}&middot; {appointment.startTime}–{appointment.endTime}
@@ -183,23 +239,50 @@ export default function NurseAppointmentDetailPage() {
         </div>
       )}
 
-      {/* Clinical notes — pseudonymised (Patient #N), watermarked images, copy-prevented */}
-      {notesData && (
-        <div
-          style={{ userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}
-          onCopy={(e) => e.preventDefault()}
-          onCut={(e) => e.preventDefault()}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <h3 className="text-sm font-medium text-muted-foreground mb-3">
-            Clinical Notes — {notesData.patientRef}
+      {/* Clinical notes — on-demand, pseudonymised (Patient #N), watermarked images, copy-prevented.
+          PRIVACY: The appointment card above shows the patient's real name (scheduling context).
+          This section shows ONLY the patient number (clinical context). This separation is
+          deliberate — a leaked screenshot of the notes section cannot identify the patient.
+          Do NOT add patientName to this section. See HUMAN_TESTS_TODO.md compliance section.
+          Notes are hidden by default — nurse must click "Show Notes" to reveal.
+          Auto-closes after 5 minutes. */}
+      <div className="rounded-lg border border-border p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-muted-foreground">
+            Clinical Notes {notesData ? `— ${notesData.patientRef}` : ""}
           </h3>
+          <div className="flex items-center gap-3">
+            {notesVisible && remainingSeconds > 0 && (
+              <span className="text-xs text-amber-400 font-mono">
+                {formatCountdown(remainingSeconds)}
+              </span>
+            )}
+            <button
+              onClick={handleShowNotes}
+              disabled={notesLoading}
+              className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${
+                notesVisible
+                  ? "bg-red-600/20 text-red-400 hover:bg-red-600/30"
+                  : "bg-primary/10 text-primary hover:bg-primary/20"
+              } disabled:opacity-50`}
+            >
+              {notesLoading ? "Loading..." : notesVisible ? "Hide Notes" : "Show Notes"}
+            </button>
+          </div>
+        </div>
 
-          {notesData.notes.length === 0 && (
-            <p className="text-xs text-muted-foreground">No notes recorded for this patient.</p>
-          )}
+        {notesVisible && notesData && (
+          <div
+            className="mt-4 space-y-4"
+            style={{ userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}
+            onCopy={(e) => e.preventDefault()}
+            onCut={(e) => e.preventDefault()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {notesData.notes.length === 0 && (
+              <p className="text-xs text-muted-foreground">No notes recorded for this patient.</p>
+            )}
 
-          <div className="space-y-4">
             {notesData.notes.map((note) => (
               <div key={`${note.noteType}-${note.id}`} className="rounded-lg border border-border p-3 space-y-2">
                 <div className="flex items-center justify-between">
@@ -221,10 +304,10 @@ export default function NurseAppointmentDetailPage() {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Add note form */}
+      {/* Add note form — always visible (nurses need to add notes regardless of viewing existing ones) */}
       <form onSubmit={handleAddNote} className="rounded-lg border border-border p-4 space-y-3">
         <h3 className="text-sm font-medium">Add Note</h3>
         <select

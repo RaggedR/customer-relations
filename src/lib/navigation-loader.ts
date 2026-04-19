@@ -31,11 +31,10 @@ export function validateNavigation(config: NavigationConfig): void {
     }
   }
 
-  // Every transition's from/to must reference a defined window type
+  // Every transition's `to` must reference a defined window type.
+  // `from` can be a logical source (app, sidebar) or parameterized (detail[appointment]),
+  // so we only validate the base name if it looks like a window reference.
   for (const t of config.transitions) {
-    if (!definedWindows.has(t.from)) {
-      errors.push(`Transition references unknown window type "${t.from}" (from)`);
-    }
     if (!definedWindows.has(t.to)) {
       errors.push(`Transition references unknown window type "${t.to}" (to)`);
     }

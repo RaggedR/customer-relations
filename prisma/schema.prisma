@@ -17,7 +17,7 @@ model Patient {
   date_of_birth DateTime?
   medicare_number String? @unique
   phone String?
-  email String?
+  email String? @unique
   address String?
   status String?
   maintenance_plan_expiry DateTime?
@@ -149,6 +149,7 @@ model Nurse {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
   appointments Appointment[]
   nurse_specialtys NurseSpecialty[]
+  nurse_availabilitys NurseAvailability[]
   calendar_connections CalendarConnection[]
   @@index([userId])
 }
@@ -162,6 +163,20 @@ model NurseSpecialty {
   nurseId Int?
   nurse Nurse? @relation(fields: [nurseId], references: [id], onDelete: Cascade)
   @@index([nurseId])
+}
+
+model NurseAvailability {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  date DateTime
+  day_of_week Float?
+  start_time String
+  end_time String
+  recurring Boolean?
+  nurseId Int
+  nurse Nurse @relation(fields: [nurseId], references: [id], onDelete: Cascade)
+  @@index([nurseId, date])
 }
 
 model CalendarConnection {
@@ -205,6 +220,7 @@ model User {
   password_hash String
   role String
   active Boolean? @default(true)
+  must_change_password Boolean? @default(false)
   patients Patient[]
   nurses Nurse[]
   sessions Session[]

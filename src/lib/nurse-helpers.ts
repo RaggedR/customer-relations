@@ -19,14 +19,37 @@ import { prisma } from "@/lib/prisma";
  * Returns null if the user is not linked to a nurse entity.
  */
 export async function resolveNurse(userId: number) {
+  const include = { user: { select: { must_change_password: true } } };
+
   // 1. FK-first: fast path for records with the userId column populated.
-  const byFk = await prisma.nurse.findFirst({ where: { userId } });
+  const byFk = await prisma.nurse.findFirst({ where: { userId }, include });
   if (byFk) return byFk;
 
   // 2. Legacy fallback: email match for records that pre-date the FK.
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user?.email) return null;
-  return prisma.nurse.findFirst({ where: { email: user.email, userId: null } });
+  return prisma.nurse.findFirst({ where: { email: user.email, userId: null }, include });
+}
+
+/**
+ * Check that the nurse's user account does not require a password change.
+ *
+ * Returns a 403 NextResponse if must_change_password is true, or null if
+ * the password is current. Checked before AUP — password change takes priority.
+ */
+export function requirePasswordChanged(
+  nurse: { user?: { must_change_password: boolean | null } | null },
+): NextResponse | null {
+  if (nurse.user?.must_change_password) {
+    return NextResponse.json(
+      {
+        error: "password_change_required",
+        message: "You must change your password before accessing the nurse portal.",
+      },
+      { status: 403 },
+    );
+  }
+  return null;
 }
 
 /**
@@ -66,7 +89,7 @@ export async function verifyAppointmentOwnership(
 ) {
   const appointment = await prisma.appointment.findUnique({
     where: { id: appointmentId },
-    select: { id: true, nurseId: true, patientId: true },
+    select: { id: true, nurseId: true, patientId: true, date: true, start_time: true, specialty: true },
   });
   if (!appointment || appointment.nurseId !== nurseId) return null;
   return appointment;

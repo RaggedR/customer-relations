@@ -44,11 +44,22 @@ describe("AI schema description — field exclusion", () => {
     expect(ddl).not.toContain("registration_number");
   });
 
-  it("still includes non-excluded entities", () => {
-    const ddl = generateSchemaDescription();
+  it("still includes clinical entities when using AI exclude list", () => {
+    // The AI route passes an explicit exclude list (system entities only),
+    // so clinical_note and personal_note remain visible to the AI despite
+    // being marked sensitive (which blocks generic CRUD access).
+    const aiExclude = ["user", "session", "audit_log", "calendar_connection", "claim_token"];
+    const ddl = generateSchemaDescription(aiExclude);
     expect(ddl).toContain('"Patient"');
     expect(ddl).toContain('"Appointment"');
     expect(ddl).toContain('"ClinicalNote"');
+    expect(ddl).toContain('"PersonalNote"');
+  });
+
+  it("excludes clinical entities when called without exclude list (uses isSensitive)", () => {
+    const ddl = generateSchemaDescription();
+    expect(ddl).not.toContain('"ClinicalNote"');
+    expect(ddl).not.toContain('"PersonalNote"');
   });
 });
 

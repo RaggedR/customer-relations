@@ -18,7 +18,7 @@ import { update } from "@/lib/repository";
 // (HSP plan dates) which patients access through their treating clinician, not self-service.
 const VISIBLE_FIELDS = [
   "id", "name", "email", "phone", "address",
-  "date_of_birth", "status",
+  "date_of_birth", "medicare_number", "status",
 ] as const;
 
 // Fields the patient can self-edit (contact details only)

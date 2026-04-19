@@ -35,6 +35,9 @@ const BLOCKED_KEYWORDS = [
   // SET could alter search_path to redirect function resolution (SET search_path attack).
   "LOAD",
   "SET",
+  // EXPLAIN ANALYZE actually executes the query — blocks information disclosure
+  // about table sizes, row counts, and query plans.
+  "EXPLAIN",
 ];
 
 /**

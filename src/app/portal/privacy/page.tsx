@@ -49,12 +49,15 @@ export default function PrivacyNoticePage() {
 
       <Section title="AI-assisted queries">
         <p>
-          This practice uses an AI assistant (Google Gemini) to help answer
-          questions about practice data. When the AI processes a query,
-          your identifying information (name, contact details, Medicare number)
-          is replaced with pseudonyms before being sent to Google. The AI
-          never sees your real identity. All AI queries are logged in our
-          audit trail.
+          This practice uses an AI assistant (Google Gemini) to help the
+          practice owner answer questions about practice data. When the AI
+          processes a query, structured identifying information (name fields,
+          contact details, Medicare number) is replaced with pseudonyms
+          before being sent to Google. However, if your name appears within
+          the text of a clinical note, it may be included in data sent to
+          Google. Google&apos;s API terms prohibit using this data for model
+          training, and it is deleted within 30 days. All AI queries are
+          logged in our audit trail.
         </p>
       </Section>
 

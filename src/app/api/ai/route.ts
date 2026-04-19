@@ -62,7 +62,7 @@ Common query patterns:
 - "Find free slots for next Tuesday" → query Appointment for that date, invert to find gaps
 
 Database schema:
-${generateSchemaDescription()}
+${generateSchemaDescription(["user", "session", "audit_log", "calendar_connection", "claim_token"])}
 
 IMPORTANT RULES:
 - If the question is not related to the practice data (patients, nurses, referrals, clinical notes, hearing aids, claims, attachments), respond with: {"refused": true, "message": "Sorry, I can't help you with that. I can only answer questions about your patient and practice data."}
@@ -228,7 +228,8 @@ async function generateAnswer(
   try {
     const cleaned = stripCodeFences(resultsText);
     answerResult = JSON.parse(cleaned);
-  } catch {
+  } catch (parseErr) {
+    logger.warn({ err: parseErr, responseLength: resultsText.length }, "Gemini answer JSON parse failed — using raw text");
     answerResult = { answer: resultsText, chart: null };
   }
 
@@ -306,6 +307,7 @@ export const POST = adminRoute()
           error: "The AI generated an unsafe query. Please rephrase your question.",
         }, { status: 400 });
       }
+      logger.error({ err }, "Gemini SQL generation failed");
       return NextResponse.json({
         error: "Failed to parse AI response",
       }, { status: 500 });

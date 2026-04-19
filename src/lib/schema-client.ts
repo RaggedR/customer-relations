@@ -68,11 +68,26 @@ export interface SchemaHierarchy {
  * belongs_to relations. Pure function, no side effects.
  */
 export function deriveHierarchy(schema: SchemaConfig): SchemaHierarchy {
-  const allEntities = Object.keys(schema.entities);
+  // Exclude sensitive entities (user, session, audit_log, etc.) — they are
+  // internal system entities, not navigable in the UI.
+  const allEntities = Object.keys(schema.entities).filter(
+    (name) => !schema.entities[name].sensitive
+  );
 
   const firstOrder = allEntities.filter((name) => {
     const entity = schema.entities[name];
-    return !entity.relations || Object.keys(entity.relations).length === 0;
+    // An entity is first-order if it has no relations, or all its
+    // belongs_to targets are sensitive (e.g. patient → user).
+    if (!entity.relations) return true;
+    const belongsToTargets = Object.values(entity.relations)
+      .filter((r) => r.type === "belongs_to")
+      .map((r) => r.entity);
+    if (belongsToTargets.length === 0) return true;
+    // If the target is missing from the schema (filtered out as sensitive)
+    // or explicitly marked sensitive, ignore that relation for hierarchy purposes.
+    return belongsToTargets.every(
+      (target) => !schema.entities[target] || schema.entities[target].sensitive
+    );
   });
 
   const propertiesOf: Record<string, string[]> = {};

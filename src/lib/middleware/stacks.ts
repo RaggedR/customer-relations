@@ -64,6 +64,16 @@ export function patientRoute() {
     .use(withPatientContext);
 }
 
+/** Patient portal with parsed ID: trace → session → patient → resolution → ID */
+export function patientIdRoute() {
+  return route()
+    .use(withTrace)
+    .use(withSession)
+    .use(withRole("patient"))
+    .use(withPatientContext)
+    .use(withParsedId);
+}
+
 /** Public routes: trace only (no auth) */
 export function publicRoute() {
   return route()

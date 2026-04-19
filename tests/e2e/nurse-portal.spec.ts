@@ -13,7 +13,7 @@
  */
 
 import { test, expect } from "playwright/test";
-import { NURSE_STORAGE, BASE_URL } from "./helpers/auth";
+import { NURSE_STORAGE, NURSE_EMAIL, NURSE_PASSWORD, BASE_URL } from "./helpers/auth";
 import { readFileSync } from "fs";
 
 // Use the nurse storageState for all tests in this file
@@ -190,5 +190,81 @@ test.describe("Section 14 — Nurse Notes (Watermarked Images)", () => {
     expect(detail.referrals).toBeUndefined();
     expect(detail.clinical_notes).toBeUndefined();
     expect(detail.medicare_number).toBeUndefined();
+  });
+});
+
+test.describe("Section 14 — Nurse Onboarding (Password Change)", () => {
+  test("login returns mustChangePassword flag", async () => {
+    // Login with the E2E nurse — must_change_password is false
+    const res = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: NURSE_EMAIL, password: NURSE_PASSWORD }),
+    });
+    expect(res.ok).toBe(true);
+    const body = await res.json();
+    expect(body.user.mustChangePassword).toBe(false);
+  });
+
+  test("nurse with must_change_password=false can access appointments", async ({ request }) => {
+    // The E2E nurse has must_change_password: false — should work
+    const res = await request.get("/api/nurse/appointments");
+    expect(res.ok()).toBeTruthy();
+  });
+
+  test("nurse with must_change_password=false can access /api/nurse/me", async ({ request }) => {
+    const res = await request.get("/api/nurse/me");
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    expect(body.name).toBeTruthy();
+  });
+
+  test("change-password endpoint validates strength rules", async () => {
+    const token = getNurseToken();
+
+    // Try a weak password — should be rejected
+    const res = await fetch(`${BASE_URL}/api/auth/change-password`, {
+      method: "POST",
+      headers: {
+        Cookie: `session=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        currentPassword: NURSE_PASSWORD,
+        newPassword: "weak",
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.rules).toBeDefined();
+    expect(body.rules.length).toBeGreaterThan(0);
+  });
+
+  test("change-password endpoint rejects wrong current password", async () => {
+    const token = getNurseToken();
+
+    const res = await fetch(`${BASE_URL}/api/auth/change-password`, {
+      method: "POST",
+      headers: {
+        Cookie: `session=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        currentPassword: "wrong-password",
+        newPassword: "Strong!Pass1",
+      }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test("change-password page is accessible to nurses", async () => {
+    const token = getNurseToken();
+
+    const res = await fetch(`${BASE_URL}/change-password`, {
+      redirect: "manual",
+      headers: { Cookie: `session=${token}` },
+    });
+    // Should NOT redirect to /login (it's accessible to all authenticated roles)
+    expect(res.status).not.toBe(307);
   });
 });

@@ -7,6 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { entityLabelSingular, fieldTypes, toSnakeCase, type SchemaConfig, type FieldConfig } from "@/lib/schema-client";
 import { recordDisplayName, formatDateForInput, formatDatetimeForInput } from "@/lib/renderers";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface EntityFormPanelProps {
   entityName: string;
@@ -30,6 +38,11 @@ export function EntityFormPanel({
     text: string;
     type: "success" | "error";
   } | null>(null);
+  const [generatedPassword, setGeneratedPassword] = useState<{
+    password: string;
+    nurseName: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Load existing record in edit mode
   useEffect(() => {
@@ -93,8 +106,16 @@ export function EntityFormPanel({
       );
       onSaved?.(data.id, displayName);
       if (!entityId) {
-        // Clear form after create
-        setForm({});
+        // If a nurse was created with an auto-generated password, show it
+        // in a modal before clearing the form
+        if (data._generatedPassword) {
+          setGeneratedPassword({
+            password: data._generatedPassword,
+            nurseName: displayName || data.name || "Nurse",
+          });
+        } else {
+          setForm({});
+        }
       }
     } catch (err) {
       showMessage((err as Error).message, "error");
@@ -163,6 +184,61 @@ export function EntityFormPanel({
           </Button>
         </div>
       </form>
+
+      {/* Password display modal — shown once after nurse creation */}
+      <Dialog
+        open={!!generatedPassword}
+        onOpenChange={(open) => {
+          if (!open) {
+            setGeneratedPassword(null);
+            setCopied(false);
+            setForm({});
+          }
+        }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Account created</DialogTitle>
+            <DialogDescription>
+              A login account has been created for{" "}
+              <strong>{generatedPassword?.nurseName}</strong>. Give them
+              this temporary password — it will not be shown again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="my-2 flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2">
+            <code className="flex-1 select-all font-mono text-sm tracking-wide">
+              {generatedPassword?.password}
+            </code>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (generatedPassword?.password) {
+                  navigator.clipboard.writeText(generatedPassword.password);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }
+              }}
+            >
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The nurse will be required to change this password on first login.
+          </p>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setGeneratedPassword(null);
+                setCopied(false);
+                setForm({});
+              }}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
