@@ -94,7 +94,9 @@
     --sidebar-ring: oklch(0.55 0.15 185);
 }
 
-/* Dark mode (admin dashboard floating windows & sidebar) */
+/* Dark mode — NOT currently applied. Retained for future use.
+   The admin dashboard's dark aesthetic comes from --floating-* and
+   --sidebar vars defined above in :root, not from .dark. */
 .dark {
     --floating: oklch(0.22 0.035 255);
     --floating-foreground: oklch(0.93 0.01 250);

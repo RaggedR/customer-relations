@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { STATUS_STYLES, STATUS_FALLBACK } from "@/lib/status-styles";
 
 interface Appointment {
   id: number;
@@ -13,14 +13,6 @@ interface Appointment {
   specialty: string;
   status: string;
 }
-
-const STATUS_STYLES: Record<string, string> = {
-  confirmed: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  requested: "bg-amber-100 text-amber-800 border-amber-200",
-  completed: "bg-sky-100 text-sky-800 border-sky-200",
-  cancelled: "bg-red-100 text-red-800 border-red-200",
-  no_show: "bg-gray-100 text-gray-700 border-gray-200",
-};
 
 export default function PortalAppointmentsPage() {
   const router = useRouter();
@@ -59,9 +51,6 @@ export default function PortalAppointmentsPage() {
         {upcoming.length === 0 ? (
           <div className="rounded-lg border border-border bg-card p-8 text-center">
             <p className="text-sm text-muted-foreground">No upcoming appointments.</p>
-            <Link href="/portal/book" className="text-sm text-primary font-medium hover:underline mt-2 inline-block">
-              Book an appointment
-            </Link>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -104,7 +93,7 @@ function AppointmentCard({ appointment: appt, muted }: { appointment: Appointmen
             {appt.startTime} – {appt.endTime}
           </p>
         </div>
-        <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full border ${STATUS_STYLES[appt.status] ?? "bg-gray-100 text-gray-700 border-gray-200"}`}>
+        <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full border ${STATUS_STYLES[appt.status] ?? STATUS_FALLBACK}`}>
           {appt.status?.replace("_", " ")}
         </span>
       </div>
