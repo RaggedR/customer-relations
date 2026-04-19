@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { STATUS_STYLES, STATUS_FALLBACK } from "@/lib/status-styles";
 
 interface Appointment {
   id: number;
@@ -12,14 +13,6 @@ interface Appointment {
   specialty: string;
   status: string;
 }
-
-const STATUS_COLOURS: Record<string, string> = {
-  confirmed: "bg-green-500/20 text-green-400",
-  requested: "bg-amber-500/20 text-amber-400",
-  completed: "bg-blue-500/20 text-blue-400",
-  cancelled: "bg-red-500/20 text-red-400",
-  no_show: "bg-gray-500/20 text-gray-400",
-};
 
 export default function PortalAppointmentsPage() {
   const router = useRouter();
@@ -40,20 +33,27 @@ export default function PortalAppointmentsPage() {
   }, []);
 
   if (loading) return <p className="text-sm text-muted-foreground py-8">Loading appointments...</p>;
-  if (error) return <p className="text-sm text-red-400 py-8">{error}</p>;
+  if (error) return <p className="text-sm text-red-600 py-8">{error}</p>;
 
   const now = new Date();
   const upcoming = appointments.filter((a) => new Date(a.date) >= now && a.status !== "cancelled");
   const past = appointments.filter((a) => new Date(a.date) < now || a.status === "cancelled");
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 max-w-5xl">
+      {/* Upcoming */}
       <section>
-        <h2 className="text-xl font-semibold mb-4">Upcoming Appointments</h2>
+        <div className="mb-4">
+          <h2 className="text-2xl font-semibold tracking-tight">Upcoming Appointments</h2>
+          <p className="text-sm text-muted-foreground mt-1">Your scheduled visits</p>
+        </div>
+
         {upcoming.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No upcoming appointments.</p>
+          <div className="rounded-lg border border-border bg-card p-8 text-center">
+            <p className="text-sm text-muted-foreground">No upcoming appointments.</p>
+          </div>
         ) : (
-          <div className="space-y-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             {upcoming.map((appt) => (
               <AppointmentCard key={appt.id} appointment={appt} />
             ))}
@@ -61,12 +61,13 @@ export default function PortalAppointmentsPage() {
         )}
       </section>
 
+      {/* Past */}
       {past.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold mb-4 text-muted-foreground">Past Appointments</h2>
-          <div className="space-y-2">
+          <h2 className="text-lg font-semibold text-muted-foreground mb-4">Past Appointments</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
             {past.map((appt) => (
-              <AppointmentCard key={appt.id} appointment={appt} />
+              <AppointmentCard key={appt.id} appointment={appt} muted />
             ))}
           </div>
         </section>
@@ -75,26 +76,31 @@ export default function PortalAppointmentsPage() {
   );
 }
 
-function AppointmentCard({ appointment: appt }: { appointment: Appointment }) {
+function AppointmentCard({ appointment: appt, muted }: { appointment: Appointment; muted?: boolean }) {
   const dateStr = new Date(appt.date).toLocaleDateString("en-AU", {
-    weekday: "long",
+    weekday: "short",
     day: "numeric",
     month: "long",
     year: "numeric",
   });
 
   return (
-    <div className="rounded-lg border border-border p-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium">{dateStr}</p>
-          <p className="text-xs text-muted-foreground">
-            {appt.startTime}–{appt.endTime} &middot; {appt.location} &middot; {appt.specialty}
+    <div className={`rounded-lg border border-border bg-card p-4 shadow-sm ${muted ? "opacity-60" : ""}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-card-foreground">{dateStr}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {appt.startTime} – {appt.endTime}
           </p>
         </div>
-        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_COLOURS[appt.status] ?? "bg-gray-500/20 text-gray-400"}`}>
+        <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full border ${STATUS_STYLES[appt.status] ?? STATUS_FALLBACK}`}>
           {appt.status?.replace("_", " ")}
         </span>
+      </div>
+      <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+        <span>{appt.location}</span>
+        <span className="text-border">|</span>
+        <span>{appt.specialty}</span>
       </div>
     </div>
   );

@@ -101,49 +101,59 @@ export default function PortalProfilePage() {
   }
 
   if (loading) return <p className="text-sm text-muted-foreground py-8">Loading profile...</p>;
-  if (error) return <p className="text-sm text-red-400 py-8">{error}</p>;
+  if (error) return <p className="text-sm text-red-600 py-8">{error}</p>;
   if (!profile) return null;
 
   return (
-    <div className="space-y-8">
-      <section>
-        <h2 className="text-xl font-semibold mb-4">My Profile</h2>
-        <div className="rounded-lg border border-border p-4 space-y-3">
-          <Field label="Name" value={profile.name} />
-          <Field label="Email" value={profile.email} />
-          <Field label="Date of birth" value={profile.date_of_birth ? new Date(profile.date_of_birth).toLocaleDateString("en-AU") : "—"} />
-          <Field label="Status" value={profile.status} />
+    <div className="max-w-5xl">
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold tracking-tight">My Profile</h2>
+        <p className="text-sm text-muted-foreground mt-1">View and update your personal details</p>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Personal details card */}
+        <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">Personal Details</h3>
+          <div className="space-y-4">
+            <Field label="Name" value={profile.name} />
+            <Field label="Email" value={profile.email} />
+            <Field label="Date of birth" value={profile.date_of_birth ? new Date(profile.date_of_birth).toLocaleDateString("en-AU") : "—"} />
+            <Field label="Status" value={profile.status} />
+          </div>
         </div>
-      </section>
 
-      <section>
-        <h2 className="text-lg font-semibold mb-4">Contact Details</h2>
-        <form onSubmit={handleSaveContact} className="rounded-lg border border-border p-4 space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="phone">Phone</Label>
-            <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        {/* Contact details card */}
+        <form onSubmit={handleSaveContact} className="rounded-lg border border-border bg-card p-6 shadow-sm">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">Contact Details</h3>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone</Label>
+              <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="address">Address</Label>
+              <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} />
+            </div>
+            {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+            {saveSuccess && <p className="text-sm text-emerald-600">{saveSuccess}</p>}
+            <Button type="submit" disabled={saving}>
+              {saving ? "Saving..." : "Update contact details"}
+            </Button>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="address">Address</Label>
-            <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} />
-          </div>
-          {saveError && <p className="text-sm text-red-400">{saveError}</p>}
-          {saveSuccess && <p className="text-sm text-green-400">{saveSuccess}</p>}
-          <Button type="submit" disabled={saving}>
-            {saving ? "Saving..." : "Update contact details"}
-          </Button>
         </form>
-      </section>
+      </div>
 
-      <section>
-        <h2 className="text-lg font-semibold mb-4">Request a Correction</h2>
-        <p className="text-sm text-muted-foreground mb-3">
+      {/* Correction request */}
+      <div className="mt-6 rounded-lg border border-border bg-card p-6 shadow-sm">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Request a Correction</h3>
+        <p className="text-sm text-muted-foreground mb-4">
           If any of your details above are incorrect (name, date of birth, Medicare number),
           you can request a correction. The practice will review and update your records.
         </p>
 
         {correctionMessage && (
-          <p className="text-sm text-green-400 mb-3">{correctionMessage}</p>
+          <p className="text-sm text-emerald-600 mb-3">{correctionMessage}</p>
         )}
 
         {!showCorrection ? (
@@ -151,7 +161,7 @@ export default function PortalProfilePage() {
             Request a correction
           </Button>
         ) : (
-          <form onSubmit={handleCorrectionSubmit} className="rounded-lg border border-border p-4 space-y-4">
+          <form onSubmit={handleCorrectionSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="correction">What needs correcting?</Label>
               <Textarea
@@ -172,16 +182,16 @@ export default function PortalProfilePage() {
             </div>
           </form>
         )}
-      </section>
+      </div>
     </div>
   );
 }
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span>{value}</span>
+    <div>
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="text-sm text-card-foreground mt-0.5">{value}</dd>
     </div>
   );
 }

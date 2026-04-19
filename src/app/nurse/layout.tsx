@@ -1,30 +1,74 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+
+interface NavItem { href: string; label: string; icon: string }
+
+const NAV_ITEMS: NavItem[] = [
+  { href: "/nurse", label: "Appointments", icon: "📋" },
+];
+
+/** Match exact path or prefix (with trailing slash guard to prevent /nurse matching /nursery). */
+function isActive(pathname: string, item: NavItem, basePath: string): boolean {
+  if (pathname === item.href) return true;
+  return item.href !== basePath && pathname.startsWith(item.href + "/");
+}
 
 export default function NurseLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   }
 
+  const currentLabel = NAV_ITEMS.find((item) => isActive(pathname, item, "/nurse"))?.label ?? "Nurse Portal";
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-4 py-3 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">Nurse Portal</h1>
-          <p className="text-xs text-muted-foreground">Clinical data is watermarked and access-logged</p>
+    <div className="min-h-screen bg-background text-foreground flex">
+      {/* Sidebar */}
+      <aside className="w-60 shrink-0 border-r border-border bg-sidebar text-sidebar-foreground flex flex-col">
+        <div className="px-5 py-5 border-b border-sidebar-border">
+          <h1 className="text-base font-semibold text-sidebar-foreground">Nurse Portal</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Clinical data is watermarked</p>
         </div>
-        <button
-          onClick={handleLogout}
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Sign out
-        </button>
-      </header>
-      <main className="p-4 max-w-4xl mx-auto">{children}</main>
+
+        <nav className="flex-1 px-3 py-4 space-y-1">
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                isActive(pathname, item, "/nurse")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+              }`}
+            >
+              <span className="text-base">{item.icon}</span>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="px-3 py-4 border-t border-sidebar-border">
+          <button
+            onClick={handleLogout}
+            className="w-full text-left rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-14 shrink-0 border-b border-border bg-card px-8 flex items-center">
+          <h2 className="text-sm font-medium text-muted-foreground">{currentLabel}</h2>
+        </header>
+        <main className="flex-1 overflow-y-auto p-8">{children}</main>
+      </div>
     </div>
   );
 }
