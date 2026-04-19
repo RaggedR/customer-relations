@@ -100,11 +100,8 @@ describe("Edge Case Roundtrip", () => {
     expect(importRes.ok).toBe(true);
     const summary = await importRes.json();
 
-    // All our edge-case records should survive
-    const edgeErrors = summary.errors.filter((e: string) =>
-      e.includes("RT-EDGE")
-    );
-    expect(edgeErrors).toHaveLength(0);
+    // No rows should be skipped — catches name-resolution failures too
+    expect(summary.skipped).toBe(0);
 
     // Verify the quotes survived
     const reimported = (await findAll("hearing_aid", {
@@ -133,6 +130,7 @@ describe("Edge Case Roundtrip", () => {
       "unicode-test.csv"
     );
     expect(importRes.ok).toBe(true);
+    expect((await importRes.clone().json()).skipped).toBe(0);
 
     const reimported = (await findAll("hearing_aid", {
       filterBy: { patientId },
@@ -163,6 +161,7 @@ describe("Edge Case Roundtrip", () => {
       "newlines-test.csv"
     );
     expect(importRes.ok).toBe(true);
+    expect((await importRes.clone().json()).skipped).toBe(0);
 
     const reimported = (await findAll("hearing_aid", {
       filterBy: { patientId },
@@ -191,6 +190,7 @@ describe("Edge Case Roundtrip", () => {
       "nulls-test.csv"
     );
     expect(importRes.ok).toBe(true);
+    expect((await importRes.clone().json()).skipped).toBe(0);
 
     const reimported = (await findAll("hearing_aid", {
       filterBy: { patientId },
@@ -225,6 +225,7 @@ describe("Edge Case Roundtrip", () => {
       "large-text-test.csv"
     );
     expect(importRes.ok).toBe(true);
+    expect((await importRes.clone().json()).skipped).toBe(0);
 
     const reimported = (await findAll("hearing_aid", {
       filterBy: { patientId },
