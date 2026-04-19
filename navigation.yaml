@@ -45,7 +45,7 @@ windows:
     features:
       - two_week_view        # default: 14-day grid
       - nurse_highlight_dropdown  # dropdown to select a nurse; their appointments are highlighted, others dimmed
-      - count_badge                 # each slot shows a count ("1", "2", "3") of how many appointments exist in that time slot
+      - name_pills                   # each appointment renders as a small pill showing patient first name; multiple pills tile side-by-side
       - slot_popup_menu            # clicking a cell with appointments shows popup: list of appointments + "New appointment" — this is how you drill into detail
       - click_to_create            # click empty slot → new appointment form; also available from popup menu
 

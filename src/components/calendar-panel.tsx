@@ -346,8 +346,8 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
           <div
             className="absolute rounded-lg border border-border bg-card shadow-lg py-1 min-w-[200px]"
             style={{
-              left: Math.min(popup.x, window.innerWidth - 220),
-              top: Math.min(popup.y, window.innerHeight - 200),
+              left: Math.min(popup.x, (typeof window !== "undefined" ? window.innerWidth : 1024) - 220),
+              top: Math.min(popup.y, (typeof window !== "undefined" ? window.innerHeight : 768) - 200),
             }}
             onClick={(e) => e.stopPropagation()}
           >
