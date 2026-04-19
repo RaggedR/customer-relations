@@ -62,7 +62,7 @@ Common query patterns:
 - "Find free slots for next Tuesday" → query Appointment for that date, invert to find gaps
 
 Database schema:
-${generateSchemaDescription()}
+${generateSchemaDescription(["user", "session", "audit_log", "calendar_connection", "claim_token"])}
 
 IMPORTANT RULES:
 - If the question is not related to the practice data (patients, nurses, referrals, clinical notes, hearing aids, claims, attachments), respond with: {"refused": true, "message": "Sorry, I can't help you with that. I can only answer questions about your patient and practice data."}

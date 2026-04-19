@@ -358,3 +358,36 @@ checkAuth()      -- Basic Auth with timing-safe comparison
     v
 Route Handler    -- calls logAuditEvent() directly for writes
 ```
+
+## Email Notifications
+
+Transactional emails are sent via Resend (`src/lib/email.ts`). When
+`RESEND_API_KEY` is not set, all emails are logged to the console as stubs.
+Email failures never block the user's request — all sends are fire-and-forget.
+
+### Emails Sent by the Application
+
+| Email | Trigger | Recipient | Route |
+|-------|---------|-----------|-------|
+| Account claim ("set your password") | Admin creates patient portal invite | Patient | `api/auth/portal/check` |
+| Appointment confirmation | Admin creates appointment OR patient books via portal | Patient | `api/appointment` (POST), `api/portal/appointments` (POST) |
+| Cancellation — reschedule | Nurse cancels an appointment | Patient | `api/nurse/appointments/[id]/cancel` |
+| Cancellation — notification | Nurse cancels an appointment | Admin (Clare) | `api/nurse/appointments/[id]/cancel` |
+
+### Emails Sent by Cron Jobs
+
+| Email | Schedule | Recipient | Script |
+|-------|----------|-----------|--------|
+| Appointment reminder | Daily (e.g. 6pm) | Patients with appointments tomorrow | `scripts/appointment-reminders.ts` |
+| Suspicious activity alert | Every 10 minutes | Admin (Clare) | `scripts/audit-alerts.ts` |
+
+### Environment Variables
+
+| Variable | Used By | Purpose |
+|----------|---------|---------|
+| `RESEND_API_KEY` | All emails | Resend API key — without this, all emails are console stubs |
+| `EMAIL_FROM` | All emails | Sender address (default: `Customer Relations <noreply@example.com>`) |
+| `PRACTICE_NAME` | All emails | Practice name in email body (default: `the practice`) |
+| `ADMIN_EMAIL` | Cancellation to admin | Clare's email — nurse cancellations are sent here |
+| `ALERT_EMAIL` | Audit alerts | Alert recipient — suspicious activity notifications |
+| `PORTAL_URL` | Cancellation to patient | Base URL for "rebook" link in cancellation email |

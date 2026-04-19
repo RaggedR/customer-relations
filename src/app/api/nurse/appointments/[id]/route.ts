@@ -17,6 +17,14 @@ export const GET = nurseIdRoute()
     const appointment = await findById("appointment", ctx.entityId) as Record<string, unknown> | null;
 
     if (!appointment || appointment.nurseId !== ctx.nurse.id) {
+      if (appointment) {
+        ctx.audit({
+          action: "access_denied",
+          entity: "appointment",
+          entityId: String(ctx.entityId),
+          details: `nurse ${ctx.nurse.name} (nurse #${ctx.nurse.id}) attempted to view appointment #${ctx.entityId} assigned to another nurse`,
+        });
+      }
       return NextResponse.json(
         { error: "Appointment not found or not assigned to you" },
         { status: 404 },

@@ -33,7 +33,7 @@ function getPracticeName(): string {
 }
 
 /** Stub logger for dev — logs to console when no Resend key is set. */
-function stub(type: string, params: Record<string, unknown>): void {
+function stub(type: string, params: object): void {
   logger.info(params, `EMAIL STUB: ${type} (set RESEND_API_KEY to send real emails)`);
   if (process.env.NODE_ENV !== "production") {
     console.log(`\n📧 ${type}:`, JSON.stringify(params, null, 2), "\n");

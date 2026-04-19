@@ -31,6 +31,12 @@ export const GET = nurseIdRoute()
     });
 
     if (!hasAppointment) {
+      ctx.audit({
+        action: "access_denied",
+        entity: "patient",
+        entityId: String(patientId),
+        details: `nurse ${ctx.nurse.name} (nurse #${ctx.nurse.id}) attempted to view notes for non-assigned patient #${patientId}`,
+      });
       return NextResponse.json(
         { error: "You do not have access to this patient's records" },
         { status: 403 },
