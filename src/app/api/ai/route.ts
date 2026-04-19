@@ -228,7 +228,8 @@ async function generateAnswer(
   try {
     const cleaned = stripCodeFences(resultsText);
     answerResult = JSON.parse(cleaned);
-  } catch {
+  } catch (parseErr) {
+    logger.warn({ err: parseErr, responseLength: resultsText.length }, "Gemini answer JSON parse failed — using raw text");
     answerResult = { answer: resultsText, chart: null };
   }
 
@@ -306,6 +307,7 @@ export const POST = adminRoute()
           error: "The AI generated an unsafe query. Please rephrase your question.",
         }, { status: 400 });
       }
+      logger.error({ err }, "Gemini SQL generation failed");
       return NextResponse.json({
         error: "Failed to parse AI response",
       }, { status: 500 });

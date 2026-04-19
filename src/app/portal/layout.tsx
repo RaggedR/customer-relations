@@ -1,10 +1,25 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const [patientName, setPatientName] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/portal/profile")
+      .then((res) => {
+        if (res.status === 401) { router.push("/portal/login"); return null; }
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.name) setPatientName(data.name);
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -20,6 +35,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <Link href="/portal" className="text-muted-foreground hover:text-foreground transition-colors">
               Appointments
             </Link>
+            <Link href="/portal/book" className="text-muted-foreground hover:text-foreground transition-colors">
+              Book
+            </Link>
             <Link href="/portal/profile" className="text-muted-foreground hover:text-foreground transition-colors">
               My Profile
             </Link>
@@ -28,12 +46,19 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             </Link>
           </nav>
         </div>
-        <button
-          onClick={handleLogout}
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Sign out
-        </button>
+        <div className="flex items-center gap-4">
+          {patientName && (
+            <span className="text-sm text-muted-foreground">
+              Logged in as <span className="text-foreground font-medium">{patientName}</span>
+            </span>
+          )}
+          <button
+            onClick={handleLogout}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
       <main className="p-4 max-w-3xl mx-auto">{children}</main>
     </div>

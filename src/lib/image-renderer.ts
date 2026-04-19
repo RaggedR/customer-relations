@@ -14,7 +14,7 @@ import { createCanvas, type CanvasRenderingContext2D } from "canvas";
 // ── Constants ────────────────────────────────────────────
 
 const CANVAS_WIDTH = 800;
-const MIN_CANVAS_HEIGHT = 600;
+const MIN_CANVAS_HEIGHT = 120;
 const MARGIN = 40;
 const CONTENT_WIDTH = CANVAS_WIDTH - MARGIN * 2;
 const CONTENT_FONT = "14px sans-serif";

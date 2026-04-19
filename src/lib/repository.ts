@@ -215,7 +215,11 @@ export async function findAll(
     if (!validSortFields.has(options.sortBy)) {
       throw new Error(`Invalid sort field: ${options.sortBy}`);
     }
-    args.orderBy = { [toSnakeCase(options.sortBy)]: options.sortOrder || "asc" };
+    const order = options.sortOrder || "asc";
+    if (order !== "asc" && order !== "desc") {
+      throw new Error(`Invalid sort order: ${order}`);
+    }
+    args.orderBy = { [toSnakeCase(options.sortBy)]: order };
   } else {
     args.orderBy = { createdAt: "desc" };
   }

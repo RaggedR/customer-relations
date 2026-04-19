@@ -98,13 +98,19 @@ export function requiresRole(pathname: string): Role | null {
     pathname === "/favicon.ico" ||
     pathname.startsWith("/.well-known/") ||
     pathname.startsWith("/api/carddav/") || // CardDAV uses Basic auth via checkAuth() in carddav-auth.ts
+    pathname.startsWith("/api/calendar/") || // iCal feeds use bearer-token auth via verifyFeedToken()
     pathname === "/api/ready" || // Readiness probe — no patient data exposed
+    pathname === "/api/health" || // Health check — no patient data exposed, needed for monitoring
+    pathname === "/api/navigation" || // Navigation config — no patient data, needed for frontend boot
     pathname === "/portal/login" ||
     pathname === "/portal/claim" ||
     pathname === "/portal/privacy"
   ) {
     return null;
   }
+
+  // Change-password page: accessible to any authenticated user (patient ≤ nurse ≤ admin)
+  if (pathname === "/change-password") return "patient";
 
   // Nurse routes (check before default to handle /api/nurse/*)
   // Matches both /nurse and /nurse/* — bare path has no trailing slash

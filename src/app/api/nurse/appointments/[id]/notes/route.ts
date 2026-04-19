@@ -94,12 +94,23 @@ export const GET = nurseIdRoute()
       })),
     ].sort((a, b) => new Date(b.date as string).getTime() - new Date(a.date as string).getTime());
 
-    ctx.audit({
-      action: "view",
-      entity: "clinical_note",
-      entityId: String(patientId),
-      details: `nurse viewed ${notes.length} notes for ${patientRef}`,
-    });
+    if (clinicalNotes.length > 0) {
+      ctx.audit({
+        action: "view",
+        entity: "clinical_note",
+        entityId: String(patientId),
+        details: `nurse viewed ${clinicalNotes.length} clinical notes for ${patientRef}`,
+      });
+    }
+
+    if (personalNotes.length > 0) {
+      ctx.audit({
+        action: "view",
+        entity: "personal_note",
+        entityId: String(patientId),
+        details: `nurse viewed ${personalNotes.length} personal notes for ${patientRef}`,
+      });
+    }
 
     return NextResponse.json({
       patientRef,

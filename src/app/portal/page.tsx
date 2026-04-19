@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface Appointment {
   id: number;
@@ -26,6 +27,7 @@ export default function PortalAppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pastExpanded, setPastExpanded] = useState(false);
 
   useEffect(() => {
     fetch("/api/portal/appointments")
@@ -61,16 +63,30 @@ export default function PortalAppointmentsPage() {
         )}
       </section>
 
-      {past.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold mb-4 text-muted-foreground">Past Appointments</h2>
-          <div className="space-y-2">
-            {past.map((appt) => (
-              <AppointmentCard key={appt.id} appointment={appt} />
-            ))}
+      <section>
+        <button
+          onClick={() => setPastExpanded(!pastExpanded)}
+          className="flex items-center gap-2 text-lg font-semibold text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <span className={`text-xs transition-transform ${pastExpanded ? "rotate-90" : ""}`}>&#9654;</span>
+          Past Appointments
+          {past.length > 0 && (
+            <span className="text-xs font-normal">({past.length})</span>
+          )}
+        </button>
+
+        {pastExpanded && (
+          <div className="mt-4 space-y-2">
+            {past.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No past appointments.</p>
+            ) : (
+              past.map((appt) => (
+                <AppointmentCard key={appt.id} appointment={appt} />
+              ))
+            )}
           </div>
-        </section>
-      )}
+        )}
+      </section>
     </div>
   );
 }
@@ -84,7 +100,7 @@ function AppointmentCard({ appointment: appt }: { appointment: Appointment }) {
   });
 
   return (
-    <div className="rounded-lg border border-border p-3">
+    <Link href={`/portal/appointments/${appt.id}`} className="block rounded-lg border border-border p-3 hover:border-foreground/30 transition-colors cursor-pointer">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium">{dateStr}</p>
@@ -96,6 +112,6 @@ function AppointmentCard({ appointment: appt }: { appointment: Appointment }) {
           {appt.status?.replace("_", " ")}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }

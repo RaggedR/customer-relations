@@ -3,6 +3,9 @@ import { NextRequest } from "next/server";
 import { signSession } from "@/lib/auth";
 import { getSessionUser } from "@/lib/session";
 
+// Ensure demo mode is disabled for session tests — we're testing real auth
+process.env.NEXT_PUBLIC_DEMO_MODE = "false";
+
 const SECRET = "test-secret-must-be-at-least-32-bytes-long!!";
 
 function makeRequest(token?: string): NextRequest {

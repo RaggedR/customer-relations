@@ -218,7 +218,7 @@ The AI query endpoint (`POST /api/ai`) is admin-only (Clare) and sends data to t
 
 ### Legal basis
 
-Google's Gemini API Terms of Service state that API input data is not used to train models and is deleted within 30 days. This contractual commitment is the "reasonable steps" basis under APP 8.3(b) for the cross-border transfer. Clare should be informed of this disclosure when she uses the AI endpoint.
+Google's Gemini API Terms of Service state that API input data is not used to train models and is deleted within 30 days. Under APP 8.1, an entity must take "reasonable steps" to ensure an overseas recipient does not breach the APPs. The contractual commitment in Google's API ToS — combined with a signed Google Cloud Data Processing Addendum (DPA) — constitutes reasonable steps. **Action required:** execute the Google Cloud DPA before deploying the AI endpoint with real patient data. Clare should be informed of this disclosure when she uses the AI endpoint.
 
 ### Data minimisation
 
@@ -226,7 +226,7 @@ Fields marked `ai_visible: false` in `schema.yaml` are excluded from:
 1. The database schema description sent to Gemini (so it cannot generate queries selecting those fields)
 2. Query result rows sent to Gemini for summarisation (defence-in-depth redaction)
 
-Currently excluded: `medicare_number`. To exclude additional fields in future, add `ai_visible: false` to the field definition in `schema.yaml`.
+Currently excluded: `patient.medicare_number`, `patient.phone`, `patient.email`, `patient.address`, `nurse.phone`, `nurse.email`, `nurse.registration_number`, `nurse.caldav_url`, `nurse.google_calendar_id`, `nurse.feed_token`, `attachment.storage_path`. To exclude additional fields in future, add `ai_visible: false` to the field definition in `schema.yaml`.
 
 ### What reaches Gemini
 

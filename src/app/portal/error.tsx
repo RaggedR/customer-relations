@@ -11,7 +11,7 @@ export default function PortalError({
     <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
       <h2 className="text-lg font-semibold">Something went wrong</h2>
       <p className="text-sm text-muted-foreground">
-        {error.message || "An unexpected error occurred."}
+        An unexpected error occurred. Please try again or contact the practice.
       </p>
       <button
         onClick={reset}

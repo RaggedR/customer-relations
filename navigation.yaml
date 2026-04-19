@@ -4,16 +4,31 @@
 # Edit THIS FIRST when adding features or changing behaviour.
 # Then update the code to match.
 #
+# Conventions:
+#   reads:   — data fetched from the database and displayed on the page
+#   writes:  — data sent to the database via forms or actions
+#   visible_fields:  — subset of entity fields shown to the user (read-only)
+#   editable_fields: — subset of entity fields the user can modify (form inputs)
+#   transitions:     — buttons/links that navigate to other pages
+#   features:        — UI behaviours and controls
+#
 # Window types: each is a "blob" in the navigation graph.
 #   - role: visual sizing/positioning (maps to layout.ts)
 #   - title: template string ({entity}, {name}, {label} are interpolated)
 #   - component: which React component renders the content
-#   - features: what actions/sections are available inside the window
 #
 # Transitions: each is an "arrow" in the graph.
 #   - from → to: source window/element → target window type
 #   - on: what user action triggers the transition
 #   - id: template for the window's unique ID (prevents duplicates)
+
+# ═══════════════════════════════════════════════
+# Admin CRM (role: admin)
+# ═══════════════════════════════════════════════
+#
+# Full CRM for Clare. Schema-driven — entities, fields, and
+# relations are defined in schema.yaml. The admin UI renders
+# windows dynamically based on the schema.
 
 windows:
   calendar:
@@ -21,20 +36,34 @@ windows:
     floating: false    # renders in main area, not as a floating window
     title: "Calendar"
     component: CalendarPanel
+    reads:
+      - source: GET /api/appointment (date range, all nurses)
+        fields: [date, start_time, end_time, location, specialty, status, patient.name, nurse.name]
+    writes:
+      - target: POST /api/appointment (click empty slot → form → save)
+        fields: [date, start_time, end_time, location, specialty, patient, nurse]
     features:
       - two_week_view        # default: 14-day grid
-      - nurse_colour_coding  # each nurse gets a colour
-      - click_to_create      # click empty slot → new appointment form
+      - nurse_highlight_dropdown  # dropdown to select a nurse; their appointments are highlighted, others dimmed
+      - stacked_pills             # overlapping appointments stack vertically as pills
+      - slot_popup_menu            # clicking a cell with appointments shows popup: list of appointments + "New appointment"
+      - click_to_create            # click empty slot → new appointment form; also available from popup menu
 
   search:
     role: search
     title: "{entity} list"
     component: EntitySearchPanel
+    reads:
+      - source: GET /api/{entity} (paginated, searchable)
+        fields: "schema-driven — display.title, display.subtitle, display.badge"
 
   detail:
     role: detail
     title: "{name}"
     component: EntityDetailPanel
+    reads:
+      - source: GET /api/{entity}/{id}
+        fields: "all schema fields for the entity"
     features:
       - edit           # opens form for this entity
       - delete         # delete this entity (with confirmation)
@@ -47,19 +76,44 @@ windows:
     role: property
     title: "{label}"
     component: PropertyPanel
+    reads:
+      - source: GET /api/{entity}?filterBy={parentEntity}={parentId}
+        fields: "schema-driven — all fields of the child entity"
+      - source: GET /api/admin/notes/{patientId} (for clinical_note and personal_note entities only)
+        fields: [patientRef, "notes[].id", "notes[].date", "notes[].noteType", "notes[].clinician", "notes[].imageDataUri"]
+        note: "watermarked PNGs with admin name + timestamp. Same renderer as nurse portal."
+        auto_load: true                      # notes load automatically on panel open
+        header: "Patient #{parentId}"        # pseudonymised — shows patient number, not name
     features:
       - detail-view    # click an item to see all fields
       - export-xlsx    # export button (shown for hearing_aid entity)
+      - notes_auto_load                      # clinical/personal notes load automatically when panel opens
+      - show_hide_toggle                     # toggle button to hide/re-show notes after auto-load
+      - auto_close_5min                      # notes auto-close after 5 minutes
+      - countdown_timer                      # visible amber timer
+      - no_copy_paste                        # user-select: none on notes
 
   form:
     role: form
     title: "{mode} {entitySingular}"
     component: EntityFormPanel
+    reads:
+      - source: GET /api/{entity}/{id} (edit mode only)
+        fields: "all schema fields — pre-populated into form inputs"
+    writes:
+      - target: POST /api/{entity} (create mode)
+        fields: "all required + optional schema fields from form inputs"
+      - target: PUT /api/{entity}/{id} (edit mode)
+        fields: "changed fields only"
 
   ai:
     role: ai
     title: Ask AI
     component: AiChatPanel
+    reads:
+      - source: POST /api/ai
+        fields: "natural language query → SQL → results (Gemini LLM)"
+    writes: []  # read-only — AI cannot modify data
     features:
       - fuzzy-names          # Levenshtein name resolution (0-1 auto, 2-3 asks)
       - refuse-offtopic      # rejects questions not about practice data
@@ -127,3 +181,403 @@ transitions:
     to: form
     on: click edit
     id: "form-{entity}-{id}"
+
+# ═══════════════════════════════════════════════
+# Nurse Portal (role: nurse)
+# ═══════════════════════════════════════════════
+#
+# Separate navigation graph for nurses.
+# All views scoped to the logged-in nurse's assigned data.
+# Clinical data rendered as watermarked images (canvas PNG, not HTML text).
+# Patient identity pseudonymised in clinical context (number only, no name).
+
+nurse:
+  layout:
+    header:
+      title: "Nurse Portal"
+      identity: "{nurse.name}"             # nurse name shown for login verification
+      reads:
+        - source: GET /api/nurse/me
+          fields: [name]
+      compliance_notice: "Clinical data is watermarked and access-logged"
+    tabs:
+      - label: Appointments
+        path: /nurse
+      - label: Availability
+        path: /nurse/availability
+      - label: Patient Records
+        path: /nurse/records
+    actions:
+      - sign_out                             # POST /api/auth/logout → redirect /login
+
+  onboarding:
+    # When admin creates a nurse via "+ Add Nurse":
+    # 1. POST /api/nurse auto-creates a User account (role: nurse)
+    # 2. A strong 16-char password is generated (crypto random, ambiguous chars excluded)
+    # 3. Admin sees the password once in a modal (copy button, not shown again)
+    # 4. User.must_change_password = true
+    #
+    # On first login:
+    # 1. Login API returns mustChangePassword: true
+    # 2. Proxy redirects ALL routes to /change-password (any role, not just nurse)
+    # 3. Nurse must set a new password meeting strength rules:
+    #    - min 8 chars, uppercase, lowercase, digit, special character
+    # 4. POST /api/auth/change-password validates strength, clears the flag
+    # 5. After password change, nurse proceeds to AUP acknowledgement (if needed)
+    #
+    # Defence in depth:
+    # - Proxy checks must_change_password on every authenticated request
+    # - withNurseContext middleware also blocks nurse API routes if flag is set
+    password_change:
+      path: /change-password
+      auth: any_authenticated                # accessible to admin, nurse, patient
+      reads: []
+      writes:
+        - target: POST /api/auth/change-password
+          form_fields:
+            - currentPassword: { type: password, required: true }
+            - newPassword: { type: password, required: true }
+          validation:
+            - min_length: 8
+            - uppercase: true
+            - lowercase: true
+            - digit: true
+            - special_character: true
+      features:
+        - live_strength_feedback             # checkmarks show which rules are met as user types
+        - confirm_password                   # must type new password twice
+
+  pages:
+    appointments:
+      path: /nurse
+      scope: self                            # only show this nurse's appointments
+      reads:
+        - source: GET /api/nurse/appointments?from={past30days}&to={next90days}
+          fields: [id, date, startTime, endTime, location, specialty, status, patientName, patientId]
+          filter: nurseId = logged-in nurse
+      features:
+        - upcoming_past_split                # separate upcoming vs past sections
+        - group_by_date                      # appointments grouped by day within each section
+        - clickable_cards                    # click → appointment detail
+        - always_show_past_heading           # "Past Appointments" heading shown even when empty
+        - past_collapsible                   # past section collapsed by default, click heading to expand
+
+    availability:
+      path: /nurse/availability
+      scope: self                            # only this nurse's availability
+      reads:
+        - source: GET /api/nurse/availability?week={selectedWeek}
+          fields: [id, date, day_of_week, start_time, recurring]
+          note: "returns 45-min slots for the selected week. Recurring slots expanded to concrete dates."
+        - source: GET /api/nurse/appointments (same week, for overlay)
+          fields: [date, start_time, end_time]
+          note: "existing appointments shown as occupied slots (non-clickable)"
+      writes:
+        - target: POST /api/nurse/availability
+          form_fields:
+            - date: { type: date, from: clicked cell }
+            - start_time: { type: time, from: clicked cell, note: "derived from row position" }
+            - recurring: { type: boolean, from: toggle }
+          note: "creates a 45-min availability slot"
+        - target: DELETE /api/nurse/availability/{id}
+          note: "removes availability slot (click again to deselect)"
+      features:
+        - weekly_grid                        # 7 columns (Mon-Sun) × time rows (45-min blocks)
+        - click_to_toggle                    # click cell → create/delete availability slot
+        - recurring_toggle                   # switch between "this week only" and "every week"
+        - appointment_overlay                # existing appointments shown as occupied (different colour)
+        - week_navigation                    # ← prev week / next week → buttons
+        - slot_duration_45min                # each row = 45 minutes
+        - time_range: "07:00-19:00"          # visible hours on the grid
+        - colour_coding:
+            available: green                 # nurse has marked this slot available
+            booked: blue                     # an appointment exists in this slot
+            unavailable: grey                # default — not available
+            recurring: green_striped         # recurring availability (visual distinction)
+      note: |
+        Architecture: availability is stored as discrete 45-min slot records.
+        The slot computation API (GET /api/slots) reads from this table.
+        Future: a CalDAV adapter could write to the same table from Google Calendar
+        free/busy data, making the two sources interchangeable.
+
+    appointment_detail:
+      path: /nurse/appointments/{id}
+      scope: self                            # verify appointment belongs to nurse
+      reads:
+        - source: GET /api/nurse/appointments/{id}
+          fields: [id, date, startTime, endTime, location, specialty, status, patientId]
+          note: "heading shows 'Patient #N' (clinical context — pseudonymised). Loaded on page open."
+        - source: GET /api/nurse/appointments/{id}/notes
+          fields: [patientRef, "notes[].id", "notes[].date", "notes[].noteType", "notes[].clinician", "notes[].imageDataUri"]
+          note: "patientRef is 'Patient #N' — no name (clinical context). Images are watermarked PNGs."
+          on_demand: true                    # NOT loaded on page open — requires "Show Notes" click
+          anti_cache: "Cache-Control: no-store, no-cache, must-revalidate"
+      writes:
+        - target: POST /api/nurse/appointments/{id}/notes
+          form_fields:
+            - noteType: { type: select, options: [progress_note, initial_assessment, discharge_summary, treatment_plan, personal] }
+            - content: { type: textarea, required: true, max_length: 50000 }
+          note: "append-only — notes cannot be edited or deleted. Add Note form always visible."
+        - target: POST /api/nurse/appointments/{id}/cancel
+          form_fields:
+            - reason: { type: textarea }
+          note: "triggers email to patient (rebook link) + email to Clare"
+      features:
+        - cancel_appointment                 # with reason field, triggers emails
+        - show_notes_button                  # notes hidden by default, must click "Show Notes" to reveal
+        - auto_close_5min                    # notes automatically close after 5 minutes
+        - countdown_timer                    # visible amber timer showing remaining seconds
+        - add_note                           # append-only clinical/personal notes (form always visible)
+        - no_copy_paste                      # user-select: none on notes section
+        - audit_logged                       # view logged (nurse ID, patient number, timestamp)
+
+    patient_records:
+      path: /nurse/records
+      scope: self                            # only patients with appointments assigned to this nurse
+      reads:
+        - source: GET /api/nurse/records
+          fields: [patientRef, patientId, noteCount]
+          note: "patientRef is 'Patient #N' — pseudonymised, no names"
+        - source: GET /api/nurse/records/{patientId}/notes (on demand, after clicking Show Notes)
+          fields: [patientRef, "notes[].id", "notes[].date", "notes[].noteType", "notes[].clinician", "notes[].imageDataUri"]
+          note: "watermarked PNGs with nurse name + timestamp baked into pixels"
+          anti_cache: "Cache-Control: no-store, no-cache, must-revalidate"
+      writes: []  # read-only — notes are added via the appointment detail page
+      features:
+        - patient_list_by_number             # pseudonymised — patient number only, no names
+        - show_notes_button                  # notes hidden by default, must click to reveal
+        - auto_close_5min                    # notes automatically close after 5 minutes
+        - countdown_timer                    # visible amber timer showing remaining seconds
+        - watermarked_images                 # all clinical content as canvas PNG
+        - no_copy_paste                      # user-select: none, oncopy/oncut/oncontextmenu prevention
+        - audit_logged                       # every view logged (nurse ID, patient number, timestamp)
+
+  transitions:
+    - from: appointments
+      to: appointment_detail
+      on: click appointment card
+      id: "nurse-appointment-{id}"
+
+    - from: appointment_detail
+      to: appointments
+      on: click "← Back to appointments" link
+      id: "nurse-appointments"
+
+    - from: patient_records
+      to: show_notes (inline)
+      on: click "Show Notes" button
+      id: "nurse-patient-notes-{patientRef}"
+      auto_close: 5min                       # timer starts on reveal, closes automatically
+
+    - from: patient_records (notes visible)
+      to: patient_records (notes hidden)
+      on: click "Hide Notes" button OR 5-min timer expires
+      id: "nurse-patient-notes-close"
+
+# ═══════════════════════════════════════════════
+# Patient Portal (role: patient)
+# ═══════════════════════════════════════════════
+#
+# Separate navigation graph for patients.
+# All views are scoped to the logged-in patient's own data.
+# The layout header shows the patient's name for identity verification.
+# No clinical notes or nurse details are exposed.
+
+portal:
+  layout:
+    header:
+      title: "Patient Portal"
+      identity: "{patient.name}"             # patient name shown for login verification
+      reads:
+        - source: GET /api/portal/profile
+          fields: [name]
+    tabs:
+      - label: Appointments
+        path: /portal
+      - label: Book
+        path: /portal/book
+      - label: My Profile
+        path: /portal/profile
+      - label: Privacy
+        path: /portal/privacy
+    actions:
+      - sign_out                             # POST /api/auth/logout → redirect /portal/login
+
+  pages:
+    login:
+      path: /portal/login
+      reads: []  # no data read before authentication
+      writes:
+        - target: POST /api/auth/portal/check
+          form_fields:
+            - email: { type: email, required: true }
+          note: "returns status: login | claim_sent | register"
+        - target: POST /api/auth/login (existing user)
+          form_fields:
+            - email: { type: email }
+            - password: { type: password, required: true }
+        - target: POST /api/auth/portal/register (new patient)
+          form_fields:
+            - email: { type: email }
+            - name: { type: string, required: true }
+            - phone: { type: tel }
+            - password: { type: password, required: true, min_length: 8 }
+      features:
+        - multi_step_flow                    # email → login | claim_sent | register
+        - back_button                        # "Use a different email" returns to email step
+
+    claim:
+      path: /portal/claim?token={token}
+      reads: []  # token validated server-side
+      writes:
+        - target: POST /api/auth/portal/claim
+          form_fields:
+            - token: { type: hidden, from: query_param }
+            - password: { type: password, required: true, min_length: 8 }
+            - confirmPassword: { type: password, required: true, client_validation: must_match_password }
+      note: "one-time password setup via emailed link, token expires in 24h"
+
+    appointments:
+      path: /portal
+      scope: self                            # only show this patient's appointments
+      reads:
+        - source: GET /api/portal/appointments
+          fields: [id, date, startTime, endTime, location, specialty, status]
+          filter: patientId = logged-in patient
+          date_range: past 30 days to next 90 days (default)
+      features:
+        - upcoming_past_split                # separate upcoming vs past sections
+        - clickable_cards                    # click → appointment detail
+        - past_collapsible                   # past section collapsed by default, click heading to expand
+
+    book:
+      path: /portal/book
+      scope: self
+      reads:
+        - source: GET /api/slots?specialty={selected}&from={today}&to={today+1month}
+          fields: [date, start_time, end_time, nurse_name, nurse_id]
+          note: |
+            Backend slot computation:
+            1. Find nurses with the selected specialty (from nurse_specialty table)
+            2. Read each nurse's availability slots (from nurse_availability table)
+            3. Subtract existing appointments (from appointment table)
+            4. Return remaining slots with nurse name attached
+            Future: step 2 could also read Google Calendar free/busy via CalDAV adapter.
+      writes:
+        - target: POST /api/portal/appointments
+          form_fields:
+            - date: { type: date, from: selected slot }
+            - start_time: { type: time, from: selected slot }
+            - nurse_id: { type: hidden, from: selected slot }
+            - specialty: { type: hidden, from: dropdown }
+          note: "creates appointment with status 'requested'. End time = start_time + 45 min."
+      features:
+        - specialty_dropdown                   # step 1: choose specialty type
+        - slot_calendar                        # step 2: visual calendar showing available slots
+        - nurse_name_on_slots                  # each slot shows which nurse is available
+        - booking_window_1_month               # only show slots from today to 1 month ahead
+        - slot_duration_45min                  # all slots are 45 minutes
+        - confirm_booking_modal                 # step 3: modal popup with details + confirm button
+
+    appointment_detail:
+      path: /portal/appointments/{id}
+      scope: self                            # verify appointment belongs to patient
+      reads:
+        - source: GET /api/portal/appointments/{id}
+          fields: [id, date, startTime, endTime, location, specialty, status, notes]
+          note: "notes here are appointment-level scheduling notes, NOT clinical notes"
+      writes: []  # read-only view
+      visible_fields:
+        - date
+        - start_time
+        - end_time
+        - location
+        - specialty
+        - status
+        - notes                              # appointment-level notes (not clinical)
+
+    profile:
+      path: /portal/profile
+      scope: self
+      reads:
+        - source: GET /api/portal/profile
+          fields: [id, name, email, date_of_birth, medicare_number, phone, address, status]
+      writes:
+        - target: PUT /api/portal/profile (contact details only)
+          form_fields:
+            - phone: { type: tel }
+            - address: { type: text }
+          note: "only phone and address are self-editable"
+        - target: POST /api/portal/corrections (correction request)
+          form_fields:
+            - description: { type: textarea, required: true, min_length: 10 }
+          note: "logged as audit event for Clare to review. Rate limited: 3/hour."
+      visible_fields:
+        - name                               # read-only
+        - email                              # read-only
+        - date_of_birth                      # read-only
+        - medicare_number                    # read-only
+        - status                             # read-only
+      editable_fields:
+        - phone
+        - address
+      features:
+        - request_correction                 # for fields patient can't self-edit (name, DOB, Medicare)
+
+    privacy:
+      path: /portal/privacy
+      reads: []  # static content, no database queries
+      writes: []  # informational page only
+      features:
+        - privacy_notice                     # Australian Privacy Principles disclosure
+      sections:
+        - what_we_collect
+        - why_we_collect_it
+        - how_we_use_and_disclose_it
+        - ai_assisted_queries
+        - data_storage_and_security
+        - your_rights                        # APP 6 (access), APP 13 (correction)
+        - contact
+
+    error:
+      path: /portal (error boundary)
+      reads: []
+      writes: []
+      features:
+        - try_again_button                   # calls reset() to re-render the page
+
+  transitions:
+    - from: login
+      to: appointments
+      on: successful login or registration
+      id: "portal-login-success"
+
+    - from: login
+      to: claim
+      on: claim email sent → user clicks link in email
+      id: "portal-claim"
+
+    - from: claim
+      to: appointments
+      on: successful password set
+      id: "portal-claim-success"
+
+    - from: appointments
+      to: appointment_detail
+      on: click appointment card (Link component)
+      id: "portal-appointment-{id}"
+
+    - from: appointment_detail
+      to: appointments
+      on: click "← Back to appointments" link (Link component)
+      id: "portal-appointments"
+
+    - from: book
+      to: appointments
+      on: successful booking confirmation
+      id: "portal-book-success"
+
+    - from: login (register step)
+      to: privacy
+      on: click "privacy notice" link
+      id: "portal-privacy-from-register"

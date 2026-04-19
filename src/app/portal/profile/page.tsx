@@ -14,6 +14,7 @@ interface Profile {
   phone: string | null;
   address: string | null;
   date_of_birth: string | null;
+  medicare_number: string | null;
   status: string;
 }
 
@@ -112,6 +113,7 @@ export default function PortalProfilePage() {
           <Field label="Name" value={profile.name} />
           <Field label="Email" value={profile.email} />
           <Field label="Date of birth" value={profile.date_of_birth ? new Date(profile.date_of_birth).toLocaleDateString("en-AU") : "—"} />
+          <Field label="Medicare number" value={profile.medicare_number ?? "—"} />
           <Field label="Status" value={profile.status} />
         </div>
       </section>

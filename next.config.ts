@@ -2,7 +2,12 @@ import type { NextConfig } from "next";
 
 const csp = [
   "default-src 'self'",
-  "script-src 'self'",
+  // Next.js injects inline <script> tags for RSC hydration.
+  // In dev, 'unsafe-inline' + 'unsafe-eval' are required for HMR/Turbopack.
+  // In production, replace with nonce-based CSP (see TODO below).
+  process.env.NODE_ENV === "development"
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    : "script-src 'self' 'unsafe-inline'",
   // TODO(Fix 18): Replace 'unsafe-inline' with nonce-based CSP.
   // Next.js 16 supports nonces via proxy.ts (src/proxy.ts already exists).
   // The pattern: generate a nonce per-request in the proxy, set

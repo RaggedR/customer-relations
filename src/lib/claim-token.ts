@@ -17,9 +17,14 @@ export async function issueClaim(email: string): Promise<string> {
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
 
-  await prisma.claimToken.create({
-    data: { email, token_hash: tokenHash, expires_at: expiresAt },
-  });
+  // Atomically revoke any outstanding unused tokens for this email, then create the new one.
+  // Prevents token accumulation from repeated requests.
+  await prisma.$transaction([
+    prisma.claimToken.deleteMany({ where: { email, used_at: null } }),
+    prisma.claimToken.create({
+      data: { email, token_hash: tokenHash, expires_at: expiresAt },
+    }),
+  ]);
 
   return rawToken;
 }

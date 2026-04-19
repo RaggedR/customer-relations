@@ -182,3 +182,52 @@ export const PATIENT_EDGE_CASE = {
 
 /** Prefix used to identify and clean up roundtrip test data */
 export const ROUNDTRIP_PREFIX = "[ROUNDTRIP]";
+
+// ── vCard / iCal codec fixtures (unit tests, no DB needed) ──────────
+
+type Row = Record<string, unknown>;
+
+export const VCARD_PATIENT_FIXTURE: Row = {
+  id: 42,
+  name: "Ada Lovelace",
+  phone: "0412345678",
+  email: "ada@example.com",
+  address: "123 Main St, Melbourne VIC 3000",
+  date_of_birth: "1815-12-10",
+};
+
+export const VCARD_PATIENT_SPECIAL_CHARS: Row = {
+  id: 43,
+  name: "O'Brien, James (Jr.)",
+  phone: "0400000099",
+  email: "james@o'brien.example",
+  address: "Suite 5, Level 2, 100 Collins St",
+  date_of_birth: "1950-03-25",
+};
+
+export const VCARD_PATIENT_SEMICOLON_ADDRESS: Row = {
+  id: 44,
+  name: "Test Semicolon",
+  phone: "0400000100",
+  email: "test@example.com",
+  address: "Building A; Level 3; Room 42",
+  date_of_birth: "2000-01-01",
+};
+
+export const VCARD_NURSE_FIXTURE: Row = {
+  id: 7,
+  name: "Florence Nightingale",
+  phone: "0498765432",
+  email: "florence@clinic.com",
+};
+
+export const ICAL_APPOINTMENT_FIXTURE: Row = {
+  id: 99,
+  date: "2026-04-20",
+  start_time: "09:00",
+  end_time: "09:30",
+  location: "Room 3, Main Clinic",
+  specialty: "audiometry",
+  status: "confirmed",
+  notes: "Initial assessment — bring referral",
+};

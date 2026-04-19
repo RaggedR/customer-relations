@@ -48,5 +48,13 @@ export const GET = nurseRoute()
       };
     });
 
+    // Audit: nurse viewed patient scheduling data (names exposed)
+    ctx.audit({
+      action: "view_schedule",
+      entity: "appointment",
+      entityId: "list",
+      details: `Viewed ${result.length} appointments (${fromStr} to ${toStr})`,
+    });
+
     return NextResponse.json(result);
   });

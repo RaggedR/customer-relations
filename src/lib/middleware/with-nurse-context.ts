@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { resolveNurse, requireAupAcknowledgement } from "@/lib/nurse-helpers";
+import { resolveNurse, requirePasswordChanged, requireAupAcknowledgement } from "@/lib/nurse-helpers";
 import type { TraceContext, SessionContext, AuditContext, NurseContext } from "./types";
 
 export async function withNurseContext(
@@ -24,6 +24,10 @@ export async function withNurseContext(
       { status: 403 },
     );
   }
+
+  // Password change takes priority over AUP — must have a secure password first
+  const pwError = requirePasswordChanged(nurse);
+  if (pwError) return pwError;
 
   const aupError = requireAupAcknowledgement(nurse);
   if (aupError) return aupError;

@@ -23,7 +23,15 @@ export const GET = nurseIdRoute()
       );
     }
 
+    // Audit: nurse viewed specific appointment (patient name exposed)
     const patient = appointment.patient as Record<string, unknown> | null | undefined;
+    ctx.audit({
+      action: "view_appointment",
+      entity: "appointment",
+      entityId: String(ctx.entityId),
+      details: `Patient #${patient?.id ?? "unknown"}`,
+    });
+
     return NextResponse.json({
       id: appointment.id,
       date: appointment.date,

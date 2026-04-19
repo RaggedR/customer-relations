@@ -6,7 +6,7 @@ import { logger } from "@/lib/logger";
 // getSecret is a pure env-var accessor with no mutable state, so it's safe to
 // share across the proxy boundary despite the Next.js 16 proxy docs warning
 // about shared modules. COOKIE_NAME is kept duplicated here as a precaution.
-import { getSecret } from "@/lib/session";
+import { getSecret, hashSessionToken } from "@/lib/session";
 
 const COOKIE_NAME = "session";
 
@@ -39,6 +39,12 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return NextResponse.next();
   }
 
+  // Demo mode — skip all auth checks.
+  // SECURITY: startup guard in instrumentation.ts prevents this from being active in production.
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+    return NextResponse.next();
+  }
+
   // Protected route — verify session
   const redirect = loginUrl(requiredRole);
   const token = parseCookie(request);
@@ -58,7 +64,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   // Session DB check: verify the session record exists and is not idle-timed-out.
   // This makes sessions revocable (delete the DB row → immediate logout).
-  const dbSession = await prisma.session.findUnique({ where: { token } });
+  // We store sha256(token) in the DB, so hash before lookup.
+  const tokenHash = hashSessionToken(token);
+  const dbSession = await prisma.session.findUnique({ where: { token: tokenHash } });
   if (!dbSession) {
     // JWT is valid but session was revoked or never created
     return NextResponse.redirect(new URL(redirect, request.url));
@@ -73,6 +81,20 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     if (idleMs > idleTimeoutMs) {
       await prisma.session.delete({ where: { id: dbSession.id } });
       return NextResponse.redirect(new URL(redirect, request.url));
+    }
+  }
+
+  // Force password change: redirect to /change-password if the flag is set.
+  // Skip for the change-password page itself and auth API routes (avoid redirect loop).
+  if (pathname !== "/change-password" && !pathname.startsWith("/api/auth/")) {
+    const user = dbSession.userId
+      ? await prisma.user.findUnique({
+          where: { id: dbSession.userId },
+          select: { must_change_password: true },
+        })
+      : null;
+    if (user?.must_change_password) {
+      return NextResponse.redirect(new URL("/change-password", request.url));
     }
   }
 
