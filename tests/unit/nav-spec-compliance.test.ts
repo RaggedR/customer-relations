@@ -12,7 +12,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
-// @ts-expect-error — js-yaml has no type declarations
 import { load } from "js-yaml";
 
 const ROOT = resolve(__dirname, "../..");
