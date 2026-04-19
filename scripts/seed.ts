@@ -41,6 +41,7 @@ async function seed() {
   await prisma.auditLog.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.nurseSpecialty.deleteMany();
+  await prisma.nurseAvailability.deleteMany();
   await prisma.calendarConnection.deleteMany();
   await prisma.nurse.deleteMany();
   await prisma.attachment.deleteMany();

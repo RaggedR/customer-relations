@@ -120,6 +120,7 @@ function formatDate(d: Date): string {
 
 async function sendReport() {
   if (!ADMIN_EMAIL) {
+    console.warn("ADMIN_EMAIL not set — weekly access reporting disabled");
     process.exit(0);
   }
 

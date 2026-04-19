@@ -32,9 +32,33 @@ export const POST = adminRoute()
 
     const email = (body.email as string | undefined)?.toLowerCase().trim();
 
+    // Destructure only expected Nurse schema fields — never spread raw body into Prisma
+    const {
+      name,
+      phone,
+      registration_number,
+      caldav_url,
+      google_calendar_id,
+      feed_token,
+      notes,
+      aup_acknowledged_at,
+    } = body as Record<string, unknown>;
+
     // If no email, create nurse without a user account
     if (!email) {
-      const nurse = await prisma.nurse.create({ data: body });
+      const nurse = await prisma.nurse.create({
+        data: {
+          name: name as string,
+          phone: phone as string | undefined,
+          email: undefined,
+          registration_number: registration_number as string | undefined,
+          caldav_url: caldav_url as string | undefined,
+          google_calendar_id: google_calendar_id as string | undefined,
+          feed_token: feed_token as string | undefined,
+          notes: notes as string | undefined,
+          aup_acknowledged_at: aup_acknowledged_at ? new Date(aup_acknowledged_at as string) : undefined,
+        },
+      });
       ctx.audit({ action: "create", entity: "nurse", entityId: String(nurse.id) });
       return NextResponse.json(nurse, { status: 201 });
     }
@@ -73,8 +97,20 @@ export const POST = adminRoute()
         },
       });
 
-      const nurseData = { ...body, email, userId: user.id };
-      const nurse = await tx.nurse.create({ data: nurseData });
+      const nurse = await tx.nurse.create({
+        data: {
+          name: name as string,
+          phone: phone as string | undefined,
+          email,
+          registration_number: registration_number as string | undefined,
+          caldav_url: caldav_url as string | undefined,
+          google_calendar_id: google_calendar_id as string | undefined,
+          feed_token: feed_token as string | undefined,
+          notes: notes as string | undefined,
+          aup_acknowledged_at: aup_acknowledged_at ? new Date(aup_acknowledged_at as string) : undefined,
+          userId: user.id,
+        },
+      });
 
       return { nurse, userId: user.id };
     });
