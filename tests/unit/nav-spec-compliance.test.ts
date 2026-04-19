@@ -149,7 +149,6 @@ describe("patient portal features", () => {
 // ── Admin CRM Windows ─────────────────────────────────────────────
 
 describe("admin CRM window types", () => {
-  const windows = navYaml.windows as Record<string, Record<string, unknown>>;
   const dashShell = readSrc("src/components/dashboard-shell.tsx");
 
   it("slot end time uses 45-minute duration", () => {
