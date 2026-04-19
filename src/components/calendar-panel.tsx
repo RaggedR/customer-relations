@@ -245,7 +245,7 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
               <React.Fragment key={`row-${slotIdx}`}>
                 {/* Time label */}
                 <div
-                  className="border-b border-border/30 px-1 text-[9px] text-muted-foreground text-right pr-2 flex items-start justify-end"
+                  className="border-b border-border/50 px-1 text-[9px] text-muted-foreground text-right pr-2 flex items-start justify-end"
                   style={{ height: 32 }}
                 >
                   {slotIdx % 2 === 0 ? time : ""}
@@ -266,7 +266,7 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
                   return (
                     <div
                       key={`${slotIdx}-${dayIdx}`}
-                      className={`relative border-b border-r border-border/20 cursor-pointer hover:bg-accent/30 transition-colors ${
+                      className={`relative border-b border-r border-border/40 cursor-pointer hover:bg-accent/30 transition-colors ${
                         isToday ? "bg-blue-50" : ""
                       } ${isWeekend ? "bg-muted/30" : ""}`}
                       style={{ height: 32 }}
@@ -287,30 +287,46 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
                       }}
                     >
                       {(() => {
-                        const count = startingHere.length;
-                        if (count === 0) return null;
+                        if (startingHere.length === 0) return null;
 
-                        const first = startingHere[0];
-                        const startIdx = timeToSlotIndex(first.start_time);
-                        const endIdx = timeToSlotIndex(first.end_time);
-                        const spanSlots = Math.max(1, endIdx - startIdx);
-                        const fullHeight = spanSlots * 32 - 2;
+                        return startingHere.map((appt, apptIdx) => {
+                          const startIdx = timeToSlotIndex(appt.start_time);
+                          const endIdx = timeToSlotIndex(appt.end_time);
+                          const spanSlots = Math.max(1, endIdx - startIdx);
+                          const fullHeight = spanSlots * 32 - 2;
 
-                        // Highlight: if a nurse is selected, check if any appointment in this slot belongs to them
-                        const hasHighlightedNurse = highlightNurseId === null ||
-                          startingHere.some((a) => a.nurse?.id === highlightNurseId);
-                        const pillClass = hasHighlightedNurse
-                          ? "bg-blue-100 border-blue-200 text-blue-800"
-                          : "bg-muted/30 border-border text-muted-foreground";
+                          // Per-pill highlight: dim pills not matching the selected nurse
+                          const isHighlighted = highlightNurseId === null ||
+                            appt.nurse?.id === highlightNurseId;
+                          const pillClass = isHighlighted
+                            ? "bg-blue-100 border-blue-200 text-blue-800"
+                            : "bg-muted/30 border-border text-muted-foreground";
 
-                        return (
-                          <div
-                            className={`absolute left-0 right-0 mx-0.5 rounded-sm border ${pillClass} px-1 overflow-hidden cursor-pointer hover:brightness-125 transition-all z-[1] flex items-center justify-center`}
-                            style={{ top: 0, height: fullHeight }}
-                          >
-                            <span className="text-[9px] font-medium">{count}</span>
-                          </div>
-                        );
+                          // Stack pills side by side when multiple in same slot
+                          const total = startingHere.length;
+                          const widthPct = total > 1 ? `${Math.floor(100 / total)}%` : undefined;
+                          const leftPct = total > 1 ? `${Math.floor((100 / total) * apptIdx)}%` : undefined;
+
+                          return (
+                            <div
+                              key={appt.id}
+                              className={`absolute rounded-sm border ${pillClass} px-0.5 overflow-hidden cursor-pointer hover:brightness-125 transition-all z-[1] flex items-center justify-center`}
+                              style={{
+                                top: 0,
+                                height: fullHeight,
+                                left: leftPct ?? 1,
+                                right: total > 1 ? undefined : 1,
+                                width: widthPct,
+                                marginLeft: total > 1 ? 0 : 2,
+                                marginRight: total > 1 ? 0 : 2,
+                              }}
+                            >
+                              <span className="text-[9px] font-medium truncate">
+                                {appt.patient?.name?.split(" ")[0] ?? appt.id}
+                              </span>
+                            </div>
+                          );
+                        });
                       })()}
                     </div>
                   );

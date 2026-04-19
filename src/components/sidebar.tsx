@@ -54,7 +54,7 @@ export function Sidebar({
           <button
             key={`add-${name}`}
             onClick={() => onAddEntity(name)}
-            className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md border border-floating-border bg-floating text-floating-foreground hover:bg-floating-muted transition-colors"
+            className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 transition-colors"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -65,7 +65,7 @@ export function Sidebar({
         ))}
         <button
           onClick={onOpenAiChat}
-          className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md border border-floating-border bg-floating text-floating-foreground hover:bg-floating-muted transition-colors"
+          className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-md bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 transition-colors"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 2a8 8 0 0 1 8 8c0 3.3-2 6.2-5 7.5V20a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2.5C6 16.2 4 13.3 4 10a8 8 0 0 1 8-8z" />

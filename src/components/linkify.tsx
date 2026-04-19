@@ -18,7 +18,7 @@ export function Linkify({ children }: { children: string }) {
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-400 hover:text-blue-300 underline underline-offset-2 break-all"
+            className="text-primary hover:text-primary/80 underline underline-offset-2 break-all"
             onClick={(e) => e.stopPropagation()}
           >
             {part}

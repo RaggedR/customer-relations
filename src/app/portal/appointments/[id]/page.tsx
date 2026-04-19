@@ -12,6 +12,7 @@ interface AppointmentDetail {
   location: string;
   specialty: string;
   status: string;
+  nurseName: string | null;
   notes: string | null;
 }
 
@@ -72,6 +73,8 @@ export default function PortalAppointmentDetailPage({
         <Field label="Time" value={`${appointment.startTime} – ${appointment.endTime}`} />
         <Field label="Location" value={appointment.location} />
         <Field label="Specialty" value={appointment.specialty} />
+        {appointment.nurseName && <Field label="Clinician" value={appointment.nurseName} />}
+        <Field label="Status" value={appointment.status?.replace("_", " ")} />
         {appointment.notes && <Field label="Notes" value={appointment.notes} />}
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { STATUS_STYLES, STATUS_FALLBACK } from "@/lib/status-styles";
 
 interface Appointment {
@@ -19,6 +20,7 @@ export default function PortalAppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pastExpanded, setPastExpanded] = useState(false);
 
   useEffect(() => {
     fetch("/api/portal/appointments")
@@ -61,15 +63,23 @@ export default function PortalAppointmentsPage() {
         )}
       </section>
 
-      {/* Past */}
+      {/* Past — collapsible */}
       {past.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold text-muted-foreground mb-4">Past Appointments</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {past.map((appt) => (
-              <AppointmentCard key={appt.id} appointment={appt} muted />
-            ))}
-          </div>
+          <button
+            onClick={() => setPastExpanded((v) => !v)}
+            className="flex items-center gap-2 text-lg font-semibold text-muted-foreground mb-4 hover:text-foreground transition-colors"
+          >
+            <span className="text-sm">{pastExpanded ? "▼" : "▶"}</span>
+            Past Appointments ({past.length})
+          </button>
+          {pastExpanded && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {past.map((appt) => (
+                <AppointmentCard key={appt.id} appointment={appt} muted />
+              ))}
+            </div>
+          )}
         </section>
       )}
     </div>
@@ -85,7 +95,10 @@ function AppointmentCard({ appointment: appt, muted }: { appointment: Appointmen
   });
 
   return (
-    <div className={`rounded-lg border border-border bg-card p-4 shadow-sm ${muted ? "opacity-60" : ""}`}>
+    <Link
+      href={`/portal/appointments/${appt.id}`}
+      className={`block rounded-lg border border-border bg-card p-4 shadow-sm hover:border-primary/40 hover:shadow-md transition-all ${muted ? "opacity-60" : ""}`}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-card-foreground">{dateStr}</p>
@@ -102,6 +115,6 @@ function AppointmentCard({ appointment: appt, muted }: { appointment: Appointmen
         <span className="text-border">|</span>
         <span>{appt.specialty}</span>
       </div>
-    </div>
+    </Link>
   );
 }

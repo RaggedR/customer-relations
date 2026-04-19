@@ -115,7 +115,7 @@ export function EntityDetailPanel({
                 </span>
                 <button
                   onClick={() => onNavigateToRelated(rel.entity, relId, relDisplayName)}
-                  className="text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+                  className="text-primary hover:text-primary/80 hover:underline transition-colors"
                 >
                   {relDisplayName}
                 </button>
@@ -216,7 +216,7 @@ export function EntityDetailPanel({
             </Button>
           </div>
           {uploadMsg && (
-            <div className={`text-[10px] ${uploadMsg === "Uploaded" ? "text-emerald-400" : "text-destructive"}`}>
+            <div className={`text-[10px] ${uploadMsg === "Uploaded" ? "text-emerald-600" : "text-destructive"}`}>
               {uploadMsg}
             </div>
           )}
@@ -282,9 +282,9 @@ export function EntityDetailPanel({
             JSON
           </Button>
         )}
-        {hasFeature("export-xlsx") && (
+        {hasFeature("export-xlsx") && onExport && (
           <Button variant="outline" size="sm" className="flex-1 text-xs"
-            onClick={() => window.open(`/api/${entityName}/export?format=xlsx`, "_blank")}>
+            onClick={() => onExport(entityId, "xlsx")}>
             Excel
           </Button>
         )}

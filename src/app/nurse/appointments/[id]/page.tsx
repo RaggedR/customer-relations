@@ -319,7 +319,7 @@ export default function NurseAppointmentDetailPage() {
           <option value="initial_assessment">Initial Assessment</option>
           <option value="discharge_summary">Discharge Summary</option>
           <option value="treatment_plan">Treatment Plan</option>
-          <option value="personal">Personal Note</option>
+          <option value="personal_note">Personal Note</option>
         </select>
         <textarea
           value={noteContent}

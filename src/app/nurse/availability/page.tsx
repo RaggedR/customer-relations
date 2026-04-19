@@ -226,6 +226,9 @@ export default function NurseAvailabilityPage() {
           <span className="w-3 h-3 rounded bg-blue-500/30 border border-blue-500/50 inline-block" /> Booked
         </span>
         <span className="flex items-center gap-1">
+          <span className="w-3 h-3 rounded bg-green-500/30 border border-green-500/50 inline-block" style={{ backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(34,197,94,0.3) 2px, rgba(34,197,94,0.3) 4px)" }} /> Recurring
+        </span>
+        <span className="flex items-center gap-1">
           <span className="w-3 h-3 rounded bg-muted/30 border border-border inline-block" /> Unavailable
         </span>
       </div>
