@@ -20,6 +20,11 @@ import type { Row } from "@/lib/parsers";
  * Build column definitions from the schema and CSV representation.
  * Returns { key, header } pairs for each field + parent relation names.
  */
+/** Title-case a snake_case string: "hearing_aid" → "Hearing Aid" */
+function toTitleCase(s: string): string {
+  return s.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
 function buildColumns(entityName: string) {
   const schema = getSchema();
   const entity = schema.entities[entityName];
@@ -27,25 +32,22 @@ function buildColumns(entityName: string) {
   const headers = csvRep.headers ?? {};
 
   const columns: { key: string; header: string }[] = [];
+  const relationKeys = new Set<string>();
 
-  // Add parent relation name columns first
+  // Add parent relation ID + name columns (skip sensitive relations like user)
   if (entity.relations) {
     for (const [relName, rel] of Object.entries(entity.relations)) {
+      if (isSensitive(rel.entity)) continue;
       const parentEntity = schema.entities[rel.entity];
       if (parentEntity?.fields.name) {
+        const idKey = `${relName}_id`;
+        const nameKey = `${relName}_name`;
+        relationKeys.add(idKey);
+        relationKeys.add(nameKey);
         // FK ID column — enables exact roundtrip (same-database reimport)
-        const idLabel = rel.entity.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + " ID";
-        columns.push({
-          key: `${relName}_id`,
-          header: idLabel,
-        });
+        columns.push({ key: idKey, header: toTitleCase(rel.entity) + " ID" });
         // Name column — human-readable, used as fallback for cross-database import
-        const headerLabel = headers[relName] ??
-          rel.entity.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + " Name";
-        columns.push({
-          key: `${relName}_name`,
-          header: headerLabel,
-        });
+        columns.push({ key: nameKey, header: headers[relName] ?? toTitleCase(rel.entity) + " Name" });
       }
     }
   }
@@ -54,12 +56,11 @@ function buildColumns(entityName: string) {
   for (const fieldName of Object.keys(entity.fields)) {
     columns.push({
       key: fieldName,
-      header: headers[fieldName] ??
-        fieldName.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+      header: headers[fieldName] ?? toTitleCase(fieldName),
     });
   }
 
-  return columns;
+  return { columns, relationKeys };
 }
 
 /**
@@ -68,31 +69,24 @@ function buildColumns(entityName: string) {
 function flattenRow(
   item: Row,
   entityName: string,
-  columns: { key: string; header: string }[]
+  columns: { key: string; header: string }[],
+  relationKeys: Set<string>
 ): Record<string, string> {
   const schema = getSchema();
   const entity = schema.entities[entityName];
   const row: Record<string, string> = {};
 
   for (const col of columns) {
-    // Handle parent relation ID columns
-    if (col.key.endsWith("_id") && entity.relations) {
-      const relName = col.key.replace(/_id$/, "");
-      if (entity.relations[relName]) {
-        const parent = item[relName] as Row | null;
-        row[col.key] = parent ? String(parent.id ?? "") : "";
-        continue;
-      }
-    }
-
-    // Handle parent relation name columns
-    if (col.key.endsWith("_name") && entity.relations) {
-      const relName = col.key.replace(/_name$/, "");
-      if (entity.relations[relName]) {
-        const parent = item[relName] as Row | null;
-        row[col.key] = parent ? String(parent.name ?? "") : "";
-        continue;
-      }
+    // Handle relation columns (ID and name) — identified by the Set built in buildColumns,
+    // not by suffix pattern matching, to avoid collisions with fields like google_calendar_id
+    if (relationKeys.has(col.key) && entity.relations) {
+      const isId = col.key.endsWith("_id");
+      const relName = col.key.replace(isId ? /_id$/ : /_name$/, "");
+      const parent = item[relName] as Row | null;
+      row[col.key] = parent
+        ? String(isId ? (parent.id ?? "") : (parent.name ?? ""))
+        : "";
+      continue;
     }
 
     // Regular field
@@ -157,8 +151,8 @@ export const GET = adminRoute()
 
     const slug = entityName.replace(/_/g, "-");
     const items = (await findAll(entityName)) as Row[];
-    const columns = buildColumns(entityName);
-    const rows = items.map((item) => flattenRow(item, entityName, columns));
+    const { columns, relationKeys } = buildColumns(entityName);
+    const rows = items.map((item) => flattenRow(item, entityName, columns, relationKeys));
 
     ctx.audit({
       action: "export",

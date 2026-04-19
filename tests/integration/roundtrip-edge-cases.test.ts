@@ -130,6 +130,7 @@ describe("Edge Case Roundtrip", () => {
       "unicode-test.csv"
     );
     expect(importRes.ok).toBe(true);
+    expect((await importRes.clone().json()).skipped).toBe(0);
 
     const reimported = (await findAll("hearing_aid", {
       filterBy: { patientId },
@@ -160,6 +161,7 @@ describe("Edge Case Roundtrip", () => {
       "newlines-test.csv"
     );
     expect(importRes.ok).toBe(true);
+    expect((await importRes.clone().json()).skipped).toBe(0);
 
     const reimported = (await findAll("hearing_aid", {
       filterBy: { patientId },
@@ -188,6 +190,7 @@ describe("Edge Case Roundtrip", () => {
       "nulls-test.csv"
     );
     expect(importRes.ok).toBe(true);
+    expect((await importRes.clone().json()).skipped).toBe(0);
 
     const reimported = (await findAll("hearing_aid", {
       filterBy: { patientId },
@@ -222,6 +225,7 @@ describe("Edge Case Roundtrip", () => {
       "large-text-test.csv"
     );
     expect(importRes.ok).toBe(true);
+    expect((await importRes.clone().json()).skipped).toBe(0);
 
     const reimported = (await findAll("hearing_aid", {
       filterBy: { patientId },

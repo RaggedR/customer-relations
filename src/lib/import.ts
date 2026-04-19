@@ -5,12 +5,13 @@
  * maps columns to fields, validates, and upserts.
  *
  * Key design decisions:
- * - Relations resolved by name (case-insensitive) — e.g. "patient_name" → patientId
+ * - Relations resolved by FK ID (exact, preferred) or name (case-insensitive, fallback)
+ * - Sensitive relations (e.g. user) are never resolved by imported ID
  * - Upsert by configurable key fields (defaults to entity-specific logic)
  * - Unknown columns are skipped (logged but not rejected)
  */
 
-import { getSchema, EntityConfig, foreignKeyName, toPascalCase } from "@/lib/schema";
+import { getSchema, EntityConfig, foreignKeyName, toPascalCase, isSensitive } from "@/lib/schema";
 import { create, update, findAll, validateEntity, transformInput } from "./repository";
 import { prisma } from "./prisma";
 import type { Row } from "./parsers";
@@ -249,23 +250,31 @@ export async function importEntities(
 /**
  * Build name→id lookup maps for all belongs_to relations on an entity.
  */
+interface RelationLookup {
+  nameToId: Map<string, number>;
+  validIds: Set<number>;
+}
+
 async function buildRelationMaps(
   entity: EntityConfig
-): Promise<Record<string, Map<string, number>>> {
-  const maps: Record<string, Map<string, number>> = {};
+): Promise<Record<string, RelationLookup>> {
+  const maps: Record<string, RelationLookup> = {};
 
   if (!entity.relations) return maps;
 
   for (const [relName, rel] of Object.entries(entity.relations)) {
     const records = (await findAll(rel.entity)) as Row[];
-    const map = new Map<string, number>();
+    const nameToId = new Map<string, number>();
+    const validIds = new Set<number>();
     for (const record of records) {
+      const id = record.id as number;
+      validIds.add(id);
       const name = String(record.name ?? "").toLowerCase().trim();
       if (name) {
-        map.set(name, record.id as number);
+        nameToId.set(name, id);
       }
     }
-    maps[relName] = map;
+    maps[relName] = { nameToId, validIds };
   }
 
   return maps;
@@ -325,7 +334,7 @@ async function loadExistingRecords(
 function resolveRelations(
   row: Row,
   entity: EntityConfig,
-  relationMaps: Record<string, Map<string, number>>,
+  relationMaps: Record<string, RelationLookup>,
   rowNum: number,
   result: ImportResult
 ): Row | null {
@@ -343,14 +352,24 @@ function resolveRelations(
     delete data[idKey];
     delete data[nameKey];
 
+    const lookup = relationMaps[relName];
+
     // Prefer FK ID (exact pointer — same-database roundtrip)
-    if (rawId && !isNaN(Number(rawId))) {
-      data[relName] = Number(rawId);
+    // Block ID-based resolution for sensitive relations (e.g. user)
+    if (rawId && !isNaN(Number(rawId)) && !isSensitive(rel.entity)) {
+      const numId = Number(rawId);
+      if (!lookup?.validIds.has(numId)) {
+        result.errors.push(
+          `Row ${rowNum}: ${rel.entity} ID ${numId} does not exist`
+        );
+        result.skipped++;
+        return null;
+      }
+      data[relName] = numId;
     } else if (rawName && typeof rawName === "string") {
       // Fall back to name resolution (cross-database import)
-      const map = relationMaps[relName];
       const name = rawName.toLowerCase().trim();
-      const id = map?.get(name);
+      const id = lookup?.nameToId.get(name);
 
       if (!id) {
         result.errors.push(
