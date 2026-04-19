@@ -65,7 +65,7 @@ export default function PortalAppointmentDetailPage({
       <div className="flex items-center gap-3">
         <h2 className="text-xl font-semibold">{dateStr}</h2>
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[appointment.status] ?? STATUS_FALLBACK}`}>
-          {appointment.status?.replace("_", " ")}
+          {appointment.status?.replaceAll("_", " ")}
         </span>
       </div>
 
@@ -74,7 +74,6 @@ export default function PortalAppointmentDetailPage({
         <Field label="Location" value={appointment.location} />
         <Field label="Specialty" value={appointment.specialty} />
         {appointment.nurseName && <Field label="Clinician" value={appointment.nurseName} />}
-        <Field label="Status" value={appointment.status?.replace("_", " ")} />
         {appointment.notes && <Field label="Notes" value={appointment.notes} />}
       </div>
     </div>

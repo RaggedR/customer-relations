@@ -93,6 +93,27 @@ Clinical and personal note views are logged as **separate audit entries** with
 distinct `entity` values, allowing queries like "show all personal note access
 for patient #42" without text parsing.
 
+### Data Access — Hearing Aids
+
+| Action  | Trigger                                                | Logged By                              |
+|---------|--------------------------------------------------------|----------------------------------------|
+| `view`  | Admin views hearing aids (via patient property panel)  | Route factory (generic entity read)    |
+| `view`  | Nurse views hearing aids via appointment detail        | `api/nurse/appointments/[id]/hearing-aids` |
+| `view`  | Patient views own hearing aids via portal              | `api/portal/hearing-aids`              |
+
+Hearing aids are health information (they reveal hearing loss and its severity).
+All access is audit-logged regardless of role. Unlike clinical notes, hearing
+aids are not watermarked or canvas-rendered — the data is objective equipment
+records (make, model, serial number), not subjective clinical observations.
+
+**Nurse access scope:** nurses can only view hearing aids for patients they have
+appointments with (same scope rule as clinical notes). Cross-patient access
+attempts are logged as `access_denied`.
+
+**Patient portal:** patients see a practical subset of fields (ear, make, model,
+serial number, battery type, wax filter, dome, warranty end date). Internal
+fields (programming cable, software, HSP code, repair details) are excluded.
+
 ### Data Access — Appointments
 
 | Action              | Trigger                                    | Logged By                     |
@@ -207,6 +228,7 @@ The following events are intentionally **not** logged:
 | Generic entity reads (non-sensitive)   | Entities like `location`, `appointment_type`, `nurse_specialty` contain no personal information. Logging every read would produce noise that obscures meaningful access events. |
 | Patient portal appointment reads       | Patient viewing their own appointments. Low risk — they own this data. |
 | Patient portal profile reads           | Patient viewing their own profile. Low risk — they own this data. |
+| ~~Patient portal hearing aid reads~~   | **Exception: hearing aids ARE logged** despite being self-access, because they are health information revealing hearing loss and device details. |
 | Nurse availability changes             | No patient data involved. |
 | CardDAV read-only access               | Address book reads (GET) after successful auth are not logged. Only writes (PUT) and failed auth are logged. |
 

@@ -314,8 +314,8 @@ export function CalendarPanel({ onEventClick, onSlotClick }: CalendarPanelProps)
                               style={{
                                 top: 0,
                                 height: fullHeight,
-                                left: leftPct ?? 1,
-                                right: total > 1 ? undefined : 1,
+                                left: leftPct ?? "1px",
+                                right: total > 1 ? undefined : "1px",
                                 width: widthPct,
                                 marginLeft: total > 1 ? 0 : 2,
                                 marginRight: total > 1 ? 0 : 2,

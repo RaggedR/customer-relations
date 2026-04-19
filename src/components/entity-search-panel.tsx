@@ -57,6 +57,7 @@ export function EntitySearchPanel({ entityName, entity, onItemSelect }: EntitySe
     return () => clearTimeout(timeout);
   }, [fetchItems]);
 
+  // Items are filtered server-side via query params
   const filtered = items;
 
   if (selectedItem) {
