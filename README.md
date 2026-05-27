@@ -1,36 +1,110 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Customer Relations
 
-## Getting Started
+A schema-driven healthcare CRM for a fictional Australian audiology practice. Built as a learning project to explore how far a declarative approach can take a full-featured clinical management system.
 
-First, run the development server:
+## What it does
+
+The entire data model lives in `schema.yaml` -- entities, fields, relations, validation rules, and external format mappings (vCard, iCal, CSV, XLSX). A startup engine reads this file, generates the Prisma schema, and runs migrations automatically. The UI structure is similarly declared in `navigation.yaml`, which defines windows, transitions, visible fields, and portal layouts.
+
+Three interfaces share the same backend:
+
+- **Admin CRM** -- floating-window desktop UI for clinic staff. Search, detail panels, calendar, AI chat, PDF/XLSX export, file attachments.
+- **Nurse portal** -- restricted view for clinicians. Availability management, patient records, pseudonymised clinical notes with watermarking and auto-close timers.
+- **Patient portal** -- self-service appointment booking, profile management, appointment history.
+
+### Notable features
+
+- **AI natural-language queries** via Google Gemini -- translates questions to SQL with privacy guardsrails (data minimisation, off-topic refusal, fuzzy name matching)
+- **CalDAV/CardDAV sync** -- bidirectional calendar and contact synchronisation
+- **Privacy compliance** -- designed against the Australian Privacy Principles (APPs): three-role auth, audit logging, immutable clinical notes, encrypted backups, watermarked canvas rendering
+- **Import/export** -- CSV, JSON, XLSX, PDF, vCard, iCal with foreign-key round-trip fidelity
+
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16 (App Router), React 19 |
+| Language | TypeScript 5 |
+| Database | PostgreSQL 16 via Prisma 7 |
+| Styling | Tailwind CSS v4, shadcn/ui |
+| AI | Google Gemini |
+| Auth | Custom session + JWT (jose) |
+| Email | Resend |
+| Testing | Vitest (unit/integration), Playwright (E2E) |
+
+## Getting started
+
+### Prerequisites
+
+- Node.js 20+
+- PostgreSQL 16 (or Docker)
+
+### With Docker
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+docker compose up
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This starts PostgreSQL and the app on `http://localhost:3000`. Schema generation and migrations run automatically on startup.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Without Docker
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cp .env.example .env        # configure DATABASE_URL, SESSION_SECRET, etc.
+npm install
+npm run dev                  # generates schema, runs migrations, starts dev server
+```
 
-## Learn More
+### Environment variables
 
-To learn more about Next.js, take a look at the following resources:
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `SESSION_SECRET` | Yes | Session encryption key |
+| `TOKEN_ENCRYPTION_KEY` | Yes | JWT token encryption |
+| `GOOGLE_API_KEY` | No | Gemini AI chat |
+| `CARDDAV_PASSWORD` | No | CalDAV/CardDAV sync |
+| `BACKUP_PASSPHRASE` | No | Encrypted backup archives |
+| `RESEND_API_KEY` | No | Transactional email |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+schema.yaml              # Source of truth: data model
+navigation.yaml          # Source of truth: UI structure
+prisma/schema.prisma     # Auto-generated -- do not edit
+src/
+  engine/                # Schema engine: YAML -> Prisma -> migrations
+  app/api/               # API routes (entity CRUD, auth, calendar, AI, backup)
+  app/nurse/             # Nurse portal pages
+  app/portal/            # Patient portal pages
+  components/            # React components (calendar, AI chat, floating windows)
+  lib/                   # Business logic (auth, audit, CalDAV, import/export, privacy)
+  plugins/               # Plugin system
+tests/
+  unit/                  # ~25 unit tests (auth, schema, parsers, SQL safety, etc.)
+  integration/           # Round-trip and edge-case tests
+  e2e/                   # Playwright specs (CRUD, auth, calendar, security, fuzz)
+```
 
-## Deploy on Vercel
+## Testing
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npm test                 # run all unit + integration tests
+npm run test:watch       # watch mode
+npx playwright test      # run E2E tests (requires dev server)
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Architecture
+
+Two orthogonal dimensions define the system:
+
+1. **UI rendering pipeline** -- schema.yaml -> navigation.yaml -> layout engine -> React components -> API routes. Adding a new entity or field is a YAML change, not a code change.
+
+2. **Security/compliance stack** -- three-role auth (admin/nurse/patient), rate limiting, SQL injection prevention, audit logging, immutable clinical records, pseudonymised notes, watermarked rendering.
+
+These intersect at the API layer, where route-factory.ts generates CRUD endpoints from the schema while the compliance middleware enforces access control and audit trails.
+
+## License
+
+[MIT](LICENSE)
